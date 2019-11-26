@@ -13,6 +13,9 @@ datatype yul_value =
 
 type_synonym 'v local = "identifier \<Rightarrow> 'v option"
 
+definition local_empty :: "'v local" where
+"local_empty = (\<lambda> _ . None)"
+
 (* restrict e1 to the identifiers of e2 *)
 definition restrict :: "'v local \<Rightarrow> 'v local \<Rightarrow> 'v local" where
 "restrict e1 e2 i =
@@ -40,6 +43,10 @@ fun put_values :: "'v local \<Rightarrow> identifier_list \<Rightarrow> 'v list 
           L)
     else None)"
 
+fun get_values :: "'v local \<Rightarrow> identifier_list \<Rightarrow> 'v list option" where
+"get_values L (Ids i ids) =
+   List.those (List.map L (i#ids))"
+
 fun get_min :: "('a \<Rightarrow> nat) \<Rightarrow> 'a set \<Rightarrow> 'a" where
 "get_min f aset =
   (SOME a . a \<in> aset \<and>
@@ -60,114 +67,159 @@ begin
 (* big-step inductive semantics for Yul programs *)
 print_context
 
-
+(* parameters:
+   - global state
+   - local state (variable map)
+   - function identifiers
+   - statement
+   - return *)
+(* NB official Yul interpreter appears to be
+registering functions at the block level, rather than
+as they appear syntactically.
+*)
 inductive yul_eval_st ::
-  "'g \<Rightarrow> yul_value local \<Rightarrow> statement \<Rightarrow>
-   ('g * yul_value local * mode) \<Rightarrow> bool" 
+  "'g \<Rightarrow> yul_value local \<Rightarrow> function_sig local \<Rightarrow> statement \<Rightarrow>
+   ('g * yul_value local * function_sig  local * mode) \<Rightarrow> bool" 
 and
   yul_eval_sts ::
-  "'g \<Rightarrow> yul_value local \<Rightarrow> statement list \<Rightarrow>
-   ('g * yul_value local * mode) \<Rightarrow> bool" 
+  "'g \<Rightarrow> yul_value local \<Rightarrow> function_sig  local \<Rightarrow> statement list \<Rightarrow>
+   ('g * yul_value local * function_sig  local * mode) \<Rightarrow> bool" 
 and
   yul_eval_e ::
-   "'g \<Rightarrow> yul_value local \<Rightarrow> expression \<Rightarrow>
-   ('g * yul_value local * yul_value list) \<Rightarrow> bool" 
+   "'g \<Rightarrow> yul_value local \<Rightarrow> function_sig  local \<Rightarrow> expression \<Rightarrow>
+   ('g * yul_value local * function_sig  local * yul_value list) \<Rightarrow> bool" 
 and
   yul_eval_c ::
   "'g \<Rightarrow> yul_value local \<Rightarrow>
+    function_sig local \<Rightarrow>
     yul_value list \<Rightarrow>  casest list \<Rightarrow> block \<Rightarrow>
-   ('g * yul_value local * mode) \<Rightarrow> bool"
+   ('g * yul_value local * function_sig  local *  mode) \<Rightarrow> bool"
+and yul_eval_args ::
+  "'g \<Rightarrow> yul_value local \<Rightarrow>
+    function_sig local \<Rightarrow>
+    expression list \<Rightarrow>
+    ('g * yul_value local * function_sig local * yul_value list) \<Rightarrow> bool"
    where
 
 (* statement lists*)
-  "yul_eval_sts G L [] (G, L, Regular)"
-| "yul_eval_st G L s1 (G1, L1, Regular) \<Longrightarrow>
-    yul_eval_sts G1 L1 sl (Gn, Ln, mode) \<Longrightarrow>
-    yul_eval_sts G L (s1#sl) (Gn, Ln, mode)"
-| "yul_eval_st G L s1 (G1, L1, mode) \<Longrightarrow>
-    yul_eval_sts G L (s1#sl) (G1, L1, mode)"
+  "yul_eval_sts G L F [] (G, L, F, Regular)"
+| "yul_eval_st G L F s1 (G1, L1, F1, Regular) \<Longrightarrow>
+    yul_eval_sts G1 L1 F1 sl (Gn, Ln, Fn, mode) \<Longrightarrow>
+    yul_eval_sts G L F (s1#sl) (Gn, Ln, Fn, mode)"
+| "yul_eval_st G L F s1 (G1, L1, F1, mode) \<Longrightarrow>
+    mode \<noteq> Regular \<Longrightarrow>
+    yul_eval_sts G L F (s1#sl) (G1, L1, F1, mode)"
 
 (* block *)
-| "yul_eval_sts G L sl (G1, L1, mode) \<Longrightarrow>
-   yul_eval_st G L (SB (Block sl)) (G1, restrict L1 L, mode)"
+(* function definitions have block scoping. *)
+(* TODO should we allow redefinition of functions in inner scopes
+to propagate back up to outer scopes? this seems bad *)
+| "yul_eval_sts G L F sl (G1, L1, F1, mode) \<Longrightarrow>
+   yul_eval_st G L F (SB (Block sl)) (G1, restrict L1 L, F, mode)"
 
 (* function definitions *)
-(* TODO: have an environment for functions *)
-| "yul_eval_st G L (SF _) (G, L, Regular)"
+| " put_values F (Ids idn []) [sig] = Some F1 \<Longrightarrow>
+    yul_eval_st G L F (SF (Fun idn sig)) (G, L, F1, Regular)"
 
 (* variable declarations *)
-| "yul_eval_st G L (SA (Asgn (strip_id_types til) e)) (G1, L1, mode) \<Longrightarrow>
-   yul_eval_st G L (SV (Var til (Some e))) (G1, L1, mode)"
+| "yul_eval_st G L F (SA (Asgn (strip_id_types til) e)) (G1, L1, F1, mode) \<Longrightarrow>
+   yul_eval_st G L F (SV (Var til (Some e))) (G1, L1, F1, mode)"
 | "put_values L (strip_id_types til)
                 (List.replicate (til_length til) (VInt 0)) = Some L1 \<Longrightarrow>
-    yul_eval_st G L (SV (Var il (None))) (G, L1, Regular)"
+    yul_eval_st G L F (SV (Var il (None))) (G, L1, F1, Regular)"
 
 (* assignments *)
-| "yul_eval_e G L e (G1, L1, vs) \<Longrightarrow>
+| "yul_eval_e G L F e (G1, L1, F1, vs) \<Longrightarrow>
    put_values L1 il vs = Some L2 \<Longrightarrow>
-  yul_eval_st G L (SA (Asgn il e)) (G, L2, Regular)"
+  yul_eval_st G L F (SA (Asgn il e)) (G, L2, F1, Regular)"
 
 (* for loops *)
 (* init block. scoping seems odd *)
-| "yul_eval_sts G L (sh#st) (G1, L1, Regular) \<Longrightarrow>
-   yul_eval_st G1 L1 (SL ( For (Block []) cond post body)) (G2, L2, Regular) \<Longrightarrow>
-   yul_eval_st G L (SL (For ( Block (sh#st)) cond post body)) (G2, restrict L2 L, Regular)"
-| "yul_eval_e G L cond (G1, L1, [VBool False]) \<Longrightarrow>
-    yul_eval_st G L (SL (For (Block []) cond post body)) (G1, L1, Regular)"
-| "yul_eval_e G L cond (G1, L1, [VBool True]) \<Longrightarrow>
-   yul_eval_st G1 L1 (SB body) (G2, L2, Break) \<Longrightarrow>
-   yul_eval_st G L (SL (For (Block []) cond post body)) (G2, L2, Regular)"
-| "yul_eval_e G L cond (G1, L1, [VBool True]) \<Longrightarrow>
-   yul_eval_st G1 L1 (SB body) (G2, L2, mode) \<Longrightarrow>
-   yul_eval_st G2 L2 (SB post) (G3, L3, mode') \<Longrightarrow>
-   yul_eval_st G3 L3 (SL (For (Block []) cond post body)) (G4, L4, mode) \<Longrightarrow>
-   yul_eval_st G L (SL (For (Block []) cond post body)) (G4, L4, mode)"
+| "yul_eval_sts G L F (sh#st) (G1, L1, F1, Regular) \<Longrightarrow>
+   yul_eval_st G1 L1 F1 (SL ( For (Block []) cond post body)) (G2, L2, F2, Regular) \<Longrightarrow>
+   yul_eval_st G L F (SL (For ( Block (sh#st)) cond post body)) (G2, restrict L2 L, F2, Regular)"
+| "yul_eval_e G L F cond (G1, L1, F1, [VBool False]) \<Longrightarrow>
+    yul_eval_st G L F (SL (For (Block []) cond post body)) (G1, L1, F1, Regular)"
+| "yul_eval_e G L F cond (G1, L1, F1, [VBool True]) \<Longrightarrow>
+   yul_eval_st G1 L1 F1 (SB body) (G2, L2, F2, Break) \<Longrightarrow>
+   yul_eval_st G L F (SL (For (Block []) cond post body)) (G2, L2, F2, Regular)"
+(* TODO: double check threading of mode return here *)
+| "yul_eval_e G L F cond (G1, L1, F1, [VBool True]) \<Longrightarrow>
+   yul_eval_st G1 L1 F1 (SB body) (G2, L2, F2, mode) \<Longrightarrow>
+   yul_eval_st G2 L2 F2 (SB post) (G3, L3, F3, mode') \<Longrightarrow>
+   yul_eval_st G3 L3 F3 (SL (For (Block []) cond post body)) (G4, L4, F4, mode'') \<Longrightarrow>
+   yul_eval_st G L F (SL (For (Block []) cond post body)) (G4, L4, F4, mode'')"
 
 (* break/continue *)
-| "yul_eval_st G L (SX XBreak) (G, L, Break)"
-| "yul_eval_st G L (SX XContinue) (G, L, Continue)"
+| "yul_eval_st G L F (SX XBreak) (G, L, F, Break)"
+| "yul_eval_st G L F (SX XContinue) (G, L, F, Continue)"
 
 (* if *)
-| "yul_eval_e G L cond (G1, L1, [VBool True]) \<Longrightarrow>
-   yul_eval_st G1 L1 (SB body) (G2, L2, mode) \<Longrightarrow>
-   yul_eval_st G L (SI (Ifst cond body)) (G2, L2, mode)"
-| "yul_eval_e G L cond (G1, L1, [VBool False]) \<Longrightarrow>
-   yul_eval_st G L (SI (Ifst cond body)) (G1, L1, mode)"
+| "yul_eval_e G L F cond (G1, L1, F1, [VBool True]) \<Longrightarrow>
+   yul_eval_st G1 L1 F1 (SB body) (G2, L2, F2, mode) \<Longrightarrow>
+   yul_eval_st G L F (SI (Ifst cond body)) (G2, L2, F2, mode)"
+| "yul_eval_e G L F cond (G1, L1, F1, [VBool False]) \<Longrightarrow>
+   yul_eval_st G L F (SI (Ifst cond body)) (G1, L1, F1, mode)"
 
 (* switch *)
-| "yul_eval_st G L (SS (Switch e c cs (Some (Default (Block []))))) (G1, L1, mode) \<Longrightarrow>
-   yul_eval_st G L (SS (Switch e c cs None)) (G1, L1, mode)"
-| "yul_eval_e G L e (G1, L1, vs) \<Longrightarrow>
-   yul_eval_st G1 L1 (SB b) (G2, L2, mode) \<Longrightarrow>
-   yul_eval_st G L (SS (Switch0 e (Default b))) (G2, L2, mode)"
-(* we need to keep a bunch of global states around? *)
+| "yul_eval_st G L F (SS (Switch e c cs (Some (Default (Block []))))) (G1, L1, F1, mode) \<Longrightarrow>
+   yul_eval_st G L F (SS (Switch e c cs None)) (G1, L1, F1, mode)"
+| "yul_eval_e G L F e (G1, L1, F1, vs) \<Longrightarrow>
+   yul_eval_st G1 L1 F1 (SB b) (G2, L2, F2, mode) \<Longrightarrow>
+   yul_eval_st G L F (SS (Switch0 e (Default b))) (G2, L2, F2, mode)"
 
-| "yul_eval_e G L e (G1, L1, vs) \<Longrightarrow>
-   yul_eval_c G1 L1 vs (c#cs) d (G2, L2, mode) \<Longrightarrow>
-   yul_eval_st G L (SS (Switch e c cs (Some (Default b)))) (G2, L2, mode)"
+| "yul_eval_e G L F e (G1, L1, F1, vs) \<Longrightarrow>
+   yul_eval_c G1 L1 F1 vs (c#cs) d (G2, L2, F2, mode) \<Longrightarrow>
+   yul_eval_st G L F (SS (Switch e c cs (Some (Default b)))) (G2, L2, F2, mode)"
 
 (* expressions as statements *)
-| "yul_eval_e G L exp (G1, L1, []) \<Longrightarrow>
-   yul_eval_st G L (SE exp) (G1, L1, Regular)"
+| "yul_eval_e G L F exp (G1, L1, F1, []) \<Longrightarrow>
+   yul_eval_st G L F (SE exp) (G1, L1, F1, Regular)"
 
 (* cases - helper *)
-| "yul_eval_st G L (SB d) (G1, L1, mode) \<Longrightarrow>
-   yul_eval_c G L vs [] d (G1, L1, mode)"
-| "yul_eval_e G L (EL (case_lit ch)) (_, _, vs) \<Longrightarrow>
-   yul_eval_st G L (SB (case_block ch)) (G1, L1, mode) \<Longrightarrow>
-   yul_eval_c G L vs ((ch)#ct) d (G1, L1, mode)"
-| "yul_eval_e G L (EL (case_lit ch)) (_, _, vs') \<Longrightarrow>
+| "yul_eval_st G L F (SB d) (G1, L1, F1, mode) \<Longrightarrow>
+   yul_eval_c G L F vs [] d (G1, L1, F1, mode)"
+| "yul_eval_e G L F (EL (case_lit ch)) (_, _, _, vs) \<Longrightarrow>
+   yul_eval_st G L F (SB (case_block ch)) (G1, L1, F1, mode) \<Longrightarrow>
+   yul_eval_c G L F vs ((ch)#ct) d (G1, L1, F1, mode)"
+| "yul_eval_e G L F (EL (case_lit ch)) (_, _, _, vs') \<Longrightarrow>
    vs' \<noteq> vs \<Longrightarrow>
-   yul_eval_c G L vs ct d (G1, L1, mode) \<Longrightarrow>
-   yul_eval_c G L vs ((ch)#ct) d (G1, L1, mode)"
+   yul_eval_c G L F vs ct d (G1, L1, F1, mode) \<Longrightarrow>
+   yul_eval_c G L F vs ((ch)#ct) d (G1, L1, F1, mode)"
+
+(* function arguments - helper *)
+(*
+and yul_eval_args ::
+  "'g \<Rightarrow> yul_value local \<Rightarrow>
+    function_sig local \<Rightarrow>
+    expression list \<Rightarrow>
+    yul_value list \<Rightarrow> 
+    ('g * yul_value local * function_sig local * yul_value list) \<Rightarrow> bool"
+   where
+*)
+| "yul_eval_args G L F [] (G, L, F, vs)"
+| "yul_eval_e G L F e (G1, L1, F1, [v]) \<Longrightarrow>
+   yul_eval_args G1 L1 F1 es (G2, L2, F2, vs) \<Longrightarrow>
+   yul_eval_args G L F (e#es) (G, L, F, v#vs)"
 
 (* expressions *)
 
 (* ids *)
 | "L i = Some v \<Longrightarrow>
-   yul_eval_e G L (EI i) (G, L, [v])"
+   yul_eval_e G L F (EI i) (G, L, F, [v])"
 
 (* function calls *)
+(* note that we do not pull any values from global scope into local scope here *)
+| " yul_eval_args G L F exs (G1, L1, F1, vals) \<Longrightarrow>
+    F1 idn = Some (FSig parms rets body) \<Longrightarrow>
+    put_values local_empty (strip_id_types parms) vals = Some Lsub \<Longrightarrow>
+    put_values Lsub (strip_id_types rets) (List.replicate (til_length rets) (VInt 0)) = Some LSub1 \<Longrightarrow>
+    yul_eval_st G1 Lsub1 F1 (SB blk) (G2, Lsub2, _, mode) \<Longrightarrow>
+    get_values Lsub2 (strip_id_types rets) = Some rvals \<Longrightarrow>
+    yul_eval_e G L F (EF (Call idn exs)) (G2, L1, F1, rvals)"
+
+(*     put_values L1 (strip_id_types rets) rvals = Some L2 \<Longrightarrow>
+ *)
 
 (* hex literals: TODO *)
 
@@ -177,7 +229,7 @@ and
 
 (* decimal numbers *)
 (* note we  aren't really dealing with overflow *)
-| "yul_eval_e G L (EL (NL (Nlit n))) (G, L, [VInt n])"
+| "yul_eval_e G L F (EL (NL (Nlit n))) (G, L, F, [VInt n])"
 
 end
 

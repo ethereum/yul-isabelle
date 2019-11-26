@@ -74,11 +74,14 @@ and
   | SI ifst
   | SE expression
   | SS switch
-  | SL for_loop
+  | SL for_loop 
   | SX break_continue
 and
+function_sig =
+  FSig "typed_identifier_list" "typed_identifier_list" "block"
+and
 function_definition =
-  Fun "identifier" "typed_identifier_list" "typed_identifier_list" "block"
+  Fun "identifier" "function_sig"
 and
 ifst =
   Ifst "expression" "block"
@@ -127,7 +130,7 @@ and
     List.list_all (continue_break_check_s' inLoop) sl"
 | "continue_break_check_c' inLoop (Case _ b) = continue_break_check_b' inLoop b"
 | "continue_break_check_s' inLoop (SB b) = continue_break_check_b' inLoop b"
-| "continue_break_check_s' inLoop (SF (Fun _ _ _ b)) = continue_break_check_b' False b"
+| "continue_break_check_s' inLoop (SF (Fun _ (FSig _ _ b))) = continue_break_check_b' False b"
 | "continue_break_check_s' inLoop (SI (Ifst _ b)) = continue_break_check_b' inLoop b"
 | "continue_break_check_s' inLoop (SS (Switch _ c cs (Some (Default b)))) = 
      (continue_break_check_c' inLoop c \<and>
@@ -160,7 +163,7 @@ and
     List.list_all (loop_init_check_s' inInit) sl"
 | "loop_init_check_c' inInit (Case _ b) = loop_init_check_b' inInit b"
 | "loop_init_check_s' inInit (SB b) = loop_init_check_b' inInit b"
-| "loop_init_check_s' inInit (SF (Fun _ _ _ b)) =
+| "loop_init_check_s' inInit (SF (Fun _ (FSig _ _ b))) =
     (if inInit then False
      else loop_init_check_b' inInit b)"
 | "loop_init_check_s' inInit (SI (Ifst _ b)) = loop_init_check_b' inInit b"
