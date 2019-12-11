@@ -32,23 +32,29 @@ datatype abi_type =
 (* for use in termination proofs
    some of the termination proofs can't be completed automatically
    due to the size of the mutually recurisve functions involved. *)
+
+definition max_u256 :: "nat" where
+"max_u256 = 2 ^ 256 - 1"
+
+(* do not use this outside of proofs - it will blow up. *)
 fun abi_type_measure :: "abi_type \<Rightarrow> nat"
 and abi_type_list_measure :: "abi_type list \<Rightarrow> nat" where
-"abi_type_measure (Ttuple ts) = 2 + abi_type_list_measure ts"
-| "abi_type_measure (Tfarray t n) = 2 + n + (abi_type_measure t)"
-| "abi_type_measure (Tarray t) = 2 + abi_type_measure t" (* curious about this one *)
+"abi_type_measure (Ttuple ts) = 1 + abi_type_list_measure ts"
+| "abi_type_measure (Tfarray t n) = 1 + n + (abi_type_measure t)"
+| "abi_type_measure (Tarray t) = 1 + max_u256 + abi_type_measure t" (* curious about this one *)
 | "abi_type_measure _ = 1"
 
-| "abi_type_list_measure [] = 0"
+| "abi_type_list_measure [] = 1"
 | "abi_type_list_measure (th#tt) =
-    abi_type_measure th + abi_type_list_measure tt"
+    abi_type_measure th + abi_type_list_measure tt + 1"
+
 
 (* count number of elements with zero-size encodings *)
 fun abi_type_empties :: "abi_type \<Rightarrow> nat"
 and abi_type_list_empties :: "abi_type list \<Rightarrow> nat" where
 "abi_type_empties (Ttuple []) = 1"
-| "abi_type_empties (Ttuple (th#tt)) = abi_type_list_empties (th#tt)"
-| "abi_type_empties (Tfarray t n) = n * (abi_type_empties t)"
+| "abi_type_empties (Ttuple (th#tt)) = abi_type_list_empties (th#tt) + 1"
+| "abi_type_empties (Tfarray t n) = n * (abi_type_empties t) + 1"
 | "abi_type_empties _ = 0"
 
 | "abi_type_list_empties [] = 0"
@@ -205,6 +211,12 @@ fun decode_uint :: "8 word list \<Rightarrow> int" where
 "decode_uint l =
   (Word.uint (Word.word_rcat (take 32 l) :: 256 word))"
 
+lemma decode_uint_max :
+"\<And> (x :: 256 word) . Word.uint x \<le>  max_u256"
+  apply(cut_tac x = "x :: 256 word" in Word.uint_range')
+  apply(auto simp add:max_u256_def)
+  done
+
 fun decode_sint :: "8 word list \<Rightarrow> int" where
 "decode_sint l =
   (Word.sint (Word.word_rcat (take 32 l) :: 256 word))"
@@ -228,6 +240,23 @@ fun decode_fixed :: "nat \<Rightarrow> 8 word list \<Rightarrow> rat" where
 fun decode_fbytes :: "nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list" where
 "decode_fbytes n l = (take n l)"
 
+
+(* for dynamic types we need to use the input list to calculate size *)
+(*
+fun abi_type_measure_dyn :: "abi_type \<Rightarrow> int"
+and abi_type_list_measure_dyn :: "abi_type list \<Rightarrow> nat" where
+"abi_type_measure_dyn (Ttuple ts) = 
+  1 + abi_type_list_measure_dyn ts"
+| "abi_type_measure_dyn (Tfarray t n) = 1 + n + (abi_type_measure_dyn t)"
+| "abi_type_measure_dyn (Tarray t) = 
+    1 + (2 ^ 256) + abi_type_measure_dyn t" (* curious about this one *)
+| "abi_type_measure_dyn _ _ = 1"
+
+| "abi_type_list_measure_dyn [] l = 1"
+| "abi_type_list_measure_dyn (th#tt) l =
+    abi_type_measure_dyn th + 
+    abi_type_list_measure_dyn + 1"
+*)
 (* here, again, we assume we have been passed a correct length byte string
    other than booleans, we aren't doing value checks here *)
 (* TODO: enforce that correct size word list was passed in?
@@ -281,36 +310,48 @@ and decode_static_nocheck_tup :: "abi_type list \<Rightarrow> 8 word list \<Righ
           None \<Rightarrow> None
           | Some vs \<Rightarrow> Some (v#vs)))"
   by pat_completeness auto
-(*
+
 termination
 apply(relation 
 "measure (\<lambda> x .
     (case x of
       Inl (t, l) \<Rightarrow> abi_type_measure t + length l
-      | Inr (Inl (t, n, l)) \<Rightarrow> abi_type_measure t + n + length l + 1
-      | Inr (Inr (ts, l)) \<Rightarrow> abi_type_list_measure ts + length l + 1))")
-apply(auto)
-  apply(case_tac t) apply(auto)
+      | Inr (Inl (t, n, l)) \<Rightarrow> abi_type_measure t + n + length l
+      | Inr (Inr (ts, l)) \<Rightarrow> abi_type_list_measure ts + length l))")
+        apply(auto)
   done
-*)
-termination
-  sorry
 (*
-apply(relation 
+termination
+  apply(relation
+    "
+
+  apply(relation 
 "measure (\<lambda> x .
     (case x of
-      Inl (t, l) \<Rightarrow> abi_type_empties t + length l + 1
-      | Inr (Inl (t, n, l)) \<Rightarrow> (n * abi_type_empties t) + length l 
+      Inl (t, l) \<Rightarrow> abi_type_empties t + length l
+      | Inr (Inl (t, n, l)) \<Rightarrow> (n * abi_type_empties t) + length l
       | Inr (Inr (ts, l)) \<Rightarrow> abi_type_list_empties ts + length l))")       
-        apply(auto)
-      apply(case_tac ts, auto)
-  apply(case_tac l, auto)
+        apply(fastforce)
+       apply(fastforce) apply(clarsimp)
+  apply(case_tac ts) apply(clarsimp) apply(clarsimp)
+     apply(clarsimp)
+  apply(case_tac t, auto)
+  apply(case_tac n) apply(auto)
+     apply(case_tac l, auto)
   done
 *)
 
 fun bytes_to_string :: "8 word list \<Rightarrow> char list" where
 "bytes_to_string bs =
   List.map (\<lambda> b . char_of_integer (integer_of_int (Word.uint b))) bs"
+
+
+fun tails_measure :: "(abi_value + (nat * abi_type)) list \<Rightarrow> nat" where
+"tails_measure [] = 1"
+| "tails_measure ((Inl _)#ts) = 1 + tails_measure ts"
+| "tails_measure ((Inr (_, t))#ts) =
+    1 + abi_type_measure t + tails_measure ts"
+
 
 (* TODO: consider returning a nat everywhere to make it easier to keep track
    of how much we have read, for the purposes of tuple indexing *)
@@ -406,24 +447,59 @@ and heads overlap? *)
               None \<Rightarrow> None
               | Some (vs, l'') \<Rightarrow> Some (v#vs, l''))))"
   by pat_completeness auto
-termination
-  sorry
-(*
+
+abbreviation decode_nocheck_dom where
+"decode_nocheck_dom \<equiv>
+decode_nocheck_decode_dyn_nocheck_array_decode_dyn_nocheck_tuple_heads_decode_dyn_nocheck_tuple_tails_dom"
+
+lemma decode_dyn_suffix :
+  fixes t
+  shows "\<And> l v l' . 
+          decode_nocheck_dom (Inl (Inl (t, l))) \<Longrightarrow>
+          decode_nocheck t l = Some (v, l') \<Longrightarrow>
+          \<exists> n . l' = drop n l"
+  apply(induction t)
+              apply(auto simp add: decode_nocheck.psimps split:if_splits option.splits)
+      apply(case_tac t, auto split:option.splits)
+  
+  apply(case_tac l, auto)
+
+termination decode_nocheck
+
   apply(relation 
 "measure (\<lambda> x .
     (case x of
-      Inl (Inl (t, l)) \<Rightarrow> abi_type_measure t + length l
-      | Inl (Inr (t, n, l)) \<Rightarrow> abi_type_measure t + n + length l + 1
-      | Inr (Inl (ts, n, l)) \<Rightarrow> abi_type_list_measure ts + length l + 1
-      | Inr (Inr (tls, n, l)) \<Rightarrow>  length l + 1))")
+       Inl (Inl (t, l)) \<Rightarrow> abi_type_measure t + length l
+      | Inl (Inr (t, n, l)) \<Rightarrow> abi_type_measure t + n + length l
+      | Inr (Inl (ts, n, l)) \<Rightarrow> abi_type_list_measure ts + n + length l
+      | Inr (Inr (tls, n, l)) \<Rightarrow> tails_measure tls + length l ))")
               apply(fastforce)
+  apply(simp)
              apply(fastforce)
-            apply(fastforce)
-  apply(clarsimp)
-apply(fastforce)
-              apply(auto)
-  apply(case_tac l)
-*)
+           apply(clarsimp)
+  apply(case_tac x10) 
+            apply(fastforce)apply(simp)
+           defer
+           apply(simp add:decode_uint_max max_u256_def)
+  apply(cut_tac x = "(word_rcat (take 32 l))" in decode_uint_max)
+           apply(simp add: Int.nat_less_iff)
+           apply(simp add:decode_uint_max max_u256_def)
+
+          apply(fastforce)
+         apply(simp) defer
+         apply(fastforce)
+  apply(simp) defer
+        apply(fastforce)
+       apply(fastforce)
+  apply(simp)
+     apply(auto)
+      defer
+      defer
+      defer
+      defer
+      defer
+(* ok, i think this works. need a couple lemmas. *)  apply(case_tac l)
+
 
 (* head = offset at which tail can be found
    tail = encoding of dynamic object *)
