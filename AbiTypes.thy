@@ -354,19 +354,17 @@ fun tails_measure :: "(abi_value + (abi_type * nat)) list \<Rightarrow> nat" whe
 
 (* TODO: consider returning a nat everywhere to make it easier to keep track
    of how much we have read, for the purposes of tuple indexing *)
-function decode_nocheck :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> (abi_value * nat) option"
+function (sequential) decode_nocheck :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> (abi_value * nat) option"
 and decode_dyn_nocheck_array :: "abi_type \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> (abi_value list * nat) option"
 (* first returned nat is the length of all the heads (used for computing offsets); 
    second returned nat is number of bytes consumed;
-   first input nat is running count of head length.
-   second input nat is current index into type list *)
-and decode_dyn_nocheck_tuple_heads :: "abi_type list \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 
-                (abi_value option list *  (nat * nat) list * nat * nat) option"
-(* NB the list parameter pairs type-list indices with offsets
-   the first nat parameter is an index of how many bytes into our overall tuple encoding we are
-   the second nat parameter is an index of how far into the types list we are *)
-and decode_dyn_nocheck_tuple_tails :: "(nat * nat) list \<Rightarrow> abi_type list \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 
-                (abi_value option list * nat) option"
+   input nat is running count of head length. *)
+and decode_dyn_nocheck_tuple_heads :: "abi_type list \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 
+                (abi_value option list *  (nat option) list * nat * nat) option"
+(* list parameter gives an offset for each field that still needs to be parsed
+   the nat parameter is an index of how many bytes into our overall tuple encoding we are *)
+and decode_dyn_nocheck_tuple_tails :: "(nat option) list \<Rightarrow> abi_type list \<Rightarrow> abi_value option list \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 
+                (abi_value list * nat) option"
 where
 (* we need to zip earlier. *)
 "decode_nocheck t l =
@@ -389,19 +387,12 @@ where
           None \<Rightarrow> None
           | Some (vs, bytes_parsed) \<Rightarrow> Some (Varray t vs, bytes_parsed + 32))
       | Ttuple ts \<Rightarrow>
-        (case decode_dyn_nocheck_tuple_heads ts 0 0 l of
+        (case decode_dyn_nocheck_tuple_heads ts 0 l of
           None \<Rightarrow> None
           | Some (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
-            (case decode_dyn_nocheck_tuple_tails idxs ts 0 byteoffset (drop bytes_parsed l) of
+            (case decode_dyn_nocheck_tuple_tails idxs ts vos byteoffset (drop bytes_parsed l) of
               None \<Rightarrow> None
-              | Some (vs, bytes_parsed') \<Rightarrow> 
-                (case (List.those (List.map2 (\<lambda> vo1 vo2.
-                      (case (vo1, vo2) of
-                            (Some v1, _) \<Rightarrow> Some v1
-                            | (None, Some v2) \<Rightarrow> Some v2
-                            | (None, None) \<Rightarrow> None)) vos vs)) of
-                      None \<Rightarrow> None
-                      | Some vs' \<Rightarrow> Some (Vtuple ts vs', bytes_parsed + bytes_parsed'))))
+              | Some (vs, bytes_parsed') \<Rightarrow> Some (Vtuple ts vs, bytes_parsed + bytes_parsed')))
       | Tbytes \<Rightarrow>
         if length l < 32 then None
         else let sz = nat (decode_uint (take 32 l)) in
@@ -427,38 +418,41 @@ where
 (* need to do something with updating indices here *)
 (* Also. how do we deal with ill-formed data such that the tails
 and heads overlap? *)
-| "decode_dyn_nocheck_tuple_heads [] i n l = Some ([], [], n, 0)"
-| "decode_dyn_nocheck_tuple_heads (th#tt) i n l =
+| "decode_dyn_nocheck_tuple_heads [] n l = Some ([], [], n, 0)"
+| "decode_dyn_nocheck_tuple_heads (th#tt) n l =
     (if abi_type_isstatic th
       then (case decode_nocheck th l of
         None \<Rightarrow> None
         | Some (v, bytes_parsed) \<Rightarrow>
-          (case decode_dyn_nocheck_tuple_heads tt (i+1) (n + nat (abi_static_size th)) (drop bytes_parsed l) of
+          (case decode_dyn_nocheck_tuple_heads tt (n + nat (abi_static_size th)) (drop bytes_parsed l) of
             None \<Rightarrow> None
-            | Some (vos, idxs, n', bytes_parsed') \<Rightarrow> Some (Some v # vos, idxs, n', bytes_parsed + bytes_parsed')))
+            | Some (vos, idxs, n', bytes_parsed') \<Rightarrow> Some (Some v # vos, None#idxs, n', bytes_parsed + bytes_parsed')))
     else
       (if length l < 32 then None
        else let sz = nat (decode_uint (take 32 l)) in
-            (case decode_dyn_nocheck_tuple_heads tt (i + 1) (n + 32) (drop 32 l) of
+            (case decode_dyn_nocheck_tuple_heads tt (n + 32) (drop 32 l) of
               None \<Rightarrow> None
-              | Some (vos, idxs, n', bytes_parsed) \<Rightarrow> Some (None # vos, (n, i)#idxs, n', bytes_parsed + 32))))"
+              | Some (vos, idxs, n', bytes_parsed) \<Rightarrow> Some (None # vos, (Some n)#idxs, n', bytes_parsed + 32))))"
 
-| "decode_dyn_nocheck_tuple_tails [] _ _ _ l = Some ([], 0)"
-| "decode_dyn_nocheck_tuple_tails (_#_) [] _ _ l = None"
-| "decode_dyn_nocheck_tuple_tails ((tidx, toffset)#t) (th#tt) idx offset l =
-   (if idx > tidx then None
-    else if idx < tidx then decode_dyn_nocheck_tuple_tails ((tidx, toffset)#t) tt (idx + 1) offset l
-    else if toffset \<noteq> offset then None
+| "decode_dyn_nocheck_tuple_tails [] [] []  _ l = Some ([], 0)"
+(* now we need to change the way we deal with value lists *)
+| "decode_dyn_nocheck_tuple_tails (None#t) (th#tt) (Some vh#vt) offset l = 
+   (case decode_dyn_nocheck_tuple_tails t tt vt offset l of
+    None \<Rightarrow> None
+    | Some (vs, bytes_parsed) \<Rightarrow> Some (vh#vs, bytes_parsed))"
+| "decode_dyn_nocheck_tuple_tails ((Some toffset)#t) (th#tt) (None#vt) offset l =
+   (if toffset \<noteq> offset then None
       else
-                 (case decode_nocheck th l of
-                       None \<Rightarrow> None
-                       | Some (v, bytes_parsed) \<Rightarrow>
-                          let offset' = offset + bytes_parsed in
-                          (case decode_dyn_nocheck_tuple_tails t tt (idx + 1) offset' (drop bytes_parsed l) of
-                                None \<Rightarrow> None
-                                | Some (vs, bytes_parsed') \<Rightarrow> Some (Some v#vs, bytes_parsed + bytes_parsed'))))
+       (case decode_nocheck th l of
+              None \<Rightarrow> None
+              | Some (v, bytes_parsed) \<Rightarrow>
+                     let offset' = offset + bytes_parsed in
+                     (case decode_dyn_nocheck_tuple_tails t tt vt offset' (drop bytes_parsed l) of
+                           None \<Rightarrow> None
+                           | Some (vs, bytes_parsed') \<Rightarrow> Some (v#vs, bytes_parsed + bytes_parsed'))))
                           
       "
+| "decode_dyn_nocheck_tuple_tails _ _ _ _ _ = None"
 (*
 | "decode_dyn_nocheck_tuple_tails (Inl v # t) n l =
    (case decode_dyn_nocheck_tuple_tails t n l of
@@ -525,8 +519,8 @@ termination decode_nocheck
     (case x of
        Inl (Inl (t, l)) \<Rightarrow> abi_type_measure t + length l 
       | Inl (Inr (t, n, l)) \<Rightarrow> abi_type_measure t + n + length l
-      | Inr (Inl (ts, i, n, l)) \<Rightarrow> abi_type_list_measure ts + length l
-      | Inr (Inr (idxs, ts, i, n, l)) \<Rightarrow> abi_type_list_measure ts + length l))")     apply(fastforce)
+      | Inr (Inl (ts,  n, l)) \<Rightarrow> abi_type_list_measure ts + length l
+      | Inr (Inr (idxs, ts, vs, n, l)) \<Rightarrow> abi_type_list_measure ts + length l))")     apply(fastforce)
              apply(auto)
   (* array case: length < 2^256 - 1 *)
   apply(cut_tac w = "(word_rcat (take 32 l) :: 256 word)" in Word.uint_lt)
