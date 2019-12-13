@@ -345,109 +345,139 @@ fun bytes_to_string :: "8 word list \<Rightarrow> char list" where
 "bytes_to_string bs =
   List.map (\<lambda> b . char_of_integer (integer_of_int (Word.uint b))) bs"
 
-
-fun tails_measure :: "(abi_value + (nat * abi_type)) list \<Rightarrow> nat" where
+fun tails_measure :: "(abi_value + (abi_type * nat)) list \<Rightarrow> nat" where
 "tails_measure [] = 1"
 | "tails_measure ((Inl _)#ts) = 1 + tails_measure ts"
-| "tails_measure ((Inr (_, t))#ts) =
-    1 + abi_type_measure t + tails_measure ts"
+| "tails_measure ((Inr (t, _))#ts) =
+    abi_type_measure t + tails_measure ts"
 
 
 (* TODO: consider returning a nat everywhere to make it easier to keep track
    of how much we have read, for the purposes of tuple indexing *)
-function decode_nocheck :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> (abi_value * 8 word list) option"
-and decode_dyn_nocheck_array :: "abi_type \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> (abi_value list * 8 word list) option"
-(* returned nat is the length of all the heads; input nat is running count of head length. *)
-and decode_dyn_nocheck_tuple_heads :: "abi_type list \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 
-                ((abi_value + (nat * abi_type)) list * nat * 8 word list) option"
-(* NB the nat parameter is an index of how many bytes into our overall tuple encoding we are *)
-and decode_dyn_nocheck_tuple_tails :: "(abi_value + (nat * abi_type)) list \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 
-                (abi_value list * 8 word list) option"
-  where
+function decode_nocheck :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> (abi_value * nat) option"
+and decode_dyn_nocheck_array :: "abi_type \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> (abi_value list * nat) option"
+(* first returned nat is the length of all the heads (used for computing offsets); 
+   second returned nat is number of bytes consumed;
+   first input nat is running count of head length.
+   second input nat is current index into type list *)
+and decode_dyn_nocheck_tuple_heads :: "abi_type list \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 
+                (abi_value option list *  (nat * nat) list * nat * nat) option"
+(* NB the list parameter pairs type-list indices with offsets
+   the first nat parameter is an index of how many bytes into our overall tuple encoding we are
+   the second nat parameter is an index of how far into the types list we are *)
+and decode_dyn_nocheck_tuple_tails :: "(nat * nat) list \<Rightarrow> abi_type list \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 
+                (abi_value option list * nat) option"
+where
+(* we need to zip earlier. *)
 "decode_nocheck t l =
   (if abi_type_isstatic t
     then
       if length l < nat (abi_static_size t) then None
       else (case decode_static_nocheck t l of
             None \<Rightarrow> None
-            | Some v \<Rightarrow> Some (v, drop (nat (abi_static_size t)) l))
+            | Some v \<Rightarrow> Some (v, nat (abi_static_size t)))
    else
     (case t of
       Tfarray t n \<Rightarrow>
         (case decode_dyn_nocheck_array t n l of
           None \<Rightarrow> None
-          | Some (vs, l') \<Rightarrow> Some (Vfarray t n vs, l'))
+          | Some (vs, bytes_parsed) \<Rightarrow> Some (Vfarray t n vs, bytes_parsed))
       | Tarray t \<Rightarrow>
        if length l < 32 then None
         else let n = nat (decode_uint (take 32 l)) in
-        (case decode_dyn_nocheck_array t n l of
+        (case decode_dyn_nocheck_array t n (drop 32 l) of
           None \<Rightarrow> None
-          | Some (vs, l') \<Rightarrow> Some (Varray t vs, l'))
+          | Some (vs, bytes_parsed) \<Rightarrow> Some (Varray t vs, bytes_parsed + 32))
       | Ttuple ts \<Rightarrow>
-        (case decode_dyn_nocheck_tuple_heads ts 0 l of
+        (case decode_dyn_nocheck_tuple_heads ts 0 0 l of
           None \<Rightarrow> None
-          | Some (tails, n, l') \<Rightarrow>
-            (case decode_dyn_nocheck_tuple_tails tails n l' of
+          | Some (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
+            (case decode_dyn_nocheck_tuple_tails idxs ts 0 byteoffset (drop bytes_parsed l) of
               None \<Rightarrow> None
-              | Some (vs, l'') \<Rightarrow> Some (Vtuple ts vs, l'')))
+              | Some (vs, bytes_parsed') \<Rightarrow> 
+                (case (List.those (List.map2 (\<lambda> vo1 vo2.
+                      (case (vo1, vo2) of
+                            (Some v1, _) \<Rightarrow> Some v1
+                            | (None, Some v2) \<Rightarrow> Some v2
+                            | (None, None) \<Rightarrow> None)) vos vs)) of
+                      None \<Rightarrow> None
+                      | Some vs' \<Rightarrow> Some (Vtuple ts vs', bytes_parsed + bytes_parsed'))))
       | Tbytes \<Rightarrow>
         if length l < 32 then None
         else let sz = nat (decode_uint (take 32 l)) in
-             if length (drop 32 l) < sz then None
-             else Some (Vbytes (take sz (drop 32 l)), (drop (sz + 32) l))
+             if length l - 32 < sz then None
+             else Some (Vbytes (take sz (drop 32 l)), sz + 32)
       | Tstring \<Rightarrow> 
         if length l < 32 then None
         else let sz = nat (decode_uint (take 32 l)) in
-             if length (drop 32 l) < sz then None
-             else Some (Vstring (bytes_to_string (take sz (drop 32 l))), drop (sz + 32) l)
+             if length l - 32 < sz then None
+             else Some (Vstring (bytes_to_string (take sz (drop 32 l))), sz + 32)
       | _ \<Rightarrow> None))"
 
 (*| "decode_dyn_nocheck_array t 0 [] = Some ([], [])"
 | "decode_dyn_nocheck_array t n [] = None" *)
-| "decode_dyn_nocheck_array t 0 l = Some ([], l)"
+| "decode_dyn_nocheck_array t 0 l = Some ([], 0)"
 | "decode_dyn_nocheck_array t (Suc n') l =
     (case decode_nocheck t l of
       None \<Rightarrow> None
-      | Some (v, l') \<Rightarrow> (case decode_dyn_nocheck_array t n' l' of
+      | Some (v, bytes_parsed) \<Rightarrow> (case decode_dyn_nocheck_array t n' (drop bytes_parsed l) of
                           None \<Rightarrow> None
-                          | Some (vt, l'') \<Rightarrow> Some (v#vt, l'')))"
+                          | Some (vt, bytes_parsed') \<Rightarrow> Some (v#vt, bytes_parsed + bytes_parsed')))"
 
 (* need to do something with updating indices here *)
 (* Also. how do we deal with ill-formed data such that the tails
 and heads overlap? *)
-| "decode_dyn_nocheck_tuple_heads [] n l = Some ([], n, l)"
-| "decode_dyn_nocheck_tuple_heads (th#tt) n l =
+| "decode_dyn_nocheck_tuple_heads [] i n l = Some ([], [], n, 0)"
+| "decode_dyn_nocheck_tuple_heads (th#tt) i n l =
     (if abi_type_isstatic th
       then (case decode_nocheck th l of
         None \<Rightarrow> None
-        | Some (v, l') \<Rightarrow>
-          (case decode_dyn_nocheck_tuple_heads tt (n + nat (abi_static_size th))  l' of
+        | Some (v, bytes_parsed) \<Rightarrow>
+          (case decode_dyn_nocheck_tuple_heads tt (i+1) (n + nat (abi_static_size th)) (drop bytes_parsed l) of
             None \<Rightarrow> None
-            | Some (tails, n', l'') \<Rightarrow> Some (Inl v # tails, n', l'')))
+            | Some (vos, idxs, n', bytes_parsed') \<Rightarrow> Some (Some v # vos, idxs, n', bytes_parsed + bytes_parsed')))
     else
       (if length l < 32 then None
        else let sz = nat (decode_uint (take 32 l)) in
-            (case decode_dyn_nocheck_tuple_heads tt (n + 32) (drop 32 l) of
+            (case decode_dyn_nocheck_tuple_heads tt (i + 1) (n + 32) (drop 32 l) of
               None \<Rightarrow> None
-              | Some (tails, n', l') \<Rightarrow> Some (Inr (sz, th) # tails, n', l'))))"
+              | Some (vos, idxs, n', bytes_parsed) \<Rightarrow> Some (None # vos, (n, i)#idxs, n', bytes_parsed + 32))))"
 
-| "decode_dyn_nocheck_tuple_tails [] _ l = Some ([], l)"
+| "decode_dyn_nocheck_tuple_tails [] _ _ _ l = Some ([], 0)"
+| "decode_dyn_nocheck_tuple_tails (_#_) [] _ _ l = None"
+| "decode_dyn_nocheck_tuple_tails ((tidx, toffset)#t) (th#tt) idx offset l =
+   (if idx > tidx then None
+    else if idx < tidx then decode_dyn_nocheck_tuple_tails ((tidx, toffset)#t) tt (idx + 1) offset l
+    else if toffset \<noteq> offset then None
+      else
+                 (case decode_nocheck th l of
+                       None \<Rightarrow> None
+                       | Some (v, bytes_parsed) \<Rightarrow>
+                          let offset' = offset + bytes_parsed in
+                          (case decode_dyn_nocheck_tuple_tails t tt (idx + 1) offset' (drop bytes_parsed l) of
+                                None \<Rightarrow> None
+                                | Some (vs, bytes_parsed') \<Rightarrow> Some (Some v#vs, bytes_parsed + bytes_parsed'))))
+                          
+      "
+(*
 | "decode_dyn_nocheck_tuple_tails (Inl v # t) n l =
    (case decode_dyn_nocheck_tuple_tails t n l of
       None \<Rightarrow> None
-      | Some (vs, l') \<Rightarrow> Some (v#vs, l'))"
+      | Some (vs, bytes_parsed) \<Rightarrow> Some (v#vs, bytes_parsed))"
 (* is it too strict to force offset to equal n? *)
-| "decode_dyn_nocheck_tuple_tails (Inr (offset, typ) # t) n l =
+| "decode_dyn_nocheck_tuple_tails (Inr (typ, offset) # t) n l =
   (if offset \<noteq> n then None
    else (case decode_nocheck typ l of
           None \<Rightarrow> None
-          | Some (v, l') \<Rightarrow>
-            let n' = n + (length l - length l') in
-            (case decode_dyn_nocheck_tuple_tails t n' l' of
+          | Some (v, bytes_parsed) \<Rightarrow>
+            let n' = n + (length l - bytes_parsed) in
+            (case decode_dyn_nocheck_tuple_tails t n' (drop bytes_parsed l) of
               None \<Rightarrow> None
-              | Some (vs, l'') \<Rightarrow> Some (v#vs, l''))))"
+              | Some (vs, bytes_parsed') \<Rightarrow> Some (v#vs, bytes_parsed + bytes_parsed'))))"
+*)
   by pat_completeness auto
 
+(*
 abbreviation decode_nocheck_dom where
 "decode_nocheck_dom \<equiv>
 decode_nocheck_decode_dyn_nocheck_array_decode_dyn_nocheck_tuple_heads_decode_dyn_nocheck_tuple_tails_dom"
@@ -463,42 +493,45 @@ lemma decode_dyn_suffix :
       apply(case_tac t, auto split:option.splits)
   
   apply(case_tac l, auto)
+*)
+(*
+lemma tails_measure_bound [rule_format] :
+fixes x
+shows "\<forall> n l a aa b .
+      (decode_dyn_nocheck_tuple_heads x n l = Some (a, aa, b) \<longrightarrow>
+       decode_nocheck_decode_dyn_nocheck_array_decode_dyn_nocheck_tuple_heads_decode_dyn_nocheck_tuple_tails_dom
+        (Inr (Inl (x, n, l))) \<longrightarrow>
+      tails_measure a \<le> abi_type_list_measure x)" 
+  apply(induction x)
+   apply(auto simp add:decode_dyn_nocheck_tuple_heads.psimps)
+  apply(auto split: if_splits option.splits prod.splits)
+   apply(drule_tac x = "(n + nat (abi_static_size a))" in spec)
+   apply(drule_tac x = "(drop x2a l)" in spec)
+   apply(drule_tac x = x1a in spec)
+   apply(auto)
+  apply(case_tac n)
+apply(frule_tac decode_dyn_nocheck_tuple_heads.psimps) apply(auto)
+*)
+
+fun somes :: "'a option list \<Rightarrow> 'a list" where
+"somes [] = []"
+| "somes (None#t) = somes t"
+| "somes (Some h#t) = h # somes t"
 
 termination decode_nocheck
 
   apply(relation 
 "measure (\<lambda> x .
     (case x of
-       Inl (Inl (t, l)) \<Rightarrow> abi_type_measure t + length l
+       Inl (Inl (t, l)) \<Rightarrow> abi_type_measure t + length l 
       | Inl (Inr (t, n, l)) \<Rightarrow> abi_type_measure t + n + length l
-      | Inr (Inl (ts, n, l)) \<Rightarrow> abi_type_list_measure ts + n + length l
-      | Inr (Inr (tls, n, l)) \<Rightarrow> tails_measure tls + length l ))")
-              apply(fastforce)
-  apply(simp)
-             apply(fastforce)
-           apply(clarsimp)
-  apply(case_tac x10) 
-            apply(fastforce)apply(simp)
-           defer
-           apply(simp add:decode_uint_max max_u256_def)
-  apply(cut_tac x = "(word_rcat (take 32 l))" in decode_uint_max)
-           apply(simp add: Int.nat_less_iff)
-           apply(simp add:decode_uint_max max_u256_def)
-
-          apply(fastforce)
-         apply(simp) defer
-         apply(fastforce)
-  apply(simp) defer
-        apply(fastforce)
-       apply(fastforce)
-  apply(simp)
-     apply(auto)
-      defer
-      defer
-      defer
-      defer
-      defer
-(* ok, i think this works. need a couple lemmas. *)  apply(case_tac l)
+      | Inr (Inl (ts, i, n, l)) \<Rightarrow> abi_type_list_measure ts + length l
+      | Inr (Inr (idxs, ts, i, n, l)) \<Rightarrow> abi_type_list_measure ts + length l))")     apply(fastforce)
+             apply(auto)
+  (* array case: length < 2^256 - 1 *)
+  apply(cut_tac w = "(word_rcat (take 32 l) :: 256 word)" in Word.uint_lt)
+  apply(simp add:max_u256_def)
+  done
 
 
 (* head = offset at which tail can be found
