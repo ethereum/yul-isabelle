@@ -623,11 +623,11 @@ fun heads_length :: "(8 word list + abi_value) list \<Rightarrow> nat" where
 | "heads_length (Inr v # t) = 32 + heads_length t"
 
 fun encode :: "abi_value \<Rightarrow> 8 word list option" 
-and encode_tuple_heads :: "abi_value list \<Rightarrow> (8 word list + abi_value) list option" 
+and encode_tuple_heads :: "abi_value list \<Rightarrow> (int * 8 word list) list \<Rightarrow> 8 word list option" 
 (*
 and encode_tuple_tails :: "(8 word list + abi_value) list \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list option" where *)
 
-and encode_tuple_tails :: "(abi_value) list \<Rightarrow> 8 word list \<Rightarrow> 8 word list list" where
+and encode_tuple_tails :: "(abi_value) list \<Rightarrow> (int * 8 word list) list option" where
 "encode v =
   (if abi_type_isstatic (abi_get_type v) then
       encode_static v
@@ -641,10 +641,10 @@ and encode_tuple_tails :: "(abi_value) list \<Rightarrow> 8 word list \<Rightarr
                 None \<Rightarrow> None
                 | Some bss \<Rightarrow> Some (encode_int (int (length vs)) @ List.concat bss))
           | Vtuple ts vs \<Rightarrow> 
-              (case encode_tuple_heads vs of
+              (case encode_tuple_tails vs of
                 None \<Rightarrow> None
                 | Some bvs \<Rightarrow>
-                  (case encode_tuple_tails bvs (heads_length bvs) [] of
+                  (case encode_tuple_heads vs bvs of
                         None \<Rightarrow> None
                         | Some bs \<Rightarrow> Some bs))
           | Vbytes l \<Rightarrow> Some (encode_int (length l) @ pad_bytes l)
@@ -654,32 +654,39 @@ and encode_tuple_tails :: "(abi_value) list \<Rightarrow> 8 word list \<Rightarr
 
 (* need to refactor for cleaner termination proof
 idea: encode tails first?
-
+ok, now we need some kind of way to get which tail we are on
+what is n? n should be the offset of the current tail
+this means we need some way to get the current offset
 *)
-| "encode_tuple_heads [] = Some []"
-| "encode_tuple_heads (v#vs) =
+| "encode_tuple_heads [] [] = Some ([])"
+| "encode_tuple_heads (v#vs) ((offset, bs)#bss) =
     (if abi_type_isstatic (abi_get_type v) then
         (case encode v of
           None \<Rightarrow> None
-          | Some bs \<Rightarrow> (case (encode_tuple_heads vs) of
+          | Some enc \<Rightarrow> (case (encode_tuple_heads vs bss) of
                           None \<Rightarrow> None
-                          | Some bs' \<Rightarrow> Some (Inl bs # bs')))
-    else (case (encode_tuple_heads vs) of
+                          | Some enc' \<Rightarrow> Some (enc @ enc')))
+    else (case (encode_tuple_heads vs bss) of
                 None \<Rightarrow> None
-                | Some bs' \<Rightarrow> Some (Inr v # bs')))
+                | Some enc \<Rightarrow> Some (encode_int (offset) @ enc)))
     "
-| "encode_tuple_tails [] n tails = Some tails"
-| "encode_tuple_tails (Inl bs # rest) n tails =
-    (case encode_tuple_tails rest n tails of
-      None \<Rightarrow> None
-      | Some bss \<Rightarrow> Some (bs @ bss))"
-| "encode_tuple_tails (Inr v # rest) n tails =
-    (case encode v of
-            None \<Rightarrow> None
-           | Some bs1 \<Rightarrow> 
-              (case encode_tuple_tails rest (n + length bs1) (tails @ bs1) of
-                  None \<Rightarrow> None
-                  | Some bss \<Rightarrow> Some ((encode_int n) @ bss)))"
+| "encode_tuple_heads _ _ = None"
+
+(* OK - we need to make it so that we track the length of the entire thing
+   so far.
+
+
+
+ *)
+(* abi_static_size *)
+| "encode_tuple_tails [] = Some []"
+| "encode_tuple_tails (v # rest) =
+    (case encode_tuple_tails rest of
+                None \<Rightarrow> None
+                | Some ts \<Rightarrow> (if abi_type_isstatic (abi_get_type v)
+                                then Some ((abi_static_size (abi_get_type v), [])#ts)
+                                else (case encode v of None \<Rightarrow> None
+                                            | Some enc \<Rightarrow> Some ((int (length enc + 32), enc)#ts))))"
         
           
 
