@@ -533,7 +533,12 @@ termination decode_nocheck
   apply(simp add:max_u256_def)
   done
 
-
+fun decode :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> abi_value option" where
+"decode t l =
+  (case decode_nocheck t l of
+    None \<Rightarrow> None
+    | Some (v, _) \<Rightarrow>
+    (if abi_value_valid v then Some v else None))"
 
 (* head = offset at which tail can be found
    tail = encoding of dynamic object *)
