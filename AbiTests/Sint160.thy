@@ -19,5 +19,18 @@ begin
 
 *)
 
+definition test_in :: "8 word list" where
+"test_in = hex_splits
+''ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd6''"
+
+definition test_schema :: abi_type where
+"test_schema = Tsint 160"
+
+definition test_out :: abi_value where
+"test_out = Vsint 160 (-42)"
+
+value "test_out"
+
+value "decode test_schema test_in"
 
 end

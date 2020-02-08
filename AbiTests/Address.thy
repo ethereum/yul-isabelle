@@ -18,4 +18,19 @@ begin
 
 0x00000000000000000000000052908400098527886e0f7030069857d2e4169ee7
 *)
+
+definition test_in :: "8 word list" where
+"test_in = 
+hex_splits ''00000000000000000000000052908400098527886e0f7030069857d2e4169ee7''"
+
+definition test_schema :: abi_type where
+"test_schema = Taddr"
+
+definition test_out :: "abi_value" where
+"test_out = Vaddr (hexread ''52908400098527886e0f7030069857d2e4169ee7'')"
+
+value "test_out"
+
+value "decode test_schema test_in"
+
 end

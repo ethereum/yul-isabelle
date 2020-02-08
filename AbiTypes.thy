@@ -267,7 +267,7 @@ and decode_static_nocheck_tup :: "abi_type list \<Rightarrow> 8 word list \<Righ
 "decode_static_nocheck (Tuint n) l =
    Some (Vuint n (decode_uint l))"
 | "decode_static_nocheck (Tsint n) l =
-   Some (Vsint n (decode_uint l))"
+   Some (Vsint n (decode_sint l))"
 | "decode_static_nocheck Taddr l =
    Some (Vaddr (decode_uint l))"
 | "decode_static_nocheck Tbool l =
