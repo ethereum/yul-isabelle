@@ -48,4 +48,6 @@ definition test_out :: "abi_value" where
              (Varray (Tuint256) []),
              (Varray (Tuint256) (map (Vuint 256) [40, 41, 42]))]" 
 
+value "decode test_schema test_in"
+
 end
