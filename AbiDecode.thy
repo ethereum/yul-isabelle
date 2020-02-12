@@ -97,7 +97,7 @@ and decode_static_nocheck_tup :: "abi_type list \<Rightarrow> 8 word list \<Righ
      else Err (locate_err ''Invalid ufixed'' l)))"
 | "decode_static_nocheck (Tfbytes n) l =
    (let res = decode_fbytes n l in
-    (if fbytes_value_valid n l then Ok (Vfbytes n res)
+    (if fbytes_value_valid n res then Ok (Vfbytes n res)
      else Err (locate_err ''Invalid fbytes'' l)))"
 | "decode_static_nocheck (Tfarray t n) l =
   (case decode_static_nocheck_tup (List.replicate n t) l of

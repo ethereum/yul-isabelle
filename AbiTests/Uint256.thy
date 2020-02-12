@@ -1,4 +1,4 @@
-theory Uint256 imports "../AbiTypes" "../Hex"
+theory Uint256 imports "../AbiTypes" "../Hex" "../AbiDecode"
 
 begin
 

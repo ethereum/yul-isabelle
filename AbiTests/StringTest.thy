@@ -1,4 +1,4 @@
-theory StringTest imports "../AbiTypes" "../Hex"
+theory StringTest imports "../AbiTypes" "../Hex" "../AbiDecode"
 
 begin
 

@@ -1,4 +1,4 @@
-theory Uint160 imports "../AbiTypes" "../Hex"
+theory Uint160 imports "../AbiTypes" "../Hex" "../AbiDecode"
 
 begin
 (* solidity *)

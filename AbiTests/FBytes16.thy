@@ -1,4 +1,4 @@
-theory FBytes16 imports "../AbiTypes" "../Hex"
+theory FBytes16 imports "../AbiTypes" "../Hex" "../AbiDecode"
 
 begin
 
@@ -30,6 +30,9 @@ definition test_schema :: abi_type where
 definition test_out :: "abi_value" where
 "test_out = Vfbytes 16 (hex_splits ''deadbeefdeadbeefdeadbeefdeadbeef'')"
 
+value "test_in"
+
 value "decode test_schema test_in"
+value "decode test_schema test_in = Ok test_out"
 
 end

@@ -1,4 +1,4 @@
-theory Farray_Array imports "../Hex" "../AbiTypes" "../AbiTypesSyntax" begin
+theory Farray_Array imports "../Hex" "../AbiTypes" "../AbiDecode" "../AbiTypesSyntax" begin
 
 (* solidity *)
 

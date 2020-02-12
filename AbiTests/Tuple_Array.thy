@@ -1,4 +1,4 @@
-theory Tuple_Array imports "../Hex" "../AbiTypes" "../AbiTypesSyntax"
+theory Tuple_Array imports "../Hex" "../AbiTypes" "../AbiTypesSyntax" "../AbiDecode"
 
 begin
 

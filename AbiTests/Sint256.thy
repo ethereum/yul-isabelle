@@ -1,4 +1,4 @@
-theory Sint256 imports "../AbiTypes" "../Hex"
+theory Sint256 imports "../AbiTypes" "../Hex" "../AbiDecode"
 
 begin
 

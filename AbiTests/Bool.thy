@@ -1,4 +1,4 @@
-theory Bool imports "../AbiTypes" "../Hex"
+theory Bool imports "../AbiTypes" "../Hex" "../AbiDecode"
 
 begin
 (* solidity *)

@@ -1,4 +1,4 @@
-theory FArray imports "../AbiTypes" "../Hex" "../AbiTypesSyntax"
+theory FArray imports "../AbiTypes" "../Hex" "../AbiTypesSyntax" "../AbiDecode"
 
 begin
 

@@ -1,4 +1,4 @@
-theory Address imports "../AbiTypes" "../Hex"
+theory Address imports "../AbiTypes" "../Hex" "../AbiDecode"
 
 begin
 

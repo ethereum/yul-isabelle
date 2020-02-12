@@ -1,5 +1,5 @@
-theory Tuple imports "../AbiTypes" "../Hex"
-
+theory Tuple imports "../AbiTypes" "../Hex" "../AbiDecode"
+ 
 begin
 
 (* solidity *)

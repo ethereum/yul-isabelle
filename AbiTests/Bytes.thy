@@ -1,5 +1,5 @@
-theory Bytes imports "../AbiTypes" "../Hex"
-
+theory Bytes imports "../AbiTypes" "../Hex" "../AbiDecode"
+ 
 begin
 
 (* solidity *)
