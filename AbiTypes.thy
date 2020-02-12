@@ -29,6 +29,8 @@ datatype abi_type =
   | Tstring
   | Tarray "abi_type"
 
+type_synonym 'a orerror = "'a + char list"
+
 (* for use in termination proofs
    some of the termination proofs can't be completed automatically
    due to the size of the mutually recurisve functions involved. *)
@@ -37,6 +39,7 @@ definition max_u256 :: "nat" where
 "max_u256 = 2 ^ 256 - 1"
 
 (* do not use this outside of proofs - it will blow up. *)
+(*
 fun abi_type_measure :: "abi_type \<Rightarrow> nat"
 and abi_type_list_measure :: "abi_type list \<Rightarrow> nat" where
 "abi_type_measure (Ttuple ts) = 1 + abi_type_list_measure ts"
@@ -47,6 +50,19 @@ and abi_type_list_measure :: "abi_type list \<Rightarrow> nat" where
 | "abi_type_list_measure [] = 1"
 | "abi_type_list_measure (th#tt) =
     abi_type_measure th + abi_type_list_measure tt + 1"
+*)
+
+fun abi_type_measure :: "abi_type \<Rightarrow> nat"
+and abi_type_list_measure :: "abi_type list \<Rightarrow> nat" where
+"abi_type_measure (Ttuple ts) = 1 + abi_type_list_measure ts"
+| "abi_type_measure (Tfarray t n) = 1 + n * (abi_type_measure t)"
+| "abi_type_measure (Tarray t) = 1 + max_u256 * abi_type_measure t" (* curious about this one *)
+| "abi_type_measure _ = 1"
+
+| "abi_type_list_measure [] = 1"
+| "abi_type_list_measure (th#tt) =
+    abi_type_measure th + abi_type_list_measure tt + 1"
+
 
 
 (* count number of elements with zero-size encodings *)
@@ -144,40 +160,77 @@ fun int_of_fixed :: "nat \<Rightarrow> rat \<Rightarrow> int option" where
     (num, den) \<Rightarrow>
       (if den = 1 then Some num else None))"
 
+definition uint_value_valid :: "nat \<Rightarrow> int \<Rightarrow> bool" where
+"uint_value_valid n i = (0 \<le> i \<and> i \<le> max_uint n)"  
+
+definition sint_value_valid :: "nat \<Rightarrow> int \<Rightarrow> bool" where
+"sint_value_valid n i = (min_sint n \<le> i \<and> i \<le> max_sint n)"  
+
+definition addr_value_valid :: "int \<Rightarrow> bool" where
+"addr_value_valid i = uint_value_valid 160 i"
+
+definition bool_value_valid :: "bool \<Rightarrow> bool" where
+"bool_value_valid b = True"
+
+definition fixed_value_valid :: "nat \<Rightarrow> nat \<Rightarrow> rat \<Rightarrow> bool" where
+"fixed_value_valid m n r =
+  (case int_of_fixed n r of
+      None \<Rightarrow> False
+      | Some i \<Rightarrow> min_sint m \<le> i \<and> i \<le> max_sint m)"
+
+definition ufixed_value_valid :: "nat \<Rightarrow> nat \<Rightarrow> rat \<Rightarrow> bool" where
+"ufixed_value_valid m n r =
+  (case int_of_fixed n r of
+      None \<Rightarrow> False
+      | Some i \<Rightarrow> 0 \<le> i \<and> i \<le> max_uint m)"
+
+definition fbytes_value_valid :: "nat \<Rightarrow> 8 word list \<Rightarrow> bool" where
+"fbytes_value_valid n l = (length l = n)"
+
+definition function_value_valid :: "int \<Rightarrow> int \<Rightarrow> bool" where
+"function_value_valid i1 i2 = 
+  (uint_value_valid 160 i1 \<and> uint_value_valid 32 i2)"
+
+definition farray_value_valid_aux :: "abi_type \<Rightarrow> nat \<Rightarrow> abi_value list \<Rightarrow> bool" where
+"farray_value_valid_aux t n l = 
+    (length l = n \<and> 
+      list_all (\<lambda> v . abi_get_type v = t) l)"
+
+definition tuple_value_valid_aux :: "abi_type list \<Rightarrow> abi_value list \<Rightarrow> bool" where
+"tuple_value_valid_aux ts vs = (List.map abi_get_type vs = ts)"
+
+definition bytes_value_valid :: "8 word list \<Rightarrow> bool" where
+"bytes_value_valid bs = True"
+
+definition string_value_valid :: "char list \<Rightarrow> bool" where
+"string_value_valid s = True"
+
+definition array_value_valid_aux :: "abi_type \<Rightarrow> abi_value list \<Rightarrow> bool" where
+"array_value_valid_aux t l = list_all (\<lambda> v . abi_get_type v = t) l"
+
 (* additional checks beyond type well-formedness to ensure
    values are permitted *)
 fun abi_value_valid_aux :: "abi_value \<Rightarrow> bool" where
-"abi_value_valid_aux (Vuint n i) =
-  (0 \<le> i \<and> i \<le> max_uint n)"
-| "abi_value_valid_aux (Vsint n i) =
-  (min_sint n \<le> i \<and> i \<le> max_sint n)"
-| "abi_value_valid_aux (Vaddr i) =
-  (0 \<le> i \<and> i \<le> max_uint 160)"
-| "abi_value_valid_aux (Vbool b) = True"
-| "abi_value_valid_aux (Vfixed m n r) =
-    (case int_of_fixed n r of
-      None \<Rightarrow> False
-      | Some i \<Rightarrow> min_sint m \<le> i \<and> i \<le> max_sint m)"
-| "abi_value_valid_aux (Vufixed m n r) =
-    (case int_of_fixed n r of
-      None \<Rightarrow> False
-      | Some i \<Rightarrow> 0 \<le> i \<and> i \<le> max_uint m)"
-| "abi_value_valid_aux (Vfbytes n l) =
-    (length l = n)"
-| "abi_value_valid_aux (Vfunction i1 i2) =
-    (0 \<le> i1 \<and> i1 \<le> max_uint 160 \<and>
-     0 \<le> i2 \<and> i2 \<le> max_uint 32)"
+"abi_value_valid_aux (Vuint n i) = uint_value_valid n i"
+| "abi_value_valid_aux (Vsint n i) = sint_value_valid n i"
+| "abi_value_valid_aux (Vaddr i) = addr_value_valid i"
+| "abi_value_valid_aux (Vbool b) = bool_value_valid b"
+| "abi_value_valid_aux (Vfixed m n r) = fixed_value_valid m n r"
+| "abi_value_valid_aux (Vufixed m n r) = ufixed_value_valid m n r"
+| "abi_value_valid_aux (Vfbytes n l) = fbytes_value_valid n l"
+| "abi_value_valid_aux (Vfunction i1 i2) = function_value_valid i1 i2"
 | "abi_value_valid_aux (Vfarray t n l) =
-    (length l = n \<and> 
-      list_all (\<lambda> v . abi_get_type v = t) l)"
+    (farray_value_valid_aux t n l \<and>
+     list_all abi_value_valid_aux l)"
 | "abi_value_valid_aux (Vtuple ts vs) =
-    (List.map abi_get_type vs = ts)"
+    (tuple_value_valid_aux ts vs \<and>
+     list_all abi_value_valid_aux vs)"
 (* in practice are there any restrictions on bytes? *)
-| "abi_value_valid_aux (Vbytes _) = True"
-| "abi_value_valid_aux (Vstring _) = True"
+| "abi_value_valid_aux (Vbytes bs) = bytes_value_valid bs"
+| "abi_value_valid_aux (Vstring s) = string_value_valid s"
 | "abi_value_valid_aux (Varray t l) =
-    list_all (\<lambda> v . abi_get_type v = t) l"
-
+  (array_value_valid_aux t l \<and>
+   list_all abi_value_valid_aux l)"
 
 fun abi_value_valid :: "abi_value \<Rightarrow> bool" where
 "abi_value_valid v =

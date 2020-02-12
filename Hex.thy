@@ -158,11 +158,79 @@ fun hex_split_bytes ::
 value "hex_split_bytes
 ''000000000000000000000000000000000000000000000000000000000000002a''"
 
+(* TODO: this will still choke if given non-hex characters. *)
 fun hex_splits :: "char list \<Rightarrow> 8 word list" where
 "hex_splits l =
   List.map (\<lambda> x . Word.word_of_int (hexread x)) (hex_split_bytes l)"
 
 value "hex_splits
 ''000000000000000000000000000000000000000000000000000000000000002a''"
+
+
+(* decimal reading/writing - for use in generating error messages *)
+
+definition decwrite1_dom :: "nat \<Rightarrow> bool" where
+"decwrite1_dom n = (n < 10)"
+
+definition decwrite1 :: "nat \<Rightarrow> char" where
+"decwrite1 c = (if c = 0 then CHR ''0'' else
+                if c = 1 then CHR ''1'' else
+                if c = 2 then CHR ''2'' else
+                if c = 3 then CHR ''3'' else
+                if c = 4 then CHR ''4'' else
+                if c = 5 then CHR ''5'' else
+                if c = 6 then CHR ''6'' else
+                if c = 7 then CHR ''7'' else
+                if c = 8 then CHR ''8'' else
+                if c = 9 then CHR ''9'' else undefined)"
+
+(*
+lemma hexread1_hexwrite1 : "hexread1_dom c \<Longrightarrow> hexwrite1 (hexread1 c) = c"
+  apply (auto simp add:hexread1_dom_def hexread1_def hexwrite1_def)
+  done
+*)
+lemma decwrite1_help :
+"n < 10 \<Longrightarrow>
+    n \<noteq> 9 \<Longrightarrow>
+    n \<noteq> 8 \<Longrightarrow>
+    n \<noteq> 7 \<Longrightarrow>
+    n \<noteq> 6 \<Longrightarrow>
+    n \<noteq> 5 \<Longrightarrow>
+    n \<noteq> 4 \<Longrightarrow>
+    n \<noteq> 3 \<Longrightarrow>
+    n \<noteq> 2 \<Longrightarrow>
+    n \<noteq> Suc 0 \<Longrightarrow>
+    0 < n \<Longrightarrow> False"
+proof(induction n, auto)
+qed 
+
+fun decwrite2 :: "nat \<Rightarrow> (char * char)" where
+"decwrite2 w = 
+  (case Divides.divmod_nat w 10 of
+       (d,m) \<Rightarrow> (decwrite1 d, decwrite1 m))"
+
+function(sequential) decwrite' :: "nat \<Rightarrow> char list" where
+"decwrite' n = (if n < 10 then [decwrite1 n] else
+              (case Divides.divmod_nat n 10 of
+                     (d, m) \<Rightarrow> (decwrite1 m # (decwrite' d))))"
+  by pat_completeness auto
+
+termination
+  apply(relation "(measure (\<lambda> n . if n < 10 then 1 else Suc n))")
+   apply(clarsimp)
+  apply(clarsimp) apply(simp add:divmod_nat_def)
+  done
+
+fun decwrite :: "nat \<Rightarrow> char list" where
+"decwrite n = rev (decwrite' n)"
+
+(*
+lemma hexwrite1_hexread1 : "hexwrite1_dom n \<Longrightarrow> hexread1 (hexwrite1 n) = n"
+  apply(auto simp add:hexwrite1_dom_def hexwrite1_def)
+                  apply(auto simp add:hexread1_def)
+                  apply(insert hexwrite1_help, auto)
+  done
+*)
+
 
 end

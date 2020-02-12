@@ -1,4 +1,4 @@
-theory Array_Tuple imports "../Hex" "../AbiTypes"
+theory Array_Tuple imports "../Hex" "../AbiTypes" "../AbiDecode"
 begin
 
 (* solidity *)
@@ -55,6 +55,8 @@ definition test_out :: "abi_value" where
               [(map (Vuint 256) [1, 2])
               ,(map (Vuint 256) [3, 4])
               ,(map (Vuint 256) [21, 22])])"
+
+value "decode test_schema test_in"
 
 
 end

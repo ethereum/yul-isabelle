@@ -1,4 +1,4 @@
-theory Tuple_Array_Tuple imports "../Hex" "../AbiTypes"
+theory Tuple_Array_Tuple imports "../Hex" "../AbiTypes" "../AbiDecode"
 
 begin
 
@@ -87,6 +87,6 @@ definition test_out :: abi_value where
 
 value "test_out"
 
-value "decode test_schema test_in"
+value "decode test_schema test_in = Ok test_out"
 
 end

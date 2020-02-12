@@ -1,4 +1,4 @@
-theory Array_Tuple_Array imports "../Hex" "../AbiTypes" "../AbiTypesSyntax"
+theory Array_Tuple_Array imports "../Hex" "../AbiTypes" "../AbiTypesSyntax" "../AbiDecode"
 begin
 
 (* example of a dynamic structure containing a static structure which in turn contains a dynamic structure *)
@@ -92,5 +92,10 @@ definition test_out :: "abi_value" where
                         Varray (Tuint 256) []],
                        [Varray (Tuint 256) (map (Vuint 256) [60, 61, 62]),
                         Varray (Tuint 256) (map (Vuint 256) [100, 101])]])"
+
+value "decode test_schema test_in"
+
+value "decode test_schema test_in = Ok test_out"
+
 
 end

@@ -1,4 +1,4 @@
-theory Array imports "../Hex" "../AbiTypes"
+theory Array imports "../Hex" "../AbiTypes" "../AbiDecode"
 
 begin
 
