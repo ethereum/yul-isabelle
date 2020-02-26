@@ -1,4 +1,4 @@
-theory Tuple_Array_Tuple imports "../Hex" "../AbiTypes" "../AbiDecode"
+theory Tuple_Array_Tuple imports "../Hex" "../AbiTypes" "../AbiDecode" "../AbiEncode" "../WordUtils"
 
 begin
 
@@ -88,5 +88,9 @@ definition test_out :: abi_value where
 value "test_out"
 
 value "decode test_schema test_in = Ok test_out"
+
+value "encode test_out = Some test_in"
+
+value "bytesToEvmWords test_in"
 
 end

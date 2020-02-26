@@ -1,4 +1,4 @@
-theory Array_Tuple imports "../Hex" "../AbiTypes" "../AbiDecode"
+theory Array_Tuple imports "../Hex" "../AbiTypes" "../AbiDecode" "../AbiEncode" "../WordUtils"
 begin
 
 (* solidity *)
@@ -58,5 +58,8 @@ definition test_out :: "abi_value" where
 
 value "decode test_schema test_in"
 
+value "encode test_out = Some test_in"
+
+value "bytesToEvmWords test_in"
 
 end

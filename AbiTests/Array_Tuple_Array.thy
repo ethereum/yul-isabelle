@@ -1,4 +1,4 @@
-theory Array_Tuple_Array imports "../Hex" "../AbiTypes" "../AbiTypesSyntax" "../AbiDecode"
+theory Array_Tuple_Array imports "../Hex" "../AbiTypes" "../AbiTypesSyntax" "../AbiDecode"  "../AbiEncode" "../WordUtils"
 begin
 
 (* example of a dynamic structure containing a static structure which in turn contains a dynamic structure *)
@@ -96,6 +96,10 @@ definition test_out :: "abi_value" where
 value "decode test_schema test_in"
 
 value "decode test_schema test_in = Ok test_out"
+
+value "encode test_out = Some test_in"
+
+value "bytesToEvmWords test_in"
 
 
 end

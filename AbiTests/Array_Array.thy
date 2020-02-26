@@ -1,4 +1,4 @@
-theory Array_Array imports "../Hex" "../AbiDecode" begin
+theory Array_Array imports "../Hex" "../AbiDecode" "../AbiEncode" "../WordUtils" begin
 (* solidity *)
 
 (*
@@ -67,5 +67,11 @@ value "test_out"
 
 
 value "decode test_schema test_in"
+
+value "map_option bytesToEvmWords (encode test_out)"
+value "encode test_out = Some test_in"
+
+value "bytesToEvmWords test_in"
+
 
 end
