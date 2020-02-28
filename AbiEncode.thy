@@ -21,7 +21,7 @@ fun encode_fixed :: "nat \<Rightarrow> rat \<Rightarrow> 8 word list" where
 fun encode_fbytes :: "nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list" where
 "encode_fbytes n l = 
   take n l"
-
+(* TODO: need validity checks here *)
 fun encode_static :: "abi_value \<Rightarrow> 8 word list option" where
 "encode_static (Vuint n i) = Some (encode_int i)"
 | "encode_static (Vsint n i) = Some (encode_int i)"
