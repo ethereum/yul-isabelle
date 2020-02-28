@@ -13,7 +13,7 @@ lemma abi_encode_succeed :
 (* if the encoder fails, there is no valid encoding according to spec *)
 lemma abi_encode_fail :
   "\<And> v full_code . encode v = None \<Longrightarrow>
-         \<not> (can_encode_as v full_code 0 (int (length full_code))) \<Longrightarrow>
+         can_encode_as v full_code 0 (int (length full_code)) \<Longrightarrow>
          False"
 
   sorry
