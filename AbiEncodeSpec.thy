@@ -4,6 +4,32 @@ begin
 
 (* Inductive specification of ABI encoding. Aim is to capture all encodings including non-canonical ones *)
 
+inductive abi_descend :: "abi_value \<Rightarrow> abi_value \<Rightarrow> bool" where
+(* reflexive *)
+"\<And> v . abi_descend v v"
+
+(* farray *)
+| "\<And> t n vs v .
+   v \<in> set vs \<Longrightarrow>
+   abi_descend (Vfarray t n vs) v"
+
+(* array *)
+| "\<And> t vs v .
+   v \<in> set vs \<Longrightarrow>
+   abi_descend (Varray t vs) v"
+
+(* tuple *)
+
+| "\<And> ts vs v .
+   v \<in> set vs \<Longrightarrow>
+   abi_descend (Varray ts vs) v"
+
+(* transitive *)
+| "\<And> v v' v'' .
+   abi_descend v v' \<Longrightarrow>
+   abi_descend v' v'' \<Longrightarrow>
+   abi_descend v v''"
+
 inductive is_static_type :: "abi_type \<Rightarrow> bool" where
 "\<And> n . is_static_type (Tuint n)"
 | "\<And> n . is_static_type (Tsint n)"
@@ -90,7 +116,6 @@ and       can_encode_as_list_dyn :: "abi_value list \<Rightarrow> 8 word list \<
 
 | "\<And> t vs pre_len pre_and_count_len pre_count_and_vs_code_len full_code . 
      abi_value_valid (Varray t vs) \<Longrightarrow>
-     (\<not> is_static_type t) \<Longrightarrow>
      can_encode_as (Vuint 256 (length vs)) full_code pre_len pre_and_count_len \<Longrightarrow>
      can_encode_as_list_dyn vs full_code pre_and_count_len pre_count_and_vs_code_len \<Longrightarrow>
      can_encode_as (Varray t vs) full_code pre_len pre_count_and_vs_code_len"
