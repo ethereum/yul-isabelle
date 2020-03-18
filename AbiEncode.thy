@@ -54,7 +54,7 @@ fun pad_bytes :: "8 word list \<Rightarrow> 8 word list" where
 "pad_bytes l = 
   (case divmod_nat (length l) 32 of
         (_, 0) \<Rightarrow> l
-        | (_, rem) \<Rightarrow> l @ (List.replicate rem (Word.word_of_int 0)))"
+        | (_, rem) \<Rightarrow> l @ (List.replicate (32 - rem) (Word.word_of_int 0)))"
 
 (*
 fun heads_length :: "(8 word list + abi_value) list \<Rightarrow> nat" where

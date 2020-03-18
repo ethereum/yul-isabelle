@@ -233,7 +233,6 @@ fun skip_padding :: "nat \<Rightarrow> nat" where
 (* in order to support negative offsets, we need to keep the entire list around always. *)
 
 function (sequential) decode' :: "abi_type \<Rightarrow> (int * 8 word list) \<Rightarrow> (abi_value * int) orerror"
-
 (*
 and decode'_dyn_array :: "abi_type \<Rightarrow> int \<Rightarrow> (int * 8 word list) \<Rightarrow> (abi_value list * int) orerror"
 *)
@@ -250,17 +249,7 @@ where
 (* we need to zip earlier. *)
 "decode' t (ix, l) =
  (let l' = drop (nat ix) l in
-  (let decode'_dyn_array  = (\<lambda> t (n :: int) (ixl :: (int * 8 word list)) .
-    (case ixl of (ix, l) \<Rightarrow>
-    (let ts = List.replicate (nat n) t in
-    (case decode'_dyn_tuple_heads ts 0 (ix, l) of
-          Err s \<Rightarrow> Err s
-          | Ok (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
-\<^cancel>\<open>this used to drop bytes parsed\<close>
-            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (ix, l) of
-              Err s \<Rightarrow> Err s
-              | Ok (vs, bytes_parsed') \<Rightarrow> (Ok (vs, bytes_parsed + bytes_parsed') :: (abi_value list * int) orerror))))))
-  in
+  
   (if abi_type_isstatic t
     then
       if int (length l) < (abi_static_size t) + ix then Err (locate_err ''Too few bytes for given static type'' (ix, l))
@@ -270,15 +259,25 @@ where
    else
     (case t of
       Tfarray t n \<Rightarrow>
-        (case decode'_dyn_array t n (ix, l) of
+        (let ts = List.replicate (nat n) t in
+        (case decode'_dyn_tuple_heads ts 0 (ix, l) of
           Err s \<Rightarrow> Err s
-          | Ok (vs, bytes_parsed) \<Rightarrow> Ok (Vfarray t n vs, bytes_parsed))
+          | Ok (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
+            \<^cancel>\<open>this used to drop bytes parsed\<close>
+            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (ix, l) of
+              Err s \<Rightarrow> Err s
+              | Ok (vs, bytes_parsed') \<Rightarrow> Ok (Vfarray t n vs, bytes_parsed + bytes_parsed'))))
       | Tarray t \<Rightarrow>
        if int (length l) < 32 + ix then Err (locate_err ''Too few bytes; could not read array size'' (ix, l))
         else let n = (decode_uint (take 32 l')) in
-        (case decode'_dyn_array t n (ix + 32, l) of
+        (let ts = List.replicate (nat n) t in
+        (case decode'_dyn_tuple_heads ts 0 (ix + 32, l) of
           Err s \<Rightarrow> Err s
-          | Ok (vs, bytes_parsed) \<Rightarrow> Ok (Varray t vs, bytes_parsed + 32))
+          | Ok (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
+            \<^cancel>\<open>this used to drop bytes parsed\<close>
+            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (ix, l) of
+              Err s \<Rightarrow> Err s
+              | Ok (vs, bytes_parsed') \<Rightarrow> Ok (Varray t vs, bytes_parsed + bytes_parsed' + 32))))
       | Ttuple ts \<Rightarrow>
         (case decode'_dyn_tuple_heads ts 0 (ix, l) of
           Err s \<Rightarrow> Err s
@@ -297,7 +296,7 @@ where
         else let sz = (decode_uint (take 32 l')) in
              if int (length l) < sz + 32 + ix then Err (locate_err ''Fewer bytes remaining than string size'' (ix, l))
              else Ok (Vstring (bytes_to_string (take (nat sz) (drop 32 l'))), int (skip_padding (nat sz)) + 32)
-      | _ \<Rightarrow> Err (locate_err ''This should be dead code'' (ix, l))))))"
+      | _ \<Rightarrow> Err (locate_err ''This should be dead code'' (ix, l)))))"
 
 (*| "decode_dyn_array t 0 [] = Some ([], [])"
 | "decode_dyn_array t n [] = None" *)
@@ -316,6 +315,7 @@ about tuples *)
               Err s \<Rightarrow> Err s
               | Ok (vs, bytes_parsed') \<Rightarrow> Ok (vs, bytes_parsed + bytes_parsed'))))"
 *)
+
 | "decode'_dyn_tuple_heads [] n (ix, l) = Ok ([], [], n, 0)"
 | "decode'_dyn_tuple_heads (th#tt) n (ix, l) =
   (let l' = drop (nat ix) l in
@@ -323,7 +323,7 @@ about tuples *)
       then (case decode' th (ix, l) of
         Err s \<Rightarrow> Err s
         | Ok (v, bytes_parsed) \<Rightarrow>
-          (case decode'_dyn_tuple_heads tt (n + (abi_static_size th)) (ix + bytes_parsed, l) of
+          (case decode'_dyn_tuple_heads tt (n + nat (abi_static_size th)) (ix + bytes_parsed, l) of
             Err s \<Rightarrow> Err s
             | Ok (vos, idxs, n', bytes_parsed') \<Rightarrow> Ok (Some v # vos, None#idxs, n', bytes_parsed + bytes_parsed')))
     else
@@ -464,7 +464,7 @@ termination decode'
   apply(relation 
 "measure (\<lambda> x .
     (case x of
-       (Inl (t, (ix, l))) \<Rightarrow> 1 + abi_type_measure t
+       Inl (t, (ix, l)) \<Rightarrow> 1 + abi_type_measure t
       | Inr (Inl (ts,  n, (ix, l))) \<Rightarrow> abi_type_list_measure ts
       | Inr (Inr (idxs, ts, vs, n, (ix, l))) \<Rightarrow> abi_type_list_measure ts))")   
 
@@ -472,10 +472,13 @@ termination decode'
              apply(clarsimp)
   apply(simp add: abi_type_list_measure_replicate)
             apply(clarsimp)
-           apply(clarsimp)
+  apply(simp add: abi_type_list_measure_replicate)
 (* first case we get stuck on
 decode' vs decode'_dyn_array *)
+              apply(clarsimp)
           apply(clarsimp)
+              apply(clarsimp)
+
   apply(cut_tac w = "(word_rcat (take 32 (drop (nat ix) l)) :: 256 word)" in Word.uint_lt)
           apply(simp add:max_u256_def)
           apply(cut_tac t = x13 in abi_type_measure_nonzero)
@@ -504,48 +507,45 @@ HOL.rev_iffD2)
 (* next up: tuple heads vs tuple tails. *)
   apply(clarsimp)
 
-  apply(clarsimp)
 
-  apply(clarsimp)
-(*
-  apply(relation 
-"measure (\<lambda> x .
-    (case x of
-       Inl (Inl (t, (ix, l))) \<Rightarrow> abi_type_measure t
-      | Inl (Inr (t, n, (ix, l))) \<Rightarrow> nat n * abi_type_measure t
-      | Inr (Inl (ts,  n, (ix, l))) \<Rightarrow> abi_type_list_measure ts
-      | Inr (Inr (idxs, ts, vs, n, (ix, l))) \<Rightarrow> abi_type_list_measure ts))")   
-              apply(clarsimp)
-             apply(clarsimp)
-            apply(clarsimp)
-           apply(clarsimp)
-(* first case we get stuck on
-decode' vs decode'_dyn_array *)
-          apply(clarsimp)
-  (* array case: length < 2^256 - 1 *)
   apply(cut_tac w = "(word_rcat (take 32 (drop (nat ix) l)) :: 256 word)" in Word.uint_lt)
-    apply(simp add:max_u256_def) apply(cut_tac t = x13 in abi_type_measure_nonzero)
+          apply(simp add:max_u256_def)
+          apply(cut_tac t = x13 in abi_type_measure_nonzero)
+          apply(simp add: abi_type_list_measure_replicate)
     apply(cut_tac w = "uint (word_rcat (take 32 (drop (nat ix) l)))" and z = "max_u256 + 1" in Int.nat_mono_iff) apply(simp add:max_u256_def)
-
-          apply(rotate_tac -1)
-          apply(case_tac "(nat (uint (word_rcat (take 32 (drop (nat ix) l)))) < nat (int (max_u256 + 1)))")
-           apply(rotate_tac -1)
-           apply(drule_tac k = "abi_type_measure x13" in Nat.mult_less_mono1) apply(simp)
-           apply(rotate_tac -1)
-  apply(drule_tac m = 1 in Nat.trans_less_add2)
-           apply(simp add:max_u256_def)
-  apply(arith)
           apply(simp add:max_u256_def)
 
-         apply(clarsimp)
-  apply(simp add: abi_type_list_measure_replicate)
-         apply(case_tac t, auto)
-  apply(case_tac
-  apply(arith)
-   defer
-  sorry
-*)
-(*  done *)
+  apply(drule_tac
+Q = "uint (word_rcat (take 32 (drop (nat ix) l)))
+       < 115792089237316195423570985008687907853269984665640564039457584007913129639936"
+and
+P = "(nat (uint (word_rcat (take 32 (drop (nat ix) l))))
+        < 115792089237316195423570985008687907853269984665640564039457584007913129639936)"
+in
+HOL.rev_iffD2)
+  apply(fastforce)
+          apply(clarsimp)
+          apply(rotate_tac -1)
+
+          apply(rule_tac Nat.add_less_mono) apply(simp)
+          apply(simp)
+
+
+       apply(clarsimp)
+  apply(case_tac tt; simp)
+
+      apply(clarsimp)
+
+     apply(clarsimp)
+
+    apply(clarsimp)
+
+   apply(clarsimp)
+
+  apply(case_tac tt; simp)
+
+   apply(clarsimp)
+  done 
 
 (*
 fun decode :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> abi_value orerror" where
@@ -557,7 +557,7 @@ fun decode :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> abi_value orerro
 *)
 fun decode :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> abi_value orerror" where
 "decode t l =
-  (case decode' t l of
+  (case decode' t (0, l) of
     Err s \<Rightarrow> Err s
     | Ok (v, _) \<Rightarrow> Ok v)"
 (* head = offset at which tail can be found

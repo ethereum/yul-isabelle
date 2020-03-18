@@ -52,18 +52,30 @@ and abi_type_list_measure :: "abi_type list \<Rightarrow> nat" where
     abi_type_measure th + abi_type_list_measure tt + 1"
 *)
 
+(*
 fun abi_type_measure :: "abi_type \<Rightarrow> nat"
 and abi_type_list_measure :: "abi_type list \<Rightarrow> nat" where
 "abi_type_measure (Ttuple ts) = 1 + abi_type_list_measure ts"
-| "abi_type_measure (Tfarray t n) = 1 + n * (abi_type_measure t)"
-| "abi_type_measure (Tarray t) = 1 + max_u256 * abi_type_measure t" (* curious about this one *)
+| "abi_type_measure (Tfarray t n) = 1 + n + n * (abi_type_measure t)"
+| "abi_type_measure (Tarray t) = 1 + (max_u256) +  (max_u256) * abi_type_measure t" (* curious about this one *)
 | "abi_type_measure _ = 1"
 
 | "abi_type_list_measure [] = 1"
 | "abi_type_list_measure (th#tt) =
-    abi_type_measure th + abi_type_list_measure tt + 1"
+    1 + abi_type_measure th + abi_type_list_measure tt"
+*)
 
 
+fun abi_type_measure :: "abi_type \<Rightarrow> nat"
+and abi_type_list_measure :: "abi_type list \<Rightarrow> nat" where
+"abi_type_measure (Ttuple ts) = 1 + abi_type_list_measure ts"
+| "abi_type_measure (Tfarray t n) = 1 + n + n * (abi_type_measure t)"
+| "abi_type_measure (Tarray t) = 1 + (1 + max_u256) +  (1 + max_u256) * abi_type_measure t" (* curious about this one *)
+| "abi_type_measure _ = 1"
+
+| "abi_type_list_measure [] = 1"
+| "abi_type_list_measure (th#tt) =
+    1 + abi_type_measure th + abi_type_list_measure tt"
 
 (* count number of elements with zero-size encodings *)
 fun abi_type_empties :: "abi_type \<Rightarrow> nat"
