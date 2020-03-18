@@ -63,75 +63,111 @@ abbreviation Err :: "char list \<Rightarrow> 'a orerror" where
 "Err \<equiv> Inr"
 
 
-definition locate_err :: "char list \<Rightarrow> 8 word list \<Rightarrow> char list"
-  where
-"locate_err s l =
-  s @ '' with '' @ decwrite (length l) @ '' bytes remaining''"
+lemma abi_type_list_measure_replicate :
+  "\<And> t . abi_type_list_measure (replicate n t)
+           =  1 + n + (n * abi_type_measure t)"
+proof(induction n)
+  case 0
+  then show ?case
+    apply(simp)
+    done
+next
+  case (Suc n)
+  then show ?case 
+    apply(simp)
+    done
+qed
 
-function (sequential) decode_static_nocheck :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> abi_value orerror" 
-(*and decode_static_nocheck_arr :: "abi_type \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> abi_value list option"*)
-and decode_static_nocheck_tup :: "abi_type list \<Rightarrow> 8 word list \<Rightarrow> abi_value list orerror" where
-"decode_static_nocheck (Tuint n) l =
-   (let res = decode_uint l in
+fun locate_err :: "char list \<Rightarrow> (int * 8 word list) \<Rightarrow> char list"
+  where
+"locate_err s (ix, l) =
+  s @ '' at byte '' @ decwrite (nat ix) @ '' of '' @ decwrite (length l) @ ''.''"
+
+function (sequential) decode_static :: "abi_type \<Rightarrow> (int * 8 word list) \<Rightarrow> abi_value orerror" 
+(*and decode_static_arr :: "abi_type \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> abi_value list option"*)
+and decode_static_tup :: "abi_type list \<Rightarrow> (int * 8 word list) \<Rightarrow> abi_value list orerror" where
+"decode_static (Tuint n) (ix, l) =
+   (let l' = drop (nat ix) l in
+   (let res = decode_uint l' in
     (if uint_value_valid n res then Ok (Vuint n res)
-     else Err (locate_err ''Invalid uint'' l)))"
-| "decode_static_nocheck (Tsint n) l =
-   (let res = decode_sint l in
+     else Err (locate_err ''Invalid uint'' (ix, l)))))"
+| "decode_static (Tsint n) (ix, l) =
+   (let l' = drop (nat ix) l in
+   (let res = decode_sint l' in
     (if sint_value_valid n res then Ok (Vsint n res)
-     else Err (locate_err ''Invalid sint'' l)))"
-| "decode_static_nocheck Taddr l =
-   (let res = decode_uint l in
+     else Err (locate_err ''Invalid sint'' (ix, l)))))"
+| "decode_static Taddr (ix, l) =
+  (let l' = drop (nat ix) l in
+   (let res = decode_uint l' in
     (if addr_value_valid res then Ok (Vaddr res)
-     else Err (locate_err ''Invalid address'' l)))"
-| "decode_static_nocheck Tbool l =
-   (case decode_bool l of
-      None \<Rightarrow> Err (locate_err ''Invalid bool'' l)
-      | Some b \<Rightarrow> Ok (Vbool b))"
-| "decode_static_nocheck (Tfixed m n) l =
-   (let res = decode_fixed m l in
+     else Err (locate_err ''Invalid address'' (ix, l)))))"
+| "decode_static Tbool (ix, l) =
+  (let l' = drop (nat ix) l in
+   (case decode_bool l' of
+      None \<Rightarrow> Err (locate_err ''Invalid bool'' (ix, l))
+      | Some b \<Rightarrow> Ok (Vbool b)))"
+| "decode_static (Tfixed m n) (ix, l) =
+  (let l' = drop (nat ix) l in
+   (let res = decode_fixed m l' in
     (if fixed_value_valid m n res then Ok (Vfixed m n res)
-     else Err (locate_err ''Invalid fixed'' l)))"
-| "decode_static_nocheck (Tufixed m n) l =
-   (let res = decode_ufixed m l in
+     else Err (locate_err ''Invalid fixed'' (ix, l)))))"
+| "decode_static (Tufixed m n) (ix, l) =
+  (let l' = drop (nat ix) l in
+   (let res = decode_ufixed m l' in
     (if ufixed_value_valid m n res then Ok (Vufixed m n res)
-     else Err (locate_err ''Invalid ufixed'' l)))"
-| "decode_static_nocheck (Tfbytes n) l =
-   (let res = decode_fbytes n l in
+     else Err (locate_err ''Invalid ufixed'' (ix, l)))))"
+| "decode_static (Tfbytes n) (ix, l) =
+  (let l' = drop (nat ix) l in
+   (let res = decode_fbytes n l' in
     (if fbytes_value_valid n res then Ok (Vfbytes n res)
-     else Err (locate_err ''Invalid fbytes'' l)))"
-| "decode_static_nocheck (Tfarray t n) l =
-  (case decode_static_nocheck_tup (List.replicate n t) l of
+     else Err (locate_err ''Invalid fbytes'' (ix, l)))))"
+| "decode_static (Tfarray t n) (ix, l) =
+  (case decode_static_tup (List.replicate n t) (ix, l) of
     Err s \<Rightarrow> Err s
     | Ok vs \<Rightarrow> 
         (if farray_value_valid_aux t n vs then Ok (Vfarray t n vs)
-         else Err (locate_err ''Invalid farray'' l)))"
-| "decode_static_nocheck (Ttuple ts) l = 
-  (case decode_static_nocheck_tup ts l of
+         else Err (locate_err ''Invalid farray'' (ix, l))))"
+| "decode_static (Ttuple ts) (ix, l) = 
+  (case decode_static_tup ts (ix, l) of
     Err s \<Rightarrow> Err s
     | Ok vs \<Rightarrow> 
       (if tuple_value_valid_aux ts vs then Ok (Vtuple ts vs)
-       else Err (locate_err ''Invalid tuple'' l)))"
-| "decode_static_nocheck _ l = Err (locate_err ''Ran static parser on dynamic array'' l)"
+       else Err (locate_err ''Invalid tuple'' (ix, l))))"
+| "decode_static _ (ix, l) = Err (locate_err ''Ran static parser on dynamic array'' (ix, l))"
 (*
-| "decode_static_nocheck_arr t 0 l = Some []"
-| "decode_static_nocheck_arr t (Suc n) l =
-    (case decode_static_nocheck t 
+| "decode_static_arr t 0 l = Some []"
+| "decode_static_arr t (Suc n) l =
+    (case decode_static t 
                    (take (nat (abi_static_size t)) l) of
       None \<Rightarrow> None
-      | Some v \<Rightarrow> (case decode_static_nocheck_arr t n
+      | Some v \<Rightarrow> (case decode_static_arr t n
                        (drop (nat (abi_static_size t)) l) of
           None \<Rightarrow> None
           | Some vs \<Rightarrow> Some (v#vs)))"
 *)
-| "decode_static_nocheck_tup [] l = Ok []"
-| "decode_static_nocheck_tup (t#ts) l =
-    (case decode_static_nocheck t 
+| "decode_static_tup [] (ix, l) = Ok []"
+
+(* i don't think the "take" that is done here actually matters. *)
+(*
+| "decode_static_tup (t#ts) (ix, l) =
+    (case decode_static t 
                    (take (nat (abi_static_size t)) l) of
       Err s \<Rightarrow> Err s
-      | Ok v \<Rightarrow> (case decode_static_nocheck_tup ts 
+      | Ok v \<Rightarrow> (case decode_static_tup ts 
                        (drop (nat (abi_static_size t)) l) of
           Err s \<Rightarrow> Err s
           | Ok vs \<Rightarrow> Ok (v#vs)))"
+*)
+
+| "decode_static_tup (t#ts) (ix, l) =
+    (case decode_static t (ix, l) of
+      Err s \<Rightarrow> Err s
+      | Ok v \<Rightarrow> (case decode_static_tup ts 
+                       (ix + (abi_static_size t), l) of
+          Err s \<Rightarrow> Err s
+          | Ok vs \<Rightarrow> Ok (v#vs)))"
+
+
   by pat_completeness auto
 
 termination
@@ -147,10 +183,15 @@ apply(relation
 apply(relation 
 "measure (\<lambda> x .
     (case x of
-      Inl (t, l) \<Rightarrow> abi_type_measure t + length l
-      | Inr (ts, l) \<Rightarrow> abi_type_list_measure ts + length l))")
-        apply(auto)
-  sorry (* need a straightforward lemma here *)
+      Inl (t, l) \<Rightarrow> 1 + abi_type_measure t
+      | Inr (ts, l) \<Rightarrow> abi_type_list_measure ts))")
+      apply(simp) apply(simp)
+  apply(simp add:abi_type_list_measure_replicate)
+  apply(simp) apply(simp)
+   apply(case_tac ts; auto)
+   apply(case_tac a; auto)
+  done
+  
 (*
 termination
   apply(relation
@@ -187,134 +228,120 @@ fun skip_padding :: "nat \<Rightarrow> nat" where
 "skip_padding n =
   (case divmod_nat n 32 of
     (_, 0) \<Rightarrow> n
-    | (_, rem) \<Rightarrow> n + rem)"
+    | (_, rem) \<Rightarrow> n + 32 - rem)" (* was n + rem *)
 
-(* TODO: consider returning a nat everywhere to make it easier to keep track
-   of how much we have read, for the purposes of tuple indexing *)
-function (sequential) decode' :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> (abi_value * nat) orerror"
+(* in order to support negative offsets, we need to keep the entire list around always. *)
 
-and decode'_dyn_array :: "abi_type \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> (abi_value list * nat) orerror"
+function (sequential) decode' :: "abi_type \<Rightarrow> (int * 8 word list) \<Rightarrow> (abi_value * int) orerror"
 
+(*
+and decode'_dyn_array :: "abi_type \<Rightarrow> int \<Rightarrow> (int * 8 word list) \<Rightarrow> (abi_value list * int) orerror"
+*)
 (* first returned nat is the length of all the heads (used for computing offsets); 
    second returned nat is number of bytes consumed;
    input nat is running count of head length. *)
-and decode'_dyn_tuple_heads :: "abi_type list \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 
-                (abi_value option list *  (nat option) list * nat * nat) orerror"
+and decode'_dyn_tuple_heads :: "abi_type list \<Rightarrow> int \<Rightarrow> (int * 8 word list) \<Rightarrow> 
+                (abi_value option list *  (nat option) list * int * int) orerror"
 (* list parameter gives an offset for each field that still needs to be parsed
    the nat parameter is an index of how many bytes into our overall tuple encoding we are *)
-and decode'_dyn_tuple_tails :: "(nat option) list \<Rightarrow> abi_type list \<Rightarrow> abi_value option list \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 
-                (abi_value list * nat) orerror"
+and decode'_dyn_tuple_tails :: "(nat option) list \<Rightarrow> abi_type list \<Rightarrow> abi_value option list \<Rightarrow> int \<Rightarrow> (int * 8 word list) \<Rightarrow> 
+                (abi_value list * int) orerror"
 where
 (* we need to zip earlier. *)
-"decode' t l =
+"decode' t (ix, l) =
+ (let l' = drop (nat ix) l in
+  (let decode'_dyn_array  = (\<lambda> t (n :: int) (ixl :: (int * 8 word list)) .
+    (case ixl of (ix, l) \<Rightarrow>
+    (let ts = List.replicate (nat n) t in
+    (case decode'_dyn_tuple_heads ts 0 (ix, l) of
+          Err s \<Rightarrow> Err s
+          | Ok (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
+\<^cancel>\<open>this used to drop bytes parsed\<close>
+            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (ix, l) of
+              Err s \<Rightarrow> Err s
+              | Ok (vs, bytes_parsed') \<Rightarrow> (Ok (vs, bytes_parsed + bytes_parsed') :: (abi_value list * int) orerror))))))
+  in
   (if abi_type_isstatic t
     then
-      if length l < nat (abi_static_size t) then Err (locate_err ''Too few bytes for given type'' l)
-      else (case decode_static_nocheck t l of
+      if int (length l) < (abi_static_size t) + ix then Err (locate_err ''Too few bytes for given static type'' (ix, l))
+      else (case decode_static t (ix, l) of
             Err s \<Rightarrow> Err s
-            | Ok v \<Rightarrow> Ok (v, nat (abi_static_size t)))
+            | Ok v \<Rightarrow> Ok (v, (abi_static_size t)))
    else
     (case t of
       Tfarray t n \<Rightarrow>
-        (case decode'_dyn_array t n l of
+        (case decode'_dyn_array t n (ix, l) of
           Err s \<Rightarrow> Err s
           | Ok (vs, bytes_parsed) \<Rightarrow> Ok (Vfarray t n vs, bytes_parsed))
       | Tarray t \<Rightarrow>
-       if length l < 32 then Err (locate_err ''Too few bytes; could not read array size'' l)
-        else let n = nat (decode_uint (take 32 l)) in
-        (case decode'_dyn_array t n (drop 32 l) of
+       if int (length l) < 32 + ix then Err (locate_err ''Too few bytes; could not read array size'' (ix, l))
+        else let n = (decode_uint (take 32 l')) in
+        (case decode'_dyn_array t n (ix + 32, l) of
           Err s \<Rightarrow> Err s
           | Ok (vs, bytes_parsed) \<Rightarrow> Ok (Varray t vs, bytes_parsed + 32))
       | Ttuple ts \<Rightarrow>
-        (case decode'_dyn_tuple_heads ts 0 l of
+        (case decode'_dyn_tuple_heads ts 0 (ix, l) of
           Err s \<Rightarrow> Err s
           | Ok (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
 \<^cancel>\<open>this used to drop bytes parsed\<close>
-            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (l) of
+            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (ix, l) of
               Err s \<Rightarrow> Err s
               | Ok (vs, bytes_parsed') \<Rightarrow> Ok (Vtuple ts vs, bytes_parsed + bytes_parsed')))
       | Tbytes \<Rightarrow>
-        if length l < 32 then Err (locate_err ''Too few bytes; could not read bytestream size'' l)
-        else let sz = nat (decode_uint (take 32 l)) in
-             if length l - 32 < sz then Err (locate_err ''Fewer bytes remaining than bytestream size'' l)
-             else Ok (Vbytes (take sz (drop 32 l)), skip_padding sz + 32)
+        if int (length l) < 32 + ix then Err (locate_err ''Too few bytes; could not read bytestream size'' (ix, l))
+        else let sz = (decode_uint (take 32 l')) in
+             if int (length l) < sz + 32 + ix then Err (locate_err ''Fewer bytes remaining than bytestream size'' (ix, l))
+             else Ok (Vbytes (take (nat sz) (drop 32 l')), int(skip_padding (nat sz)) + 32)
       | Tstring \<Rightarrow> 
-        if length l < 32 then Err (locate_err ''Too few bytes; could not read string size'' l)
-        else let sz = nat (decode_uint (take 32 l)) in
-             if length l - 32 < sz then Err (locate_err ''Fewer bytes remaining than string size'' l)
-             else Ok (Vstring (bytes_to_string (take sz (drop 32 l))), skip_padding sz + 32)
-      | _ \<Rightarrow> Err (locate_err ''This should be dead code'' l)))"
+        if int(length l) < 32 + ix then Err (locate_err ''Too few bytes; could not read string size'' (ix, l))
+        else let sz = (decode_uint (take 32 l')) in
+             if int (length l) < sz + 32 + ix then Err (locate_err ''Fewer bytes remaining than string size'' (ix, l))
+             else Ok (Vstring (bytes_to_string (take (nat sz) (drop 32 l'))), int (skip_padding (nat sz)) + 32)
+      | _ \<Rightarrow> Err (locate_err ''This should be dead code'' (ix, l))))))"
 
-(*| "decode_dyn_nocheck_array t 0 [] = Some ([], [])"
-| "decode_dyn_nocheck_array t n [] = None" *)
+(*| "decode_dyn_array t 0 [] = Some ([], [])"
+| "decode_dyn_array t n [] = None" *)
 (* TODO: error messages for the array will be confusing in that they will talk
 about tuples *)
-| "decode'_dyn_array t n l =
-    (let ts = List.replicate n t in
-    (case decode'_dyn_tuple_heads ts 0 l of
+(* TODO: make this not mutually recursive.
+*)
+(*
+| "decode'_dyn_array t n (ix, l) =
+    (let ts = List.replicate (nat n) t in
+    (case decode'_dyn_tuple_heads ts 0 (ix, l) of
           Err s \<Rightarrow> Err s
           | Ok (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
 \<^cancel>\<open>this used to drop bytes parsed\<close>
-            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (l) of
+            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (ix, l) of
               Err s \<Rightarrow> Err s
               | Ok (vs, bytes_parsed') \<Rightarrow> Ok (vs, bytes_parsed + bytes_parsed'))))"
-
-(*
-| "decode_dyn_nocheck_array t 0 l = Some ([], 0)"
-| "decode_dyn_nocheck_array t (Suc n') l =
-    (case decode_nocheck t l of
-      None \<Rightarrow> None
-      | Some (v, bytes_parsed) \<Rightarrow> (case decode_dyn_nocheck_array t n' (drop bytes_parsed l) of
-                          None \<Rightarrow> None
-                          | Some (vt, bytes_parsed') \<Rightarrow> Some (v#vt, bytes_parsed + bytes_parsed')))"
 *)
-(* need to do something with updating indices here *)
-(* Also. how do we deal with ill-formed data such that the tails
-and heads overlap? *)
-
-| "decode'_dyn_tuple_heads [] n l = Ok ([], [], n, 0)"
-| "decode'_dyn_tuple_heads (th#tt) n l =
+| "decode'_dyn_tuple_heads [] n (ix, l) = Ok ([], [], n, 0)"
+| "decode'_dyn_tuple_heads (th#tt) n (ix, l) =
+  (let l' = drop (nat ix) l in
     (if abi_type_isstatic th
-      then (case decode' th l of
+      then (case decode' th (ix, l) of
         Err s \<Rightarrow> Err s
         | Ok (v, bytes_parsed) \<Rightarrow>
-          (case decode'_dyn_tuple_heads tt (n + nat (abi_static_size th)) (drop bytes_parsed l) of
+          (case decode'_dyn_tuple_heads tt (n + (abi_static_size th)) (ix + bytes_parsed, l) of
             Err s \<Rightarrow> Err s
             | Ok (vos, idxs, n', bytes_parsed') \<Rightarrow> Ok (Some v # vos, None#idxs, n', bytes_parsed + bytes_parsed')))
     else
-      (if length l < 32 then Err (locate_err ''Too few bytes; could not read tuple head'' l)
-       else let sz = nat (decode_uint (take 32 l)) in
-            (case decode'_dyn_tuple_heads tt (n + 32) (drop 32 l) of
+      (if length l' < 32 then Err (locate_err ''Too few bytes; could not read tuple head'' (ix, l))
+       else let sz = (decode_uint (take 32 l)) in
+            (case decode'_dyn_tuple_heads tt (n + 32) (ix + 32, l) of
               Err s \<Rightarrow> Err s
 \<^cancel>\<open>Some n + sz used to be Some n\<close>
 
-              | Ok (vos, idxs, n', bytes_parsed) \<Rightarrow> Ok (None # vos, (Some (sz))#idxs, n', bytes_parsed + 32))))"
+              | Ok (vos, idxs, n', bytes_parsed) \<Rightarrow> Ok (None # vos, (Some (nat sz))#idxs, n', bytes_parsed + 32)))))"
 
-| "decode'_dyn_tuple_tails [] [] []  _ l = Ok ([], 0)"
-(* now we need to change the way we deal with value lists *)
-| "decode'_dyn_tuple_tails (None#t) (th#tt) (Some vh#vt) offset l = 
-   (case decode'_dyn_tuple_tails t tt vt offset l of
+| "decode'_dyn_tuple_tails [] [] []  _ (ix, l) = Ok ([], 0)"
+| "decode'_dyn_tuple_tails (None#t) (th#tt) (Some vh#vt) offset (ix, l) = 
+   (case decode'_dyn_tuple_tails t tt vt offset (ix, l) of
     Err s \<Rightarrow> Err s
     | Ok (vs, bytes_parsed) \<Rightarrow> Ok (vh#vs, bytes_parsed))"
-(* i think we may no longer need the offset argument. *)
-(* TODO: this cannot deal with non-canonical encodings
-   do we just keep incrementing the offset until we find it? *)
-(*
-| "decode'_dyn_tuple_tails ((Some toffset)#t) (th#tt) (None#vt) offset l =
-   (if toffset \<noteq> offset then Err (locate_err (''Offset '' @ (decwrite offset) @ '' does not match expected offset '' @ (decwrite toffset) @ '' '') l)
-      else
-       (case decode' th l of
-              Err s \<Rightarrow> Err s
-              | Ok (v, bytes_parsed) \<Rightarrow>
-                     let offset' = offset + bytes_parsed in
-                     (case decode'_dyn_tuple_tails t tt vt offset' (drop bytes_parsed l) of
-                           Err s \<Rightarrow> Err s
-                           | Ok (vs, bytes_parsed') \<Rightarrow> Ok (v#vs, bytes_parsed + bytes_parsed'))))                          
-      "
-| "decode'_dyn_tuple_tails _ _ _ _ l = Err (locate_err ''Should be dead code'' l)"
-*)
 
-(* this is still wrong. we need to remember head length (?) *)
+(*
 | "decode'_dyn_tuple_tails ((Some toffset)#t) (th#tt) (None#vt) offset l =
    (let l' = drop toffset l in
        (case decode' th l' of
@@ -325,21 +352,35 @@ and heads overlap? *)
                            Err s \<Rightarrow> Err s
                            | Ok (vs, bytes_parsed') \<Rightarrow> Ok (v#vs, bytes_parsed + bytes_parsed'))))                          
       "
-| "decode'_dyn_tuple_tails _ _ _ _ l = Err (locate_err ''Should be dead code'' l)"
+*)
+
+
+| "decode'_dyn_tuple_tails ((Some toffset)#t) (th#tt) (None#vt) offset (ix, l) =
+   (let ix' = ix + int (toffset) in
+       (case decode' th (ix', l) of
+              Err s \<Rightarrow> Err s
+              | Ok (v, bytes_parsed) \<Rightarrow>
+                     let offset' = offset + bytes_parsed in
+                     (case decode'_dyn_tuple_tails t tt vt offset' (ix, l) of
+                           Err s \<Rightarrow> Err s
+                           | Ok (vs, bytes_parsed') \<Rightarrow> Ok (v#vs, bytes_parsed + bytes_parsed'))))                          
+      "
+
+| "decode'_dyn_tuple_tails _ _ _ _ (ix, l) = Err (locate_err ''Should be dead code'' (ix, l))"
 
 (*
-| "decode_dyn_nocheck_tuple_tails (Inl v # t) n l =
-   (case decode_dyn_nocheck_tuple_tails t n l of
+| "decode_dyn_tuple_tails (Inl v # t) n l =
+   (case decode_dyn_tuple_tails t n l of
       None \<Rightarrow> None
       | Some (vs, bytes_parsed) \<Rightarrow> Some (v#vs, bytes_parsed))"
 (* is it too strict to force offset to equal n? *)
-| "decode_dyn_nocheck_tuple_tails (Inr (typ, offset) # t) n l =
+| "decode_dyn_tuple_tails (Inr (typ, offset) # t) n l =
   (if offset \<noteq> n then None
-   else (case decode_nocheck typ l of
+   else (case decode typ l of
           None \<Rightarrow> None
           | Some (v, bytes_parsed) \<Rightarrow>
             let n' = n + (length l - bytes_parsed) in
-            (case decode_dyn_nocheck_tuple_tails t n' (drop bytes_parsed l) of
+            (case decode_dyn_tuple_tails t n' (drop bytes_parsed l) of
               None \<Rightarrow> None
               | Some (vs, bytes_parsed') \<Rightarrow> Some (v#vs, bytes_parsed + bytes_parsed'))))"
 *)
@@ -386,25 +427,126 @@ fun somes :: "'a option list \<Rightarrow> 'a list" where
 | "somes (None#t) = somes t"
 | "somes (Some h#t) = h # somes t"
 
-termination decode'
-  sorry
-(*
+lemma abi_type_measure_nonzero :
+  "\<And> t . abi_type_measure t > 0"
+  apply(induct_tac t; auto)
+  done
 
+termination decode'
+
+  
+(*
   apply(relation 
 "measure (\<lambda> x .
     (case x of
        Inl (Inl (t, l)) \<Rightarrow> abi_type_measure t + length l 
       | Inl (Inr (t, n, l)) \<Rightarrow> n * abi_type_measure t + length l
       | Inr (Inl (ts,  n, l)) \<Rightarrow> abi_type_list_measure ts + length l
-      | Inr (Inr (idxs, ts, vs, n, l)) \<Rightarrow> abi_type_list_measure ts + length l))")     apply(fastforce)
+      | Inr (Inr (idxs, ts, vs, n, l)) \<Rightarrow> abi_type_list_measure ts + length l))")   
              apply(auto)
   (* array case: length < 2^256 - 1 *)
   apply(cut_tac w = "(word_rcat (take 32 l) :: 256 word)" in Word.uint_lt)
     apply(simp add:max_u256_def) 
    defer
   sorry
-(*  done *)
 *)
+(* this one works for "hard" case *)
+(*
+  apply(relation 
+"measure (\<lambda> x .
+    (case x of
+       Inl (Inl (t, (ix, l))) \<Rightarrow> 2 + abi_type_measure t
+      | Inl (Inr (t, n, (ix, l))) \<Rightarrow> 1 + abi_type_list_measure (replicate (nat n) t)
+      | Inr (Inl (ts,  n, (ix, l))) \<Rightarrow>  abi_type_list_measure ts
+      | Inr (Inr (idxs, ts, vs, n, (ix, l))) \<Rightarrow> abi_type_list_measure ts))")   
+*)
+
+  apply(relation 
+"measure (\<lambda> x .
+    (case x of
+       (Inl (t, (ix, l))) \<Rightarrow> 1 + abi_type_measure t
+      | Inr (Inl (ts,  n, (ix, l))) \<Rightarrow> abi_type_list_measure ts
+      | Inr (Inr (idxs, ts, vs, n, (ix, l))) \<Rightarrow> abi_type_list_measure ts))")   
+
+              apply(clarsimp)
+             apply(clarsimp)
+  apply(simp add: abi_type_list_measure_replicate)
+            apply(clarsimp)
+           apply(clarsimp)
+(* first case we get stuck on
+decode' vs decode'_dyn_array *)
+          apply(clarsimp)
+  apply(cut_tac w = "(word_rcat (take 32 (drop (nat ix) l)) :: 256 word)" in Word.uint_lt)
+          apply(simp add:max_u256_def)
+          apply(cut_tac t = x13 in abi_type_measure_nonzero)
+          apply(simp add: abi_type_list_measure_replicate)
+    apply(cut_tac w = "uint (word_rcat (take 32 (drop (nat ix) l)))" and z = "max_u256 + 1" in Int.nat_mono_iff) apply(simp add:max_u256_def)
+          apply(simp add:max_u256_def)
+
+  apply(drule_tac
+Q = "uint (word_rcat (take 32 (drop (nat ix) l)))
+       < 115792089237316195423570985008687907853269984665640564039457584007913129639936"
+and
+P = "(nat (uint (word_rcat (take 32 (drop (nat ix) l))))
+        < 115792089237316195423570985008687907853269984665640564039457584007913129639936)"
+in
+HOL.rev_iffD2)
+  apply(fastforce)
+          apply(clarsimp)
+          apply(rotate_tac -1)
+
+          apply(rule_tac Nat.add_less_mono) apply(simp)
+          apply(simp)
+
+(* whew *)
+
+
+(* next up: tuple heads vs tuple tails. *)
+  apply(clarsimp)
+
+  apply(clarsimp)
+
+  apply(clarsimp)
+(*
+  apply(relation 
+"measure (\<lambda> x .
+    (case x of
+       Inl (Inl (t, (ix, l))) \<Rightarrow> abi_type_measure t
+      | Inl (Inr (t, n, (ix, l))) \<Rightarrow> nat n * abi_type_measure t
+      | Inr (Inl (ts,  n, (ix, l))) \<Rightarrow> abi_type_list_measure ts
+      | Inr (Inr (idxs, ts, vs, n, (ix, l))) \<Rightarrow> abi_type_list_measure ts))")   
+              apply(clarsimp)
+             apply(clarsimp)
+            apply(clarsimp)
+           apply(clarsimp)
+(* first case we get stuck on
+decode' vs decode'_dyn_array *)
+          apply(clarsimp)
+  (* array case: length < 2^256 - 1 *)
+  apply(cut_tac w = "(word_rcat (take 32 (drop (nat ix) l)) :: 256 word)" in Word.uint_lt)
+    apply(simp add:max_u256_def) apply(cut_tac t = x13 in abi_type_measure_nonzero)
+    apply(cut_tac w = "uint (word_rcat (take 32 (drop (nat ix) l)))" and z = "max_u256 + 1" in Int.nat_mono_iff) apply(simp add:max_u256_def)
+
+          apply(rotate_tac -1)
+          apply(case_tac "(nat (uint (word_rcat (take 32 (drop (nat ix) l)))) < nat (int (max_u256 + 1)))")
+           apply(rotate_tac -1)
+           apply(drule_tac k = "abi_type_measure x13" in Nat.mult_less_mono1) apply(simp)
+           apply(rotate_tac -1)
+  apply(drule_tac m = 1 in Nat.trans_less_add2)
+           apply(simp add:max_u256_def)
+  apply(arith)
+          apply(simp add:max_u256_def)
+
+         apply(clarsimp)
+  apply(simp add: abi_type_list_measure_replicate)
+         apply(case_tac t, auto)
+  apply(case_tac
+  apply(arith)
+   defer
+  sorry
+*)
+(*  done *)
+
 (*
 fun decode :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> abi_value orerror" where
 "decode t l =
