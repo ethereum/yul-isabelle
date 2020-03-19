@@ -316,6 +316,11 @@ about tuples *)
               | Ok (vs, bytes_parsed') \<Rightarrow> Ok (vs, bytes_parsed + bytes_parsed'))))"
 *)
 
+(*
+          (case decode'_dyn_tuple_heads tt (n + nat (abi_static_size th)) (ix + bytes_parsed, l) of
+
+*)
+
 | "decode'_dyn_tuple_heads [] n (ix, l) = Ok ([], [], n, 0)"
 | "decode'_dyn_tuple_heads (th#tt) n (ix, l) =
   (let l' = drop (nat ix) l in
@@ -323,12 +328,13 @@ about tuples *)
       then (case decode' th (ix, l) of
         Err s \<Rightarrow> Err s
         | Ok (v, bytes_parsed) \<Rightarrow>
+\<^cancel>\<open>should not use byte_parsed here in this way?\<close>
           (case decode'_dyn_tuple_heads tt (n + nat (abi_static_size th)) (ix + bytes_parsed, l) of
             Err s \<Rightarrow> Err s
             | Ok (vos, idxs, n', bytes_parsed') \<Rightarrow> Ok (Some v # vos, None#idxs, n', bytes_parsed + bytes_parsed')))
     else
       (if length l' < 32 then Err (locate_err ''Too few bytes; could not read tuple head'' (ix, l))
-       else let sz = (decode_uint (take 32 l)) in
+       else let sz = (decode_uint (take 32 l')) in
             (case decode'_dyn_tuple_heads tt (n + 32) (ix + 32, l) of
               Err s \<Rightarrow> Err s
 \<^cancel>\<open>Some n + sz used to be Some n\<close>
