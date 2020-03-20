@@ -1,4 +1,4 @@
-theory Array_FArray imports "../Hex" "../AbiTypes" "../AbiDecode" begin
+theory Array_FArray imports "../Hex" "../AbiTypes" "../AbiDecode" "../AbiEncode" begin
 
 (* solidity *)
 
@@ -44,7 +44,9 @@ definition test_out :: "abi_value" where
                         [(map (Vuint 256) [1, 2]),
                          (map (Vuint 256) [3, 4])])"
 
-value "decode test_schema test_in"
+value "decode test_schema test_in = Ok test_out"
+
+value "encode test_out = Ok test_in"
 
 
 end

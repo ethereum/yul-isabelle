@@ -1,4 +1,4 @@
-theory AbiTypes imports Complex_Main "HOL-Word.Word" "HOL-Library.Multiset"
+theory AbiTypes imports Complex_Main "HOL-Word.Word" "HOL-Library.Multiset" Ok
 
 begin
 
@@ -29,7 +29,6 @@ datatype abi_type =
   | Tstring
   | Tarray "abi_type"
 
-type_synonym 'a orerror = "'a + char list"
 
 (* for use in termination proofs
    some of the termination proofs can't be completed automatically

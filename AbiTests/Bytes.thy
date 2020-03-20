@@ -1,4 +1,4 @@
-theory Bytes imports "../AbiTypes" "../Hex" "../AbiDecode"
+theory Bytes imports "../AbiTypes" "../Hex" "../AbiDecode" "../AbiEncode"
  
 begin
 
@@ -36,7 +36,9 @@ definition test_schema :: abi_type where
 definition test_out :: "abi_value" where
 "test_out = Vbytes (hex_splits ''deadbeefdeadbeefdeadbeefdeadbeef'')"
 
-value "decode test_schema test_in"
+value "decode test_schema test_in = Ok test_out"
+
+value "encode test_out = Ok test_in"
 
 value test_out
 

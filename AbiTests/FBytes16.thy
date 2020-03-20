@@ -1,4 +1,4 @@
-theory FBytes16 imports "../AbiTypes" "../Hex" "../AbiDecode"
+theory FBytes16 imports "../AbiTypes" "../Hex" "../AbiDecode" "../AbiEncode"
 
 begin
 
@@ -34,5 +34,9 @@ value "test_in"
 
 value "decode test_schema test_in"
 value "decode test_schema test_in = Ok test_out"
+
+value "encode test_out = Ok test_in"
+
+value "encode test_out"
 
 end

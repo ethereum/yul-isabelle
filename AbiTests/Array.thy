@@ -1,4 +1,4 @@
-theory Array imports "../Hex" "../AbiTypes" "../AbiDecode"
+theory Array imports "../Hex" "../AbiTypes" "../AbiDecode" "../AbiEncode"
 
 begin
 
@@ -42,6 +42,9 @@ value "test_out"
 
 value "test_in"
 
-value "decode test_schema test_in"
+value "decode test_schema test_in = Ok test_out"
+
+value "encode test_out = Ok test_in"
+
 
 end

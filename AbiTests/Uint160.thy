@@ -1,4 +1,4 @@
-theory Uint160 imports "../AbiTypes" "../Hex" "../AbiDecode"
+theory Uint160 imports "../AbiTypes" "../Hex" "../AbiDecode" "../AbiEncode"
 
 begin
 (* solidity *)
@@ -29,5 +29,8 @@ definition test_out :: abi_value where
 "test_out = Vuint 160 42"
 
 value "decode test_schema test_in"
+
+value "decode test_schema test_in = Ok test_out"
+value "encode test_out = Ok test_in"
 
 end

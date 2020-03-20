@@ -1,4 +1,4 @@
-theory Tuple_FArray imports "../AbiTypes" "../Hex" "../AbiTypesSyntax"
+theory Tuple_FArray imports "../AbiTypes" "../Hex" "../AbiTypesSyntax" "../AbiDecode" "../AbiEncode"
 
 begin
 
@@ -45,7 +45,7 @@ definition test_out :: abi_value where
 
 value "test_out"
 
-value "decode test_schema test_in"
 value "abi_get_type test_out = test_schema"
-
+value "decode test_schema test_in = Ok test_out"
+value "encode test_out = Ok test_in"
 end

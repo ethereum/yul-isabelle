@@ -1,4 +1,4 @@
-theory FArray_FArray imports "../AbiTypes" "../Hex" "../AbiDecode"
+theory FArray_FArray imports "../AbiTypes" "../Hex" "../AbiDecode" "../AbiEncode"
 
 begin
 
@@ -40,5 +40,8 @@ definition test_out :: "abi_value" where
             ,Vfarray (Tuint 256) 2 (map (Vuint 256) [42, 43])
             ,Vfarray (Tuint 256) 2 (map (Vuint 256) [43, 44])]"
 
-value "decode test_schema test_in"
+value "decode test_schema test_in = Ok test_out"
+
+value "encode test_out = Ok test_in"
+
 end

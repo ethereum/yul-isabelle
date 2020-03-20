@@ -67,9 +67,10 @@ value "test_out"
 
 
 value "decode test_schema test_in"
+value "decode test_schema test_in = Ok test_out"
 
-value "map_option bytesToEvmWords (encode test_out)"
-value "encode test_out = Some test_in"
+value "map_err bytesToEvmWords (encode test_out)"
+value "encode test_out = Ok test_in"
 
 value "bytesToEvmWords test_in"
 

@@ -1,4 +1,4 @@
-theory Tuple_Array imports "../Hex" "../AbiTypes" "../AbiTypesSyntax" "../AbiDecode"
+theory Tuple_Array imports "../Hex" "../AbiTypes" "../AbiTypesSyntax" "../AbiDecode" "../AbiEncode"
 
 begin
 
@@ -66,4 +66,7 @@ value "abi_get_type test_out"
 
 value "decode test_schema test_in"
 
+
+value "decode test_schema test_in = Ok test_out"
+value "encode test_out = Ok test_in"
 end

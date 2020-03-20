@@ -1,4 +1,4 @@
-theory AbiDecode imports AbiTypes Hex
+theory AbiDecode imports AbiTypes Hex Ok
 begin
 (* NB the caller of these functions will pass in a long
    enough list *)
@@ -56,11 +56,6 @@ and abi_type_list_measure_dyn :: "abi_type list \<Rightarrow> nat" where
    other than booleans, we aren't doing value checks here *)
 (* TODO: enforce that correct size word list was passed in?
    otherwise we risk discarding data *)
-abbreviation Ok :: "'a \<Rightarrow> 'a orerror" where
-"Ok \<equiv> Inl"
-
-abbreviation Err :: "char list \<Rightarrow> 'a orerror" where
-"Err \<equiv> Inr"
 
 
 lemma abi_type_list_measure_replicate :
@@ -78,9 +73,9 @@ next
     done
 qed
 
-fun locate_err :: "char list \<Rightarrow> (int * 8 word list) \<Rightarrow> char list"
+fun decode_err :: "char list \<Rightarrow> (int * 8 word list) \<Rightarrow> char list"
   where
-"locate_err s (ix, l) =
+"decode_err s (ix, l) =
   s @ '' at byte '' @ decwrite (nat ix) @ '' of '' @ decwrite (length l) @ ''.''"
 
 function (sequential) decode_static :: "abi_type \<Rightarrow> (int * 8 word list) \<Rightarrow> abi_value orerror" 
@@ -90,50 +85,50 @@ and decode_static_tup :: "abi_type list \<Rightarrow> (int * 8 word list) \<Righ
    (let l' = drop (nat ix) l in
    (let res = decode_uint l' in
     (if uint_value_valid n res then Ok (Vuint n res)
-     else Err (locate_err ''Invalid uint'' (ix, l)))))"
+     else Err (decode_err ''Invalid uint'' (ix, l)))))"
 | "decode_static (Tsint n) (ix, l) =
    (let l' = drop (nat ix) l in
    (let res = decode_sint l' in
     (if sint_value_valid n res then Ok (Vsint n res)
-     else Err (locate_err ''Invalid sint'' (ix, l)))))"
+     else Err (decode_err ''Invalid sint'' (ix, l)))))"
 | "decode_static Taddr (ix, l) =
   (let l' = drop (nat ix) l in
    (let res = decode_uint l' in
     (if addr_value_valid res then Ok (Vaddr res)
-     else Err (locate_err ''Invalid address'' (ix, l)))))"
+     else Err (decode_err ''Invalid address'' (ix, l)))))"
 | "decode_static Tbool (ix, l) =
   (let l' = drop (nat ix) l in
    (case decode_bool l' of
-      None \<Rightarrow> Err (locate_err ''Invalid bool'' (ix, l))
+      None \<Rightarrow> Err (decode_err ''Invalid bool'' (ix, l))
       | Some b \<Rightarrow> Ok (Vbool b)))"
 | "decode_static (Tfixed m n) (ix, l) =
   (let l' = drop (nat ix) l in
    (let res = decode_fixed m l' in
     (if fixed_value_valid m n res then Ok (Vfixed m n res)
-     else Err (locate_err ''Invalid fixed'' (ix, l)))))"
+     else Err (decode_err ''Invalid fixed'' (ix, l)))))"
 | "decode_static (Tufixed m n) (ix, l) =
   (let l' = drop (nat ix) l in
    (let res = decode_ufixed m l' in
     (if ufixed_value_valid m n res then Ok (Vufixed m n res)
-     else Err (locate_err ''Invalid ufixed'' (ix, l)))))"
+     else Err (decode_err ''Invalid ufixed'' (ix, l)))))"
 | "decode_static (Tfbytes n) (ix, l) =
   (let l' = drop (nat ix) l in
    (let res = decode_fbytes n l' in
     (if fbytes_value_valid n res then Ok (Vfbytes n res)
-     else Err (locate_err ''Invalid fbytes'' (ix, l)))))"
+     else Err (decode_err ''Invalid fbytes'' (ix, l)))))"
 | "decode_static (Tfarray t n) (ix, l) =
   (case decode_static_tup (List.replicate n t) (ix, l) of
     Err s \<Rightarrow> Err s
     | Ok vs \<Rightarrow> 
         (if farray_value_valid_aux t n vs then Ok (Vfarray t n vs)
-         else Err (locate_err ''Invalid farray'' (ix, l))))"
+         else Err (decode_err ''Invalid farray'' (ix, l))))"
 | "decode_static (Ttuple ts) (ix, l) = 
   (case decode_static_tup ts (ix, l) of
     Err s \<Rightarrow> Err s
     | Ok vs \<Rightarrow> 
       (if tuple_value_valid_aux ts vs then Ok (Vtuple ts vs)
-       else Err (locate_err ''Invalid tuple'' (ix, l))))"
-| "decode_static _ (ix, l) = Err (locate_err ''Ran static parser on dynamic array'' (ix, l))"
+       else Err (decode_err ''Invalid tuple'' (ix, l))))"
+| "decode_static _ (ix, l) = Err (decode_err ''Ran static parser on dynamic array'' (ix, l))"
 (*
 | "decode_static_arr t 0 l = Some []"
 | "decode_static_arr t (Suc n) l =
@@ -240,10 +235,11 @@ and decode'_dyn_array :: "abi_type \<Rightarrow> int \<Rightarrow> (int * 8 word
    second returned nat is number of bytes consumed;
    input nat is running count of head length. *)
 and decode'_dyn_tuple_heads :: "abi_type list \<Rightarrow> int \<Rightarrow> (int * 8 word list) \<Rightarrow> 
-                (abi_value option list *  (nat option) list * int * int) orerror"
+                (abi_value option list *  (int option) list * int * int) orerror"
 (* list parameter gives an offset for each field that still needs to be parsed
-   the nat parameter is an index of how many bytes into our overall tuple encoding we are *)
-and decode'_dyn_tuple_tails :: "(nat option) list \<Rightarrow> abi_type list \<Rightarrow> abi_value option list \<Rightarrow> int \<Rightarrow> (int * 8 word list) \<Rightarrow> 
+   the int parameter is an index of how many bytes into our overall tuple encoding we are *)
+(* do we even need the offset parameter? *)
+and decode'_dyn_tuple_tails :: "(int option) list \<Rightarrow> abi_type list \<Rightarrow> abi_value option list \<Rightarrow> int \<Rightarrow> (int * 8 word list) \<Rightarrow> 
                 (abi_value list * int) orerror"
 where
 (* we need to zip earlier. *)
@@ -252,7 +248,7 @@ where
   
   (if abi_type_isstatic t
     then
-      if int (length l) < (abi_static_size t) + ix then Err (locate_err ''Too few bytes for given static type'' (ix, l))
+      if int (length l) < (abi_static_size t) + ix then Err (decode_err ''Too few bytes for given static type'' (ix, l))
       else (case decode_static t (ix, l) of
             Err s \<Rightarrow> Err s
             | Ok v \<Rightarrow> Ok (v, (abi_static_size t)))
@@ -268,14 +264,14 @@ where
               Err s \<Rightarrow> Err s
               | Ok (vs, bytes_parsed') \<Rightarrow> Ok (Vfarray t n vs, bytes_parsed + bytes_parsed'))))
       | Tarray t \<Rightarrow>
-       if int (length l) < 32 + ix then Err (locate_err ''Too few bytes; could not read array size'' (ix, l))
+       if int (length l) < 32 + ix then Err (decode_err ''Too few bytes; could not read array size'' (ix, l))
         else let n = (decode_uint (take 32 l')) in
         (let ts = List.replicate (nat n) t in
         (case decode'_dyn_tuple_heads ts 0 (ix + 32, l) of
           Err s \<Rightarrow> Err s
           | Ok (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
             \<^cancel>\<open>this used to drop bytes parsed\<close>
-            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (ix, l) of
+            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (ix + 32, l) of
               Err s \<Rightarrow> Err s
               | Ok (vs, bytes_parsed') \<Rightarrow> Ok (Varray t vs, bytes_parsed + bytes_parsed' + 32))))
       | Ttuple ts \<Rightarrow>
@@ -287,16 +283,16 @@ where
               Err s \<Rightarrow> Err s
               | Ok (vs, bytes_parsed') \<Rightarrow> Ok (Vtuple ts vs, bytes_parsed + bytes_parsed')))
       | Tbytes \<Rightarrow>
-        if int (length l) < 32 + ix then Err (locate_err ''Too few bytes; could not read bytestream size'' (ix, l))
+        if int (length l) < 32 + ix then Err (decode_err ''Too few bytes; could not read bytestream size'' (ix, l))
         else let sz = (decode_uint (take 32 l')) in
-             if int (length l) < sz + 32 + ix then Err (locate_err ''Fewer bytes remaining than bytestream size'' (ix, l))
+             if int (length l) < sz + 32 + ix then Err (decode_err ''Fewer bytes remaining than bytestream size'' (ix, l))
              else Ok (Vbytes (take (nat sz) (drop 32 l')), int(skip_padding (nat sz)) + 32)
       | Tstring \<Rightarrow> 
-        if int(length l) < 32 + ix then Err (locate_err ''Too few bytes; could not read string size'' (ix, l))
+        if int(length l) < 32 + ix then Err (decode_err ''Too few bytes; could not read string size'' (ix, l))
         else let sz = (decode_uint (take 32 l')) in
-             if int (length l) < sz + 32 + ix then Err (locate_err ''Fewer bytes remaining than string size'' (ix, l))
+             if int (length l) < sz + 32 + ix then Err (decode_err ''Fewer bytes remaining than string size'' (ix, l))
              else Ok (Vstring (bytes_to_string (take (nat sz) (drop 32 l'))), int (skip_padding (nat sz)) + 32)
-      | _ \<Rightarrow> Err (locate_err ''This should be dead code'' (ix, l)))))"
+      | _ \<Rightarrow> Err (decode_err ''This should be dead code'' (ix, l)))))"
 
 (*| "decode_dyn_array t 0 [] = Some ([], [])"
 | "decode_dyn_array t n [] = None" *)
@@ -320,26 +316,27 @@ about tuples *)
           (case decode'_dyn_tuple_heads tt (n + nat (abi_static_size th)) (ix + bytes_parsed, l) of
 
 *)
-
+(* need to use ix when computing byte offsets? *)
+(* should ix be start of element or start of overall tuple? *)
+(* let's try having ix be start of tuple *)
 | "decode'_dyn_tuple_heads [] n (ix, l) = Ok ([], [], n, 0)"
 | "decode'_dyn_tuple_heads (th#tt) n (ix, l) =
-  (let l' = drop (nat ix) l in
+  (let l' = drop (nat (ix + n)) l in
     (if abi_type_isstatic th
-      then (case decode' th (ix, l) of
+      then (case decode' th (ix + n, l) of
         Err s \<Rightarrow> Err s
         | Ok (v, bytes_parsed) \<Rightarrow>
-\<^cancel>\<open>should not use byte_parsed here in this way?\<close>
-          (case decode'_dyn_tuple_heads tt (n + nat (abi_static_size th)) (ix + bytes_parsed, l) of
+          (case decode'_dyn_tuple_heads tt (n + nat (abi_static_size th)) (ix, l) of
             Err s \<Rightarrow> Err s
             | Ok (vos, idxs, n', bytes_parsed') \<Rightarrow> Ok (Some v # vos, None#idxs, n', bytes_parsed + bytes_parsed')))
     else
-      (if length l' < 32 then Err (locate_err ''Too few bytes; could not read tuple head'' (ix, l))
-       else let sz = (decode_uint (take 32 l')) in
-            (case decode'_dyn_tuple_heads tt (n + 32) (ix + 32, l) of
+      (if length l' < 32 then Err (decode_err ''Too few bytes; could not read tuple head'' (ix, l))
+       else let sz = (decode_sint (take 32 l')) in
+            (case decode'_dyn_tuple_heads tt (n + 32) (ix, l) of
               Err s \<Rightarrow> Err s
 \<^cancel>\<open>Some n + sz used to be Some n\<close>
 
-              | Ok (vos, idxs, n', bytes_parsed) \<Rightarrow> Ok (None # vos, (Some (nat sz))#idxs, n', bytes_parsed + 32)))))"
+              | Ok (vos, idxs, n', bytes_parsed) \<Rightarrow> Ok (None # vos, (Some (ix + sz))#idxs, n', bytes_parsed + 32)))))"
 
 | "decode'_dyn_tuple_tails [] [] []  _ (ix, l) = Ok ([], 0)"
 | "decode'_dyn_tuple_tails (None#t) (th#tt) (Some vh#vt) offset (ix, l) = 
@@ -362,7 +359,7 @@ about tuples *)
 
 
 | "decode'_dyn_tuple_tails ((Some toffset)#t) (th#tt) (None#vt) offset (ix, l) =
-   (let ix' = ix + int (toffset) in
+   (let ix' = toffset in
        (case decode' th (ix', l) of
               Err s \<Rightarrow> Err s
               | Ok (v, bytes_parsed) \<Rightarrow>
@@ -372,7 +369,7 @@ about tuples *)
                            | Ok (vs, bytes_parsed') \<Rightarrow> Ok (v#vs, bytes_parsed + bytes_parsed'))))                          
       "
 
-| "decode'_dyn_tuple_tails _ _ _ _ (ix, l) = Err (locate_err ''Should be dead code'' (ix, l))"
+| "decode'_dyn_tuple_tails _ _ _ _ (ix, l) = Err (decode_err ''Should be dead code'' (ix, l))"
 
 (*
 | "decode_dyn_tuple_tails (Inl v # t) n l =
@@ -563,9 +560,11 @@ fun decode :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> abi_value orerro
 *)
 fun decode :: "abi_type \<Rightarrow> 8 word list \<Rightarrow> abi_value orerror" where
 "decode t l =
-  (case decode' t (0, l) of
-    Err s \<Rightarrow> Err s
-    | Ok (v, _) \<Rightarrow> Ok v)"
+  (if abi_type_valid t then
+    (case decode' t (0, l) of
+      Err s \<Rightarrow> Err s
+      | Ok (v, _) \<Rightarrow> Ok v)
+   else Err ''Invalid ABI type'')"
 (* head = offset at which tail can be found
    tail = encoding of dynamic object *)
 

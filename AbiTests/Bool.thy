@@ -1,4 +1,4 @@
-theory Bool imports "../AbiTypes" "../Hex" "../AbiDecode"
+theory Bool imports "../AbiTypes" "../Hex" "../AbiDecode" "../AbiEncode"
 
 begin
 (* solidity *)
@@ -25,6 +25,7 @@ definition test_schema :: abi_type where
 definition test_out :: abi_value where
 "test_out = Vbool True"
 
-value "decode test_schema test_in"
+value "decode test_schema test_in = Ok test_out"
+value "encode test_out = Ok test_in"
 
 end
