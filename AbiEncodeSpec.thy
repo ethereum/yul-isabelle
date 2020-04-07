@@ -4,6 +4,9 @@ begin
 
 (* Inductive specification of ABI encoding. Aim is to capture all encodings including non-canonical ones *)
 
+
+(* TODO: need to augment this predicate with
+    sizes? *)
 inductive abi_descend :: "abi_value \<Rightarrow> abi_value \<Rightarrow> bool" where
 (* reflexive *)
 "\<And> v . abi_descend v v"
@@ -30,6 +33,7 @@ inductive abi_descend :: "abi_value \<Rightarrow> abi_value \<Rightarrow> bool" 
    abi_descend v' v'' \<Longrightarrow>
    abi_descend v v''"
 
+(*
 inductive is_static_type :: "abi_type \<Rightarrow> bool" where
 "\<And> n . is_static_type (Tuint n)"
 | "\<And> n . is_static_type (Tsint n)"
@@ -44,7 +48,7 @@ inductive is_static_type :: "abi_type \<Rightarrow> bool" where
 | "\<And> ts .
     (\<forall> t . t \<in> set ts \<longrightarrow> is_static_type t) \<Longrightarrow>
     is_static_type (Ttuple ts)"
-
+*)
 
 (*
 inductive typecheck_value :: "abi_value \<Rightarrow> bool" where
@@ -67,86 +71,92 @@ inductive can_encode_as :: "abi_value \<Rightarrow> 8 word list \<Rightarrow> in
 and       can_encode_as_list :: "abi_value list \<Rightarrow> 8 word list \<Rightarrow> int \<Rightarrow> int \<Rightarrow> bool"
 and       can_encode_as_list_dyn :: "abi_value list \<Rightarrow> 8 word list \<Rightarrow> int \<Rightarrow> int \<Rightarrow> bool" where
 (* static cases *)
-" \<And> n i pre post code . abi_value_valid (Vuint n i) \<Longrightarrow>
+Euint: " \<And> n i pre post code . abi_value_valid (Vuint n i) \<Longrightarrow>
   code = (encode_int i) \<Longrightarrow>
   can_encode_as (Vuint n i) (pre @ code @ post) (int (length pre)) (int (length (pre @ code)))"
-| "\<And> n i pre post code . abi_value_valid (Vsint n i) \<Longrightarrow>
+| Esint : "\<And> n i pre post code . abi_value_valid (Vsint n i) \<Longrightarrow>
   code = (encode_int i) \<Longrightarrow>
   can_encode_as (Vsint n i) (pre @ code @ post) (int (length pre)) (int (length (pre @ code)))"
-| "\<And> a pre post code . abi_value_valid (Vaddr a) \<Longrightarrow>
+| Eaddr : "\<And> a pre post code . abi_value_valid (Vaddr a) \<Longrightarrow>
   code = (encode_int a) \<Longrightarrow>
   can_encode_as (Vaddr a) (pre @ code @ post) (int (length pre)) (int (length (pre @ code)))"
-| "\<And> b pre post code . 
+| Ebool : "\<And> b pre post code . 
   code = (encode_bool b) \<Longrightarrow>
   can_encode_as (Vbool b) (pre @ code @ post) (int (length pre)) (int (length (pre @ code)))"
-| "\<And> m n r pre post code .
+| Efixed : "\<And> m n r pre post code .
   abi_value_valid (Vfixed m n r) \<Longrightarrow>
   code = (encode_fixed n r) \<Longrightarrow>
   can_encode_as (Vfixed m n r) (pre @ code @ post) (int (length pre)) (int (length (pre @ code)))"
-| "\<And> m n r pre post code. abi_value_valid (Vufixed m n r) \<Longrightarrow>
+| Eufixed : "\<And> m n r pre post code. abi_value_valid (Vufixed m n r) \<Longrightarrow>
   code = (encode_fixed n r) \<Longrightarrow>
   can_encode_as (Vufixed m n r) (pre @ code @ post) (int (length pre)) (int (length (pre @ code)))"
-| "\<And> n l pre post code . abi_value_valid (Vfbytes n l) \<Longrightarrow>
+| Efbytes : "\<And> n l pre post code . abi_value_valid (Vfbytes n l) \<Longrightarrow>
     code = (encode_fbytes n l) \<Longrightarrow>
    can_encode_as (Vfbytes n l) (pre @ code @ post) (int (length pre)) (int (length (pre @ code)))"
-| "\<And> t n vs pre_len pre_and_code_len full_code .
+| Efarray_static : "\<And> t n vs pre_len pre_and_code_len full_code .
     abi_value_valid (Vfarray t n vs) \<Longrightarrow>
-    is_static_type t \<Longrightarrow>
+    abi_type_isstatic t \<Longrightarrow>
     can_encode_as_list vs full_code pre_len pre_and_code_len \<Longrightarrow>
     can_encode_as (Vfarray t n vs) full_code pre_len pre_and_code_len"
-| "\<And> ts vs pre_len pre_and_code_len full_code .
+| Etuple_static : "\<And> ts vs pre_len pre_and_code_len full_code .
     abi_value_valid (Vtuple ts vs) \<Longrightarrow>
-    (\<forall> t . t \<in> set ts \<longrightarrow> is_static_type t) \<Longrightarrow>
+    (\<forall> t . t \<in> set ts \<longrightarrow> abi_type_isstatic t) \<Longrightarrow>
     can_encode_as_list vs full_code pre_len pre_and_code_len \<Longrightarrow>
     can_encode_as (Vtuple ts vs) full_code pre_len pre_and_code_len"
 
 (* helper for static fixed arrays/tuples *)
-| "\<And> n . can_encode_as_list [] [] n n"
-| "\<And> v vs pre_len pre_and_v_code_len pre_v_and_vs_code_len full_code .
-    can_encode_as t full_code pre_len pre_and_v_code_len \<Longrightarrow>
-    can_encode_as_list ts full_code pre_and_v_code_len pre_v_and_vs_code_len \<Longrightarrow>
+| Elnil_static :  "\<And> n full_code . can_encode_as_list [] full_code n n"
+| Elcons_static : "\<And> v vs pre_len pre_and_v_code_len pre_v_and_vs_code_len full_code .
+    can_encode_as v full_code pre_len pre_and_v_code_len \<Longrightarrow>
+    can_encode_as_list vs full_code pre_and_v_code_len pre_v_and_vs_code_len \<Longrightarrow>
     can_encode_as_list (v#vs) full_code pre_len pre_v_and_vs_code_len"
 
 (* dynamic cases *)
-| "\<And> ts vs t pre_len pre_and_vs_code_len full_code . abi_value_valid (Vtuple ts vs) \<Longrightarrow>
+| Etuple_dyn : "\<And> ts vs t pre_len pre_and_vs_code_len full_code . abi_value_valid (Vtuple ts vs) \<Longrightarrow>
       t \<in> set ts \<Longrightarrow>
-      (\<not> is_static_type t) \<Longrightarrow>
+      (abi_type_isdynamic t) \<Longrightarrow>
       can_encode_as_list_dyn vs full_code pre_len pre_and_vs_code_len \<Longrightarrow>
       can_encode_as (Vtuple ts vs) full_code pre_len pre_and_vs_code_len"
 
-| "\<And> t vs pre_len pre_and_count_len pre_count_and_vs_code_len full_code . 
+| Efarray_dyn : "\<And> t n vs pre_len pre_and_vs_code_len full_code .
+    abi_value_valid (Vfarray t n vs) \<Longrightarrow>
+    (\<not> abi_type_isstatic t) \<Longrightarrow>
+    can_encode_as_list_dyn vs full_code pre_len pre_and_vs_code_len \<Longrightarrow>
+    can_encode_as (Vfarray t n vs) full_code pre_len pre_and_vs_code_len"
+
+| Earray : "\<And> t vs pre_len pre_and_count_len pre_count_and_vs_code_len full_code . 
      abi_value_valid (Varray t vs) \<Longrightarrow>
      can_encode_as (Vuint 256 (length vs)) full_code pre_len pre_and_count_len \<Longrightarrow>
      can_encode_as_list_dyn vs full_code pre_and_count_len pre_count_and_vs_code_len \<Longrightarrow>
      can_encode_as (Varray t vs) full_code pre_len pre_count_and_vs_code_len"
 
-| "\<And> n . can_encode_as_list_dyn [] [] n n"
+| Elnil_dyn : "\<And> n full_code . can_encode_as_list_dyn [] full_code n n"
 (* NB: the integer parameters here consider the size of the head *)
 (* first, the static case *)
 
-| "\<And> v vs pre_len pre_and_head_len pre_and_heads_len .
-  (is_static_type (abi_get_type v)) \<Longrightarrow>
+| Elcons_dyn_t : "\<And> v vs pre_len pre_and_head_len pre_and_heads_len .
+  (abi_type_isstatic (abi_get_type v)) \<Longrightarrow>
   can_encode_as v full_code head_pre_len head_pre_and_head_len \<Longrightarrow>
   can_encode_as_list_dyn vs full_code pre_and_head_len pre_and_heads_len \<Longrightarrow>
   can_encode_as_list_dyn (v #vs) full_code pre_len pre_and_heads_len"
 
 (* now, the case where the value to encode is dynamic  *)
-| "\<And> v vs offset absolute absolute_and_v_len
+| Elcons_dyn_h : "\<And> v vs offset absolute absolute_and_v_len
                 pre_len pre_and_head_len
                 pre_and_heads_len .
-  (\<not> is_static_type (abi_get_type v)) \<Longrightarrow>
+  (abi_type_isdynamic (abi_get_type v)) \<Longrightarrow>
   can_encode_as (Vsint 256 offset) full_code pre_len pre_and_head_len \<Longrightarrow>
   absolute = offset + pre_len \<Longrightarrow>
   can_encode_as v full_code absolute absolute_and_v_len \<Longrightarrow>
   can_encode_as_list_dyn vs full_code pre_and_head_len pre_and_heads_len \<Longrightarrow>
   can_encode_as_list_dyn (v #vs) full_code pre_len pre_and_heads_len"
 
-| "\<And> l pre post count code .
+| Ebytes : "\<And> l pre post count code .
      abi_value_valid (Vbytes l) \<Longrightarrow>
      code = pad_bytes l \<Longrightarrow>
      can_encode_as (Vuint 256 (length l)) (pre @ count @ code @ post) (int (length pre)) (int (length (pre @ count)))\<Longrightarrow>
      can_encode_as (Vbytes l) (pre @ count @ code @ post) (int (length pre)) (int (length (pre @ count @ code)))"
-| "\<And> s l pre_len pre_and_code_len . abi_value_valid (Vstring s) \<Longrightarrow> 
+| Estring : "\<And> s l pre_len pre_and_code_len . abi_value_valid (Vstring s) \<Longrightarrow> 
      l = (string_to_bytes s) \<Longrightarrow>
      can_encode_as (Vbytes l) full_code pre_len pre_and_code_len \<Longrightarrow>
      can_encode_as (Vstring s) full_code pre_len pre_and_code_len "
