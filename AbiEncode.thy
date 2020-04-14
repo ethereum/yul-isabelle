@@ -143,13 +143,17 @@ this means we need some way to get the current offset
                                 (case encode'_tuple_tails rest headlen
                                                          (len_total) of
                                   Err s \<Rightarrow> Err s
-                                  | Ok ts \<Rightarrow> Ok ((len_total + headlen, [])#ts))
+                                  | Ok ts \<Rightarrow> 
+                                    (if uint_value_valid 256 (len_total + headlen) then Ok ((len_total + headlen, [])#ts)
+                                     else Err ''Encoded value is too long''))
       else (case encode' v of Err s \<Rightarrow> Err s
         | Ok enc \<Rightarrow> 
           let len_total' = len_total + int (length enc) in 
           (case encode'_tuple_tails rest headlen len_total' of
                                   Err s \<Rightarrow> Err s
-                                  | Ok ts \<Rightarrow> Ok ((len_total + headlen, enc)#ts))))"
+                                  | Ok ts \<Rightarrow> 
+                                    (if uint_value_valid 256 (len_total + headlen) then Ok ((len_total + headlen, enc)#ts)
+                                     else Err ''Encoded value is too long''))))"
         
 
 definition encode :: "abi_value \<Rightarrow> 8 word list orerror"  where
