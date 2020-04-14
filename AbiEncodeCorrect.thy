@@ -380,15 +380,12 @@ next
       apply(subgoal_tac
 "is_head_and_tail vs (map2 (\<lambda>v (ptr, enc). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint 256 ptr) vs bvs) (map abi_get_type vs)
             ((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs bvs). abi_type_isdynamic (abi_get_type (fst x))})")
-        apply(clarsimp)
         apply(drule_tac x = a and xs = vs  in iht_static) apply(simp)
          apply(simp)
         apply(auto)
-(*
+
       defer
       apply(atomize)
-      apply(rule_tac impE)
-      apply(drule_tac allI5)
       apply(clarsimp) apply(auto)
       apply(simp add:Set.insert_is_Un)
 *)
@@ -420,6 +417,8 @@ lemma encode_tuple_heads_correct [rule_format] :
 
 (* was "tails =", but i think maybe needs to be supseteq *)
 (* the map2 (maybe also map) hypothesis is insufficiently general *)
+(* do we need to talk about children here? *)
+(* list comes from bvs *)
 lemma encode_tuple_heads_correct [rule_format] :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
