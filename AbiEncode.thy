@@ -22,8 +22,8 @@ fun encode_fixed :: "nat \<Rightarrow> rat \<Rightarrow> 8 word list" where
 fun pad_bytes :: "8 word list \<Rightarrow> 8 word list" where
 "pad_bytes l = 
   (case divmod_nat (length l) 32 of
-        (_, 0) \<Rightarrow> l
-        | (_, rem) \<Rightarrow> l @ (List.replicate (32 - rem) (Word.word_of_int 0)))"
+        (d, 0) \<Rightarrow> l
+        | (d, Suc rem) \<Rightarrow> l @ (List.replicate (32 - (Suc rem)) (Word.word_of_int 0)))"
 
 fun encode_fbytes :: "nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list" where
 "encode_fbytes n l = 

@@ -104,7 +104,7 @@ iht_nil :  "is_head_and_tail [] [] [] {}"
    abi_get_type x = v \<Longrightarrow>
    abi_type_isstatic v \<Longrightarrow>
    is_head_and_tail (x#xs) (x#ys) (v#ts) tails"
-| iht_dynamic : "\<And> xs ys ts tails x  .
+| iht_dynamic : "\<And> xs ys ts tails x ptr  .
    is_head_and_tail xs ys ts tails \<Longrightarrow>
    abi_type_isdynamic (abi_get_type x) \<Longrightarrow>
    is_head_and_tail (x#xs) ((Vuint 256 ptr) # ys) ((Tuint 256) # ts) (insert (ptr,x) tails)"

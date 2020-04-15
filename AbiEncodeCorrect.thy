@@ -345,8 +345,42 @@ next
     done
 qed
 
+(*
+(* need an is_head_and_tail assumption? *)
+lemma encode_tuple_tails_correct_gen :
+  "\<And> vs_pre headlen len_total bvs vbvs hds tls.
+     
+     encode'_tuple_tails (vs) headlen len_total = Ok bvs \<Longrightarrow>
+     vbvs = (List.zip (vs) bvs) \<Longrightarrow>
+     hds = List.map (\<lambda> (v, (ptr, enc)) .
+                        (if (abi_type_isstatic (abi_get_type v)) then v
+                            else (Vuint 256 ptr))) vbvs  \<Longrightarrow>
+     tls = List.map (\<lambda> (v, (ptr, enc)) . (ptr, v))
+                    (List.filter (abi_type_isdynamic o abi_get_type o fst) vbvs) \<Longrightarrow>
+     is_head_and_tail vs hds 
+                         (List.map (\<lambda> v . if abi_type_isstatic (abi_get_type v) then abi_get_type v
+                                              else Tuint 256) vs) (set tls)"
+proof(induction vs)
+  case Nil
+  then show ?case
+    apply(clarsimp)
+    apply(rule_tac iht_nil)
+    done
+next
+  case (Cons a vs)
+  then show ?case
+    proof (cases "abi_type_isstatic (abi_get_type a)")
+    case True
+    then show ?thesis using Cons.prems Cons.IH
+      apply(case_tac hds; clarsimp)
+      apply(case_tac bvs; clarsimp)
+      apply(simp split: sum.split_asm)
+       apply(simp split:if_split_asm sum.split_asm)
+qed
+*)
 
 (* Need a clause here saying that all the Tuints are valid as uint 256 *)
+(* problem with bvs? *)
 lemma encode_tuple_tails_correct :
   "\<And> headlen len_total bvs vbvs hds tls.
      encode'_tuple_tails vs headlen len_total = Ok bvs \<Longrightarrow>
@@ -374,24 +408,228 @@ next
       apply(case_tac hds; clarsimp)
       apply(case_tac bvs; clarsimp)
       apply(simp split: sum.split_asm)
-      apply(safe)
        apply(simp split:if_split_asm sum.split_asm)
-      apply(clarsimp)
-      apply(subgoal_tac
-"is_head_and_tail vs (map2 (\<lambda>v (ptr, enc). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint 256 ptr) vs bvs) (map abi_get_type vs)
-            ((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs bvs). abi_type_isdynamic (abi_get_type (fst x))})")
-        apply(drule_tac x = a and xs = vs  in iht_static) apply(simp)
-         apply(simp)
-        apply(auto)
 
-      defer
+      apply(case_tac "encode'_tuple_tails vs headlen len_total"; clarsimp)
+      apply(case_tac "uint_value_valid 256 (len_total + headlen)"; clarsimp)
       apply(atomize)
-      apply(clarsimp) apply(auto)
-      apply(simp add:Set.insert_is_Un)
-*)
-      sorry next
+      apply(drule_tac x = headlen in spec) apply(drule_tac x = len_total in spec) apply(clarsimp)
+      apply(drule_tac x = a and xs = vs  in iht_static) apply(simp) apply(simp)
+
+      apply(subgoal_tac
+"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x. (x = (a, len_total + headlen, []) \<or> x \<in> set (zip vs aa)) \<and> abi_type_isdynamic (abi_get_type (fst x))}
+=
+(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs aa). abi_type_isdynamic (abi_get_type (fst x))}")
+
+      apply(clarsimp)
+      apply(rule_tac Set.equalityI)
+       apply(rule_tac Set.subsetI)
+       apply(clarsimp)
+       apply(safe)
+       apply(subgoal_tac "(ab, ac, ba) \<in> { x \<in> set (zip vs aa) . abi_type_isdynamic (abi_get_type (fst x))}")
+      apply(rotate_tac -1)
+      apply(drule_tac f = " (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))" in Set.imageI)
+      apply(clarsimp)
+       apply(fastforce)
+
+      apply(subgoal_tac "(ab, ac, ba) \<in> {x. (x = (a, len_total + headlen, []) \<or> x \<in> set (zip vs aa)) \<and> abi_type_isdynamic (abi_get_type (fst x))}")
+      apply(rotate_tac -1)
+      apply(drule_tac f = " (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))" in Set.imageI)
+       apply(clarsimp)
+      apply(fastforce)
+      done next
     case False
-    then show ?thesis using Cons.prems Cons.IH sorry
+    then show ?thesis using Cons.prems Cons.IH
+      apply(case_tac hds; clarsimp)
+      apply(case_tac bvs; clarsimp)
+       apply(simp split: sum.split_asm)
+       apply(simp split:if_split_asm)
+      apply(atomize)
+      apply(case_tac a; clarsimp)
+
+(* first case = farray *)
+           apply(simp split:sum.split_asm if_split_asm)
+           apply(drule_tac x = headlen in spec) apply(drule_tac x = "len_total + int (length x1)" in spec) apply(clarsimp)
+
+           apply(simp split:sum.split_asm if_split_asm)
+           apply(drule_tac x = headlen in spec) apply(drule_tac x = "len_total + int (length x1)" in spec) apply(clarsimp)
+
+          apply(drule_tac x = "Vfarray x91 x92 x93" and ptr = "len_total + headlen"  in iht_dynamic)
+           apply(clarsimp)
+
+      apply(subgoal_tac
+" (insert (len_total + headlen, Vfarray x91 x92 x93)
+          ((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs x1b). abi_type_isdynamic (abi_get_type (fst x))}))
+=
+((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) `
+         {x. (x = (Vfarray x91 x92 x93, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))})")
+           apply(clarsimp)
+          apply(rule_tac Set.equalityI)
+apply(rule_tac Set.subsetI)
+           apply(clarsimp)
+           apply(case_tac "aa = len_total + headlen \<and> ba = Vfarray x91 x92 x93"; clarsimp)
+
+            apply(cut_tac x = "(Vfarray x91 x92 x93, len_total + headlen, b)" and 
+f=
+"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
+and A = " {x. (x = (Vfarray x91 x92 x93, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
+             apply(clarsimp)
+            apply(clarsimp)
+
+           apply(cut_tac x = "(aa, ab, bb)" and 
+f=
+"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
+and A = " {x. (x = (Vfarray x91 x92 x93, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
+
+            apply(clarsimp) apply(clarsimp)
+
+          apply(clarsimp)
+          apply(case_tac "(aa, ab, bb) \<in> set (zip vs x1b)"; clarsimp)
+
+      apply(subgoal_tac
+"{x \<in> set (zip vs x1b). abi_type_isdynamic (abi_get_type (fst x))} =
+  set (zip vs x1b) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))}")
+           apply(clarsimp)
+
+          apply(subgoal_tac "(ab, aa) \<in> (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` (set (zip vs x1b) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))})")
+      apply(clarsimp)
+
+
+      apply(cut_tac f = "(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) "
+and x = "(aa, ab, bb)"
+and A = "set (zip vs x1b) \<inter> {x. abi_type_isdynamic (abi_get_type (fst x))}"
+in Set.imageI)
+            apply(clarsimp)
+           apply(clarsimp)
+          apply(fastforce)
+
+(*whew, that was really annoying.
+rest of the cases should hopefully be similar. *)
+
+(* second case = tuple *)
+       apply(simp split:sum.split_asm if_split_asm)
+           apply(drule_tac x = headlen in spec) apply(drule_tac x = "len_total + int (length x1)" in spec) apply(clarsimp)
+
+           apply(simp split:sum.split_asm if_split_asm)
+           apply(drule_tac x = headlen in spec) apply(drule_tac x = "len_total + int (length x1)" in spec) apply(clarsimp)
+
+          apply(drule_tac x = "Vtuple x101 x102" and ptr = "len_total + headlen"  in iht_dynamic)
+           apply(clarsimp)
+
+      apply(subgoal_tac
+" (insert (len_total + headlen, Vtuple x101 x102)
+          ((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs x1b). abi_type_isdynamic (abi_get_type (fst x))}))
+=
+((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) `
+         {x. (x = (Vtuple x101 x102, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))})")
+           apply(clarsimp)
+          apply(rule_tac Set.equalityI)
+apply(rule_tac Set.subsetI)
+           apply(clarsimp)
+           apply(case_tac "aa = len_total + headlen \<and> ba = Vtuple x101 x102"; clarsimp)
+
+            apply(cut_tac x = "(Vtuple x101 x102, len_total + headlen, b)" and 
+f=
+"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
+and A = " {x. (x = (Vtuple x101 x102, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
+             apply(clarsimp)
+            apply(clarsimp)
+
+           apply(cut_tac x = "(aa, ab, bb)" and 
+f=
+"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
+and A = " {x. (x = (Vtuple x101 x102, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
+
+            apply(clarsimp) apply(clarsimp)
+
+          apply(clarsimp)
+          apply(case_tac "(aa, ab, bb) \<in> set (zip vs x1b)"; clarsimp)
+
+      apply(subgoal_tac
+"{x \<in> set (zip vs x1b). abi_type_isdynamic (abi_get_type (fst x))} =
+  set (zip vs x1b) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))}")
+           apply(clarsimp)
+
+          apply(subgoal_tac "(ab, aa) \<in> (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` (set (zip vs x1b) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))})")
+      apply(clarsimp)
+
+
+      apply(cut_tac f = "(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) "
+and x = "(aa, ab, bb)"
+and A = "set (zip vs x1b) \<inter> {x. abi_type_isdynamic (abi_get_type (fst x))}"
+in Set.imageI)
+            apply(clarsimp)
+           apply(clarsimp)
+          apply(fastforce)
+
+(* third case = bytes *)
+       apply(simp split:sum.split_asm if_split_asm)
+         apply(drule_tac x = headlen in spec) 
+         apply(drule_tac x = " (len_total +
+         (int (length (word_rsplit (word_of_int (int (length x11a)) :: 256 word))) +
+          int (length (case divmod_nat (length x11a) 32 of (d, 0) \<Rightarrow> x11a | (d, Suc rem) \<Rightarrow> x11a @ replicate (31 - rem) 0))))" in spec)
+         apply(clarsimp)
+
+apply(drule_tac x = headlen in spec) 
+      apply(drule_tac x = " (len_total +
+         (int (length (word_rsplit (word_of_int (int (length x11a)) :: 256 word))) +
+          int (length (case divmod_nat (length x11a) 32 of (d, 0) \<Rightarrow> x11a | (d, Suc rem) \<Rightarrow> x11a @ replicate (31 - rem) 0))))" in spec)
+    apply(drule_tac x = x1 in spec) 
+      apply(clarsimp)
+
+        apply(simp split:prod.splits) 
+      apply(safe_step) apply(clarsimp) apply(fastforce)
+          apply(drule_tac x = "Vbytes x11a" and ptr = "len_total + headlen"  in iht_dynamic)
+         apply(clarsimp)
+      apply(subgoal_tac
+"(insert (len_total + headlen, Vbytes x11a) ((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs x1). abi_type_isdynamic (abi_get_type (fst x))})) =
+
+((\<lambda>(v, ptr, enc). (ptr, v)) `
+         {x. (x = (Vbytes x11a, len_total + headlen, word_rsplit (word_of_int (int (length x11a)) :: 256 word) @ (case x2 of 0 \<Rightarrow> x11a | Suc rem \<Rightarrow> x11a @ replicate (31 - rem) 0)) \<or> x \<in> set (zip vs x1)) \<and>
+             abi_type_isdynamic (abi_get_type (fst x))})")
+         apply(clarsimp)
+ 
+
+      apply(rule_tac Set.equalityI)
+apply(rule_tac Set.subsetI)
+           apply(clarsimp)
+           apply(case_tac "aa = len_total + headlen \<and> b = Vbytes x11a"; clarsimp)
+
+            apply(cut_tac x = "(Vbytes x11a, len_total + headlen, word_rsplit (word_of_int (int (length x11a)) :: 256 word))" and 
+f=
+"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
+and A = " {x. (x = (Vbytes x11a, len_total + headlen, word_rsplit (word_of_int (int (length x11a)) :: 256 word)) \<or> x \<in> set (zip vs x1)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
+             apply(clarsimp)
+          apply(clarsimp)
+
+      apply(case_tac "b = word_rsplit (word_of_int (int (length x11a)) :: 256 word)") apply(clarsimp)
+
+           apply(cut_tac x = "(Vbytes x11a, len_total + headlen, word_rsplit (word_of_int (int (length x11a)) :: 256 word) @ (case x2 of 0 \<Rightarrow> x11a | Suc rem \<Rightarrow> x11a @ replicate (31 - rem) 0))" and 
+f=
+"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
+and A = " {x. (x = ((Vbytes x11a, len_total + headlen, word_rsplit (word_of_int (int (length x11a)) :: 256 word) @ (case x2 of 0 \<Rightarrow> x11a | Suc rem \<Rightarrow> x11a @ replicate (31 - rem) 0))) \<or> x \<in> set (zip vs x1)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
+
+            apply(clarsimp) apply(clarsimp)
+
+          apply(clarsimp)
+
+      apply(subgoal_tac
+"{x \<in> set (zip vs x1). abi_type_isdynamic (abi_get_type (fst x))} =
+  set (zip vs x1) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))}")
+           apply(clarsimp)
+
+          apply(subgoal_tac "(len_total + headlen, Vbytes x11a) \<in> (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` (set (zip vs x1) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))})")
+      apply(clarsimp)
+
+
+      apply(cut_tac f = "(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) "
+and x = "(((Vbytes x11a, len_total + headlen, b)))"
+and A = "set (zip vs x1) \<inter> {x. abi_type_isdynamic (abi_get_type (fst x))}"
+in Set.imageI)
+            apply(clarsimp)
+           apply(clarsimp)
+          apply(fastforce)
+
   qed
 qed
 
