@@ -540,7 +540,7 @@ lemma encode_tuple_heads_correct [rule_format] :
 
 *)
 
-(* change - last hypothesis used to be code. not code @ code_post *)
+(* need to change this so that we leave off the tail part *)
 lemma encode_tuple_heads_correct [rule_format] :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
@@ -683,7 +683,7 @@ lemma abi_encode_succeed_gen_new :
              is_head_and_tail vs (replicate n t) tails \<and> 
              can_encode_as (Vtuple head_types heads) full_code (int (length pre)) \<and>
              (\<forall> offset v . (offset, v) \<in> tails \<Longrightarrow> 
-          (can_encode_as_list_dyn vs (pre @ code @ post) (int (length pre)) (int (length (pre @ code))))))))"
+            (can_encode_as v (pre @ code @ post) (offset)))))))))"
 
 *)
 proof(induction rule: my_abi_value_induct)
@@ -772,6 +772,15 @@ next
          apply(simp)
         apply(simp)
        apply(simp)
+
+(* need to split here. split code into head and tail. *)
+
+       defer
+
+
+
+(* old proof of deferred goal that did not do splitting correctly *)
+
       apply(rule_tac Estatic) apply(simp)
       
           apply(clarsimp)
