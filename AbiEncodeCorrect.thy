@@ -381,6 +381,8 @@ qed
 
 (* Need a clause here saying that all the Tuints are valid as uint 256 *)
 (* problem with bvs? *)
+declare [[show_types]]
+
 lemma encode_tuple_tails_correct :
   "\<And> headlen len_total bvs vbvs hds tls.
      encode'_tuple_tails vs headlen len_total = Ok bvs \<Longrightarrow>
@@ -392,7 +394,7 @@ lemma encode_tuple_tails_correct :
                     (List.filter (abi_type_isdynamic o abi_get_type o fst) vbvs) \<Longrightarrow>
      is_head_and_tail vs hds 
                          (List.map (\<lambda> v . if abi_type_isstatic (abi_get_type v) then abi_get_type v
-                                              else Tuint 256) vs) (set tls)"
+                                              else Tuint 256) vs) (tls)"
 proof(induction vs)
   case Nil
   then show ?case
@@ -415,28 +417,7 @@ next
       apply(atomize)
       apply(drule_tac x = headlen in spec) apply(drule_tac x = len_total in spec) apply(clarsimp)
       apply(drule_tac x = a and xs = vs  in iht_static) apply(simp) apply(simp)
-
-      apply(subgoal_tac
-"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x. (x = (a, len_total + headlen, []) \<or> x \<in> set (zip vs aa)) \<and> abi_type_isdynamic (abi_get_type (fst x))}
-=
-(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs aa). abi_type_isdynamic (abi_get_type (fst x))}")
-
-      apply(clarsimp)
-      apply(rule_tac Set.equalityI)
-       apply(rule_tac Set.subsetI)
-       apply(clarsimp)
-       apply(safe)
-       apply(subgoal_tac "(ab, ac, ba) \<in> { x \<in> set (zip vs aa) . abi_type_isdynamic (abi_get_type (fst x))}")
-      apply(rotate_tac -1)
-      apply(drule_tac f = " (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))" in Set.imageI)
-      apply(clarsimp)
-       apply(fastforce)
-
-      apply(subgoal_tac "(ab, ac, ba) \<in> {x. (x = (a, len_total + headlen, []) \<or> x \<in> set (zip vs aa)) \<and> abi_type_isdynamic (abi_get_type (fst x))}")
-      apply(rotate_tac -1)
-      apply(drule_tac f = " (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))" in Set.imageI)
-       apply(clarsimp)
-      apply(fastforce)
+      apply(simp)
       done next
     case False
     then show ?thesis using Cons.prems Cons.IH
@@ -451,116 +432,21 @@ next
            apply(simp split:sum.split_asm if_split_asm)
            apply(drule_tac x = headlen in spec) apply(drule_tac x = "len_total + int (length x1)" in spec) apply(clarsimp)
 
-           apply(simp split:sum.split_asm if_split_asm)
            apply(drule_tac x = headlen in spec) apply(drule_tac x = "len_total + int (length x1)" in spec) apply(clarsimp)
 
           apply(drule_tac x = "Vfarray x91 x92 x93" and ptr = "len_total + headlen"  in iht_dynamic)
            apply(clarsimp)
-
-      apply(subgoal_tac
-" (insert (len_total + headlen, Vfarray x91 x92 x93)
-          ((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs x1b). abi_type_isdynamic (abi_get_type (fst x))}))
-=
-((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) `
-         {x. (x = (Vfarray x91 x92 x93, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))})")
-           apply(clarsimp)
-          apply(rule_tac Set.equalityI)
-apply(rule_tac Set.subsetI)
-           apply(clarsimp)
-           apply(case_tac "aa = len_total + headlen \<and> ba = Vfarray x91 x92 x93"; clarsimp)
-
-            apply(cut_tac x = "(Vfarray x91 x92 x93, len_total + headlen, b)" and 
-f=
-"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
-and A = " {x. (x = (Vfarray x91 x92 x93, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
-             apply(clarsimp)
-            apply(clarsimp)
-
-           apply(cut_tac x = "(aa, ab, bb)" and 
-f=
-"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
-and A = " {x. (x = (Vfarray x91 x92 x93, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
-
-            apply(clarsimp) apply(clarsimp)
-
-          apply(clarsimp)
-          apply(case_tac "(aa, ab, bb) \<in> set (zip vs x1b)"; clarsimp)
-
-      apply(subgoal_tac
-"{x \<in> set (zip vs x1b). abi_type_isdynamic (abi_get_type (fst x))} =
-  set (zip vs x1b) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))}")
-           apply(clarsimp)
-
-          apply(subgoal_tac "(ab, aa) \<in> (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` (set (zip vs x1b) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))})")
-      apply(clarsimp)
-
-
-      apply(cut_tac f = "(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) "
-and x = "(aa, ab, bb)"
-and A = "set (zip vs x1b) \<inter> {x. abi_type_isdynamic (abi_get_type (fst x))}"
-in Set.imageI)
-            apply(clarsimp)
-           apply(clarsimp)
-          apply(fastforce)
-
-(*whew, that was really annoying.
-rest of the cases should hopefully be similar. *)
+      apply(simp)
 
 (* second case = tuple *)
-       apply(simp split:sum.split_asm if_split_asm)
+           apply(simp split:sum.split_asm if_split_asm)
            apply(drule_tac x = headlen in spec) apply(drule_tac x = "len_total + int (length x1)" in spec) apply(clarsimp)
 
-           apply(simp split:sum.split_asm if_split_asm)
            apply(drule_tac x = headlen in spec) apply(drule_tac x = "len_total + int (length x1)" in spec) apply(clarsimp)
 
           apply(drule_tac x = "Vtuple x101 x102" and ptr = "len_total + headlen"  in iht_dynamic)
            apply(clarsimp)
-
-      apply(subgoal_tac
-" (insert (len_total + headlen, Vtuple x101 x102)
-          ((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs x1b). abi_type_isdynamic (abi_get_type (fst x))}))
-=
-((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) `
-         {x. (x = (Vtuple x101 x102, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))})")
-           apply(clarsimp)
-          apply(rule_tac Set.equalityI)
-apply(rule_tac Set.subsetI)
-           apply(clarsimp)
-           apply(case_tac "aa = len_total + headlen \<and> ba = Vtuple x101 x102"; clarsimp)
-
-            apply(cut_tac x = "(Vtuple x101 x102, len_total + headlen, b)" and 
-f=
-"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
-and A = " {x. (x = (Vtuple x101 x102, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
-             apply(clarsimp)
-            apply(clarsimp)
-
-           apply(cut_tac x = "(aa, ab, bb)" and 
-f=
-"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
-and A = " {x. (x = (Vtuple x101 x102, len_total + headlen, b) \<or> x \<in> set (zip vs x1b)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
-
-            apply(clarsimp) apply(clarsimp)
-
-          apply(clarsimp)
-          apply(case_tac "(aa, ab, bb) \<in> set (zip vs x1b)"; clarsimp)
-
-      apply(subgoal_tac
-"{x \<in> set (zip vs x1b). abi_type_isdynamic (abi_get_type (fst x))} =
-  set (zip vs x1b) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))}")
-           apply(clarsimp)
-
-          apply(subgoal_tac "(ab, aa) \<in> (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` (set (zip vs x1b) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))})")
-      apply(clarsimp)
-
-
-      apply(cut_tac f = "(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) "
-and x = "(aa, ab, bb)"
-and A = "set (zip vs x1b) \<inter> {x. abi_type_isdynamic (abi_get_type (fst x))}"
-in Set.imageI)
-            apply(clarsimp)
-           apply(clarsimp)
-          apply(fastforce)
+         apply(simp) 
 
 (* third case = bytes *)
        apply(simp split:sum.split_asm if_split_asm)
@@ -570,65 +456,48 @@ in Set.imageI)
           int (length (case divmod_nat (length x11a) 32 of (d, 0) \<Rightarrow> x11a | (d, Suc rem) \<Rightarrow> x11a @ replicate (31 - rem) 0))))" in spec)
          apply(clarsimp)
 
-apply(drule_tac x = headlen in spec) 
-      apply(drule_tac x = " (len_total +
+        apply(drule_tac x = headlen in spec) 
+
+    apply(drule_tac x = " (len_total +
          (int (length (word_rsplit (word_of_int (int (length x11a)) :: 256 word))) +
           int (length (case divmod_nat (length x11a) 32 of (d, 0) \<Rightarrow> x11a | (d, Suc rem) \<Rightarrow> x11a @ replicate (31 - rem) 0))))" in spec)
+         apply(clarsimp)
     apply(drule_tac x = x1 in spec) 
-      apply(clarsimp)
 
         apply(simp split:prod.splits) 
-      apply(safe_step) apply(clarsimp) apply(fastforce)
+      (* i still don't understand why this is necessary *)
+      apply(safe_step) apply(fastforce)
           apply(drule_tac x = "Vbytes x11a" and ptr = "len_total + headlen"  in iht_dynamic)
          apply(clarsimp)
-      apply(subgoal_tac
-"(insert (len_total + headlen, Vbytes x11a) ((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs x1). abi_type_isdynamic (abi_get_type (fst x))})) =
+        apply(clarsimp)
 
-((\<lambda>(v, ptr, enc). (ptr, v)) `
-         {x. (x = (Vbytes x11a, len_total + headlen, word_rsplit (word_of_int (int (length x11a)) :: 256 word) @ (case x2 of 0 \<Rightarrow> x11a | Suc rem \<Rightarrow> x11a @ replicate (31 - rem) 0)) \<or> x \<in> set (zip vs x1)) \<and>
-             abi_type_isdynamic (abi_get_type (fst x))})")
+(* fourth case - vstring *)
+       apply(simp split:sum.split_asm if_split_asm)
+         apply(drule_tac x = headlen in spec) 
+         apply(drule_tac x = " (len_total +
+         (int (length (word_rsplit (word_of_int (int (length x12a)) :: 256 word))) +
+          int (length x1)))" in spec)
          apply(clarsimp)
- 
 
-      apply(rule_tac Set.equalityI)
-apply(rule_tac Set.subsetI)
-           apply(clarsimp)
-           apply(case_tac "aa = len_total + headlen \<and> b = Vbytes x11a"; clarsimp)
+         apply(drule_tac x = headlen in spec) 
+         apply(drule_tac x = " (len_total + int(length b))" in spec)
+         apply(clarsimp)
 
-            apply(cut_tac x = "(Vbytes x11a, len_total + headlen, word_rsplit (word_of_int (int (length x11a)) :: 256 word))" and 
-f=
-"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
-and A = " {x. (x = (Vbytes x11a, len_total + headlen, word_rsplit (word_of_int (int (length x11a)) :: 256 word)) \<or> x \<in> set (zip vs x1)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
-             apply(clarsimp)
-          apply(clarsimp)
-
-      apply(case_tac "b = word_rsplit (word_of_int (int (length x11a)) :: 256 word)") apply(clarsimp)
-
-           apply(cut_tac x = "(Vbytes x11a, len_total + headlen, word_rsplit (word_of_int (int (length x11a)) :: 256 word) @ (case x2 of 0 \<Rightarrow> x11a | Suc rem \<Rightarrow> x11a @ replicate (31 - rem) 0))" and 
-f=
-"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v))"
-and A = " {x. (x = ((Vbytes x11a, len_total + headlen, word_rsplit (word_of_int (int (length x11a)) :: 256 word) @ (case x2 of 0 \<Rightarrow> x11a | Suc rem \<Rightarrow> x11a @ replicate (31 - rem) 0))) \<or> x \<in> set (zip vs x1)) \<and> abi_type_isdynamic (abi_get_type (fst x))}" in Set.imageI)
-
-            apply(clarsimp) apply(clarsimp)
-
-          apply(clarsimp)
-
-      apply(subgoal_tac
-"{x \<in> set (zip vs x1). abi_type_isdynamic (abi_get_type (fst x))} =
-  set (zip vs x1) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))}")
-           apply(clarsimp)
-
-          apply(subgoal_tac "(len_total + headlen, Vbytes x11a) \<in> (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` (set (zip vs x1) \<inter> {x . abi_type_isdynamic (abi_get_type (fst x))})")
+      apply(drule_tac x = "Vstring x12a"
+and ptr = "len_total + headlen" in iht_dynamic)
+        apply(clarsimp)
       apply(clarsimp)
 
+(* fifth case = array *)
+           apply(simp split:sum.split_asm if_split_asm)
+           apply(drule_tac x = headlen in spec) apply(drule_tac x = "len_total + int (length x1)" in spec) apply(clarsimp)
 
-      apply(cut_tac f = "(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) "
-and x = "(((Vbytes x11a, len_total + headlen, b)))"
-and A = "set (zip vs x1) \<inter> {x. abi_type_isdynamic (abi_get_type (fst x))}"
-in Set.imageI)
-            apply(clarsimp)
+           apply(drule_tac x = headlen in spec) apply(drule_tac x = "len_total + int (length x1)" in spec) apply(clarsimp)
+
+          apply(drule_tac x = "Varray x131 x132" and ptr = "len_total + headlen"  in iht_dynamic)
            apply(clarsimp)
-          apply(fastforce)
+      apply(simp)
+      done
 
   qed
 qed
@@ -657,16 +526,31 @@ lemma encode_tuple_heads_correct [rule_format] :
 (* the map2 (maybe also map) hypothesis is insufficiently general *)
 (* do we need to talk about children here? *)
 (* list comes from bvs *)
+
+(*
+       encode'_tuple_tails l (0::int) (heads_length l) = Ok a \<Longrightarrow>
+       encode'_tuple_heads l a [] = Ok code \<Longrightarrow>
+       is_head_and_tail l (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr) l a)
+        (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) l)
+        (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip l a))) \<Longrightarrow>
+       encode_static
+        (Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) l)
+          (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr) l a)) =
+       Ok code
+
+*)
+
+(* change - last hypothesis used to be code. not code @ code_post *)
 lemma encode_tuple_heads_correct [rule_format] :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
    (\<forall> bvs ts_post vs_post code_post code .
    xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint 256 ptr) vs bvs) \<longrightarrow>
    ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint 256) vs) \<longrightarrow>
-   tails \<supseteq>     ((\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip vs bvs). abi_type_isdynamic (abi_get_type (fst ( x)))}) \<longrightarrow>
+   tails = (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs bvs)))  \<longrightarrow>
    encode_static (Vtuple ts_post vs_post) = Ok code_post \<longrightarrow>
    encode'_tuple_heads vs bvs code_post = Ok code \<longrightarrow>
-   encode_static (Vtuple (ys@ts_post) (xs@vs_post)) = Ok code)" (* tails is not the same as tls *)
+   encode_static (Vtuple (ys@ts_post) (xs@vs_post)) = Ok (code))" (* tails is not the same as tls *)
 proof(induction rule:AbiEncodeSpec.is_head_and_tail.induct)
   case iht_nil
   then show ?case 
@@ -680,33 +564,17 @@ next
   then show ?case
     apply(clarsimp)
      apply(simp split:sum.split_asm)
-     apply(clarsimp)
+    apply(clarsimp)
+     apply(simp split:sum.split)
+
     apply(case_tac bvs; clarsimp)
      apply(simp split:sum.split_asm)
     apply(drule_tac x = list in spec) apply(clarsimp)
-    apply(subgoal_tac
-"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip xs list). abi_type_isdynamic (abi_get_type (fst x))} \<subseteq> tails")     apply(clarsimp)
-    apply(drule_tac x = vs_post in spec) apply(clarsimp)
-     apply(simp split:sum.split)
 
-    apply(rule_tac B = "(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {xa. (xa = (x, aa, b) \<or> xa \<in> set (zip xs list)) \<and> abi_type_isdynamic (abi_get_type (fst xa))}"
-in subset_trans) 
-
-     apply(clarsimp)
-     apply(subgoal_tac 
-"(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) (ab, ac, bb) \<in> (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {xa. (xa = (x, aa, b) \<or> xa \<in> set (zip xs list)) \<and> abi_type_isdynamic (abi_get_type (fst xa))}")
-    apply(clarsimp)
-    apply(rule_tac Set.imageI)
-     apply(clarsimp)
-
-    apply(rule_tac B = "(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {xa. (xa = (x, aa, b) \<or> xa \<in> set (zip xs list)) \<and> abi_type_isdynamic (abi_get_type (fst xa))}"
-in subset_trans) 
-
-     apply(clarsimp)
-    apply(clarsimp)
+    apply(auto)
     done
 next
-  case (iht_dynamic ptr xs ys ts tails x)
+  case (iht_dynamic xs ys ts tails x ptr)
   then show ?case 
     apply(clarsimp)
      apply(simp split:sum.split_asm)
@@ -714,13 +582,16 @@ next
      apply(clarsimp)
      apply(case_tac bvs; clarsimp)
 
-     apply(drule_tac x = "list" in spec) (* this might be wrong *)
      apply(rule_tac conjI)
       apply(clarsimp)
-
-
-      apply(subgoal_tac "(\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip xs list). abi_type_isdynamic (abi_get_type (fst x))} \<subseteq> tails")
-       apply(clarsimp)
+     apply(simp split:sum.split_asm)
+      apply(clarsimp)
+      apply(drule_tac x = list in spec) apply(clarsimp)
+      apply(drule_tac x = 
+"vs_post" in spec)
+    (* lemma: if encode_tuple_heads works for one accumulator then it works
+       for any prefix *)
+       apply(clarsimp) apply
 
        apply(drule_tac x = vs_post in spec) apply(clarsimp)
     apply(case_tac " encode'_tuple_heads xs list (concat x1 @ b)"; clarsimp)
@@ -800,8 +671,7 @@ qed
 lemma abi_encode_succeed_gen_new :
   "(\<forall>  code pre post . encode v = Ok code \<longrightarrow>
           (can_encode_as v (pre @ code @ post) (int (length pre)))) \<and>
-   (\<forall>  t n code pre post v' code' . encode (Vfarray t n l) = Ok code \<longrightarrow>
-          (v' \<in> set l \<longrightarrow> encode v' = Ok code' \<longrightarrow> can_encode_as v' (pre @ code' @ post) (int (length pre))))"
+   (True)"
 
 (* \<and>
    (
@@ -904,7 +774,7 @@ next
        apply(simp)
       apply(rule_tac Estatic) apply(simp)
       
-         apply(simp) apply(clarsimp)
+          apply(clarsimp)
          apply(simp add:list_ex_iff) apply(fastforce)
         apply(simp add:farray_value_valid_aux_def tuple_value_valid_aux_def)
         apply(simp add:list_all_iff) apply(clarsimp)
@@ -920,9 +790,10 @@ next
           apply(drule_tac set_zip_leftD)  apply(simp) apply(simp)
         apply(clarsimp)
         apply(drule_tac set_zip_rightD) 
-
       apply(drule_tac encode'_tuple_tails_correct_overflow)
          apply(simp) apply(simp)
+
+
 
       apply(drule_tac vs_post = "[]" in encode_tuple_heads_correct; simp)
 
