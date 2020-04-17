@@ -69,7 +69,8 @@ fun heads_length :: "(abi_value) list \<Rightarrow> int" where
 
 fun encode' :: "abi_value \<Rightarrow> 8 word list orerror" 
 
-and encode'_tuple_heads :: "abi_value list \<Rightarrow> (int * 8 word list) list \<Rightarrow> 8 word list \<Rightarrow> (8 word list) orerror"
+(* change: encode'_tuple_heads now gives us back a pair (heads, tails) *)
+and encode'_tuple_heads :: "abi_value list \<Rightarrow> (int * 8 word list) list \<Rightarrow> (8 word list * 8 word list) orerror"
 (*
 and encode_tuple_tails :: "(8 word list + abi_value) list \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list option" where *)
 
@@ -83,22 +84,22 @@ and encode'_tuple_tails :: "(abi_value) list \<Rightarrow> int \<Rightarrow> int
           Vfarray t n vs \<Rightarrow>
           (case encode'_tuple_tails vs 0 (heads_length vs) of
             Err s \<Rightarrow> Err s
-            | Ok bvs \<Rightarrow> (case encode'_tuple_heads vs bvs  []  of
+            | Ok bvs \<Rightarrow> (case encode'_tuple_heads vs bvs  of
                             Err s \<Rightarrow> Err s
-                            | Ok bs \<Rightarrow> Ok bs))
+                            | Ok (heads, tails) \<Rightarrow> Ok (heads @ tails)))
           | Varray t vs \<Rightarrow>
            (case encode'_tuple_tails vs 0 (heads_length vs) of
             Err s \<Rightarrow> Err s
-            | Ok bvs \<Rightarrow> (case encode'_tuple_heads vs bvs  [] of
+            | Ok bvs \<Rightarrow> (case encode'_tuple_heads vs bvs  of
                             Err s \<Rightarrow> Err s
-                            | Ok bs \<Rightarrow> Ok (encode_int (length vs) @ bs)))
+                            | Ok (heads, tails) \<Rightarrow> Ok (encode_int (length vs) @ heads @ tails)))
           | Vtuple ts vs \<Rightarrow> 
               (case encode'_tuple_tails vs 0 (heads_length vs) of
                 Err s \<Rightarrow> Err s
                 | Ok bvs \<Rightarrow>
-                  (case encode'_tuple_heads vs bvs  [] of
+                  (case encode'_tuple_heads vs bvs  of
                         Err s \<Rightarrow> Err s
-                        | Ok bs \<Rightarrow> Ok bs))
+                        | Ok (heads, tails) \<Rightarrow> Ok (heads @ tails)))
           | Vbytes l \<Rightarrow> Ok (encode_int (length l) @ pad_bytes l)
           | Vstring s \<Rightarrow> let bs = string_to_bytes s in
                          Ok (encode_int (length bs) @ pad_bytes bs)
@@ -110,20 +111,20 @@ ok, now we need some kind of way to get which tail we are on
 what is n? n should be the offset of the current tail
 this means we need some way to get the current offset
 *)
-| "encode'_tuple_heads [] [] tails = Ok (tails)"
-| "encode'_tuple_heads (v#vs) ((offset, bs)#bss) tails =
+| "encode'_tuple_heads [] []  = Ok ([], [])"
+| "encode'_tuple_heads (v#vs) ((offset, bs)#bss) =
     (if abi_type_isstatic (abi_get_type v) then
         (case encode' v of
           Err s \<Rightarrow> Err s
-          | Ok enc \<Rightarrow> (case (encode'_tuple_heads vs bss tails) of
+          | Ok head1 \<Rightarrow> (case (encode'_tuple_heads vs bss) of
                           Err s \<Rightarrow> Err s
-                          | Ok enc' \<Rightarrow> Ok (enc @ enc')))
-    else (case (encode'_tuple_heads vs bss (tails @ bs)) of
+                          | Ok (heads', tails) \<Rightarrow> Ok ((head1 @ heads'), (tails))))
+    else (case (encode'_tuple_heads vs bss) of
                 Err s \<Rightarrow> Err s
-                | Ok enc \<Rightarrow> Ok (encode_int offset @ enc)))
+                | Ok (heads, tails)  \<Rightarrow> Ok ((encode_int offset @ heads), (bs @ tails))))
     "
 (* offset + headlen? offset + headlen + 32? *)
-| "encode'_tuple_heads _ _ _  = Err ''Should be dead code (encode'_tuple_heads)''"
+| "encode'_tuple_heads _ _   = Err ''Should be dead code (encode'_tuple_heads)''"
 
 (* OK - we need to make it so that we track the length of the entire thing
    so far.
