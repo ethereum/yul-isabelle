@@ -97,8 +97,8 @@ inductive is_head_and_tail :: "abi_value list \<Rightarrow> abi_value list \<Rig
 (* first parameter is the list of values as "input" (to be encoded)
    second parameter is list of head values
    third parameter is list of types for head values so we can run the static encoder *)
-inductive is_head_and_tail :: "abi_value list \<Rightarrow> abi_value list \<Rightarrow> abi_type list \<Rightarrow> (int\<times>abi_value) set \<Rightarrow> bool" where
-iht_nil :  "is_head_and_tail [] [] [] {}"
+inductive is_head_and_tail :: "abi_value list \<Rightarrow> abi_value list \<Rightarrow> abi_type list \<Rightarrow> (int\<times>abi_value) list \<Rightarrow> bool" where
+iht_nil :  "is_head_and_tail [] [] [] []"
 | iht_static :"\<And> xs ys ts tails x v . 
    is_head_and_tail xs ys ts tails \<Longrightarrow>
    abi_get_type x = v \<Longrightarrow>
@@ -107,7 +107,7 @@ iht_nil :  "is_head_and_tail [] [] [] {}"
 | iht_dynamic : "\<And> xs ys ts tails x ptr  .
    is_head_and_tail xs ys ts tails \<Longrightarrow>
    abi_type_isdynamic (abi_get_type x) \<Longrightarrow>
-   is_head_and_tail (x#xs) ((Vuint 256 ptr) # ys) ((Tuint 256) # ts) (insert (ptr,x) tails)"
+   is_head_and_tail (x#xs) ((Vuint 256 ptr) # ys) ((Tuint 256) # ts) ((ptr, x)#tails)"
 
 (*
 
@@ -142,15 +142,16 @@ Estatic: " \<And> v pre post code .
       (abi_type_isdynamic t) \<Longrightarrow>
       is_head_and_tail vs heads head_types tails \<Longrightarrow>
       can_encode_as (Vtuple head_types heads) full_code start \<Longrightarrow>
-      (\<And> offset v . (offset, v) \<in>  tails \<Longrightarrow> can_encode_as v full_code offset) \<Longrightarrow>
+      (\<And> offset v . (offset, v) \<in>  set tails \<Longrightarrow> can_encode_as v full_code (offset + start)) \<Longrightarrow>
       can_encode_as (Vtuple ts vs) full_code start"
 
+(* change offsets in other cases *)
 | Efarray_dyn : "\<And> t n vs heads head_types tails start full_code .
     abi_value_valid (Vfarray t n vs) \<Longrightarrow>
     (abi_type_isdynamic t) \<Longrightarrow>
     is_head_and_tail vs heads head_types tails \<Longrightarrow>
     can_encode_as (Vtuple head_types heads) full_code start \<Longrightarrow>
-    (\<And> offset v . (offset, v) \<in>  tails \<Longrightarrow> can_encode_as v full_code offset) \<Longrightarrow>
+    (\<And> offset v . (offset, v) \<in>  set tails \<Longrightarrow> can_encode_as v full_code (offset + start)) \<Longrightarrow>
     can_encode_as (Vfarray t n vs) full_code start"
 
 | Earray : "\<And> t vs heads head_types tails start full_code . 
@@ -158,7 +159,7 @@ Estatic: " \<And> v pre post code .
      is_head_and_tail vs heads head_types tails \<Longrightarrow>
      can_encode_as (Vuint 256 (length vs)) full_code start \<Longrightarrow>
      can_encode_as (Vtuple head_types heads) full_code (start + 32) \<Longrightarrow>
-     (\<And> offset v . (offset, v) \<in>  tails \<Longrightarrow> can_encode_as v full_code offset) \<Longrightarrow>
+     (\<And> offset v . (offset, v) \<in>  set tails \<Longrightarrow> can_encode_as v full_code (offset + start)) \<Longrightarrow>
      can_encode_as (Varray t vs) full_code start"
 
 | Ebytes : "\<And> l pre post count code .
