@@ -159,7 +159,7 @@ Estatic: " \<And> v pre post code .
      is_head_and_tail vs heads head_types tails \<Longrightarrow>
      can_encode_as (Vuint 256 (length vs)) full_code start \<Longrightarrow>
      can_encode_as (Vtuple head_types heads) full_code (start + 32) \<Longrightarrow>
-     (\<And> offset v . (offset, v) \<in>  set tails \<Longrightarrow> can_encode_as v full_code (offset + start)) \<Longrightarrow>
+     (\<And> offset v . (offset, v) \<in>  set tails \<Longrightarrow> can_encode_as v full_code (offset + start + 32)) \<Longrightarrow>
      can_encode_as (Varray t vs) full_code start"
 
 | Ebytes : "\<And> l pre post count code .

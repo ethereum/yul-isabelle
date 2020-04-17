@@ -598,7 +598,8 @@ next
 qed
 
 (* need to change this so that we leave off the tail part *)
-
+(* ts_pre/vs_pre. not post *)
+(* code vs code_post *)
 lemma encode_tuple_heads_correct [rule_format] :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
@@ -611,8 +612,8 @@ lemma encode_tuple_heads_correct [rule_format] :
    abi_value_valid (Vtuple ys xs) \<longrightarrow>
   abi_type_isstatic (Ttuple ys) \<longrightarrow>
    encode_static (Vtuple ts_post vs_post) = Ok code_post \<longrightarrow>
-   encode'_tuple_heads vs bvs code_post = Ok (code @ code_post @ tails_code) \<longrightarrow>
-   can_encode_as (Vtuple (ys@ts_post) (xs@vs_post)) (pre @code @ post) (int (length pre)))" (* tails is not the same as tls *)
+   encode'_tuple_heads vs bvs code_post = Ok (code) \<longrightarrow>
+   can_encode_as (Vtuple (ts_post@ys) (vs_post@xs)) (pre @code @ post) (int (length pre)))" (* tails is not the same as tls *)
 (*
 lemma encode_tuple_heads_correct [rule_format] :
 "
@@ -630,7 +631,9 @@ proof(induction rule:AbiEncodeSpec.is_head_and_tail.induct)
   case iht_nil
   then show ?case 
     apply(clarsimp)
-      apply(case_tac bvs; clarsimp)
+    apply(case_tac bvs; clarsimp)
+    apply(simp split:sum.split_asm)
+    apply(rule_tac Estatic) apply(auto)
     done
 next
   case (iht_static xs ys ts tails x v)
@@ -642,29 +645,47 @@ next
      apply(simp add:tuple_value_valid_aux_def )
 
     apply(drule_tac x = list in spec) apply(clarsimp)
- apply(simp split:sum.split)
-    done
+    apply(drule_tac x = "vs_post @ [x]" in spec) apply(clarsimp)
+    apply(drule_tac x = "x1 @ [x1a]" in spec)
+    apply(simp split:sum.split)
+    apply(subgoal_tac "those_err (map encode_static vs_post @ [Ok x1a]) = Ok (x1 @ [x1a])")
+     apply(clarsimp)
+    apply(drule_tac x = "x1a @ x1b"  in spec) apply(clarsimp)
+     apply(subgoal_tac "encode'_tuple_heads xs list (concat x1 @ x1a) = Ok (x1a @ x1b)")
+      apply(clarsimp)
+
+    (* lemmas needed:
+       - those_err (easy)
+       - encode'_tuple_heads can always be "shifted" (medium)
+*) sorry
 next
   case (iht_dynamic xs ys ts tails x ptr)
   then show ?case 
     apply(clarsimp)
      apply(simp split:sum.split_asm)
-    apply(simp split:sum.split)  apply(rule_tac conjI)
+      apply(rule_tac conjI)
      apply(clarsimp)
      apply(case_tac bvs; clarsimp)
 
-     apply(rule_tac conjI)
-      apply(clarsimp)
-     apply(simp split:sum.split_asm)
-      apply(clarsimp)
+    apply(clarsimp)
+    apply(case_tac bvs; clarsimp)
+     apply(simp split:sum.split_asm) apply(clarsimp)
       apply(drule_tac x = list in spec) apply(clarsimp)
      apply(simp add:tuple_value_valid_aux_def )
 
     (* lemma: if encode_tuple_heads works for one accumulator then it works
        for any prefix *)
-       apply(clarsimp) apply
+       apply(clarsimp)
+(* either this is very wrong because we can't characterize ba,
+   or we need to find the right place to insert ba. *)
+    apply(drule_tac x = "vs_post @ [Vuint (256::nat) ptr]" in spec) apply(clarsimp)
+    apply(case_tac "those_err (map encode_static vs_post @ [Ok (word_rsplit (word_of_int ptr :: 256 word))])"; clarsimp)
+    (* err case should be contradiction *)
+    apply(drule_tac x = "x1 @ [ba]" in spec) apply(clarsimp)
+    apply(drule_tac x = "x1 @ [(word_rsplit (word_of_int ptr :: 256 word)) :: 8 word list]" in spec) apply(clarsimp)
+    apply(subgoal_tac " those_err (map encode_static vs_post @ [Ok (word_rsplit (word_of_int ptr :: 256 word))]) = Ok (x1 @ [word_rsplit (word_of_int ptr :: 256 word)])")
+     apply(clarsimp)
 
-       apply(drule_tac x = vs_post in spec) apply(clarsimp)
     apply(case_tac " encode'_tuple_heads xs list (concat x1 @ b)"; clarsimp)
 
        apply(case_tac "those_err (map (encode_static \<circ> (\<lambda>(x, ptr, enc). if \<not> abi_type_isdynamic (abi_get_type x) then x else Vuint 256 ptr)) (zip xs list) @ map encode_static vs_post)"; clarsimp)
