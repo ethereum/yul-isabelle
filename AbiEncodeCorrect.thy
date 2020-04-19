@@ -749,6 +749,58 @@ next
     done
 qed
 
+declare [[show_types]]
+lemma encode_static_size [rule_format]:
+  "\<forall> code . encode_static v = Ok code \<longrightarrow>
+     abi_value_valid v \<longrightarrow>
+     abi_static_size (abi_get_type v) = length code"
+  apply(induction v; auto simp add:word_rsplit_def bin_rsplit_len)
+  apply(case_tac x; auto simp add:word_rsplit_def bin_rsplit_len)
+    apply(simp split:prod.splits) apply(auto)
+    apply(case_tac x2a;auto) 
+  apply(simp add:fbytes_value_valid_def)
+     apply(simp add:divmod_nat_def) apply(clarsimp)
+     apply(case_tac x2; clarsimp) 
+     apply(drule_tac Nat.dvd_imp_le) apply(simp) apply(simp)
+  apply(simp add:fbytes_value_valid_def)
+     apply(simp add:divmod_nat_def) apply(clarsimp)
+    apply(case_tac x2; clarsimp) 
+    apply(subgoal_tac "length list = nat") apply(clarsimp)
+    apply(case_tac "length list = 31"; clarsimp)
+
+   apply(simp split:sum.splits) apply(atomize)
+   apply(simp add:farray_value_valid_aux_def) apply(clarsimp)
+   apply(simp add:list_all_iff) 
+   apply(case_tac x3a; clarsimp)
+  apply(case_tac "encode_static a"; clarsimp)
+   apply(drule_tac x = a in spec) apply(clarify)
+   apply(thin_tac "a \<in> set list \<longrightarrow> (\<forall>code::8 word list. encode_static a = Ok code \<longrightarrow> abi_static_size (abi_get_type a) = int (length code))")
+  apply(simp)
+  apply(simp split:sum.splits)sorry
+  
+
+
+lemma encode_tuple_heads_headslength [rule_format]:
+  "\<forall> a aa b . encode'_tuple_heads l a = Ok (aa, b) \<longrightarrow>
+      length aa = heads_length l"
+proof(induction l)
+  case Nil
+  then show ?case 
+    apply(clarify)
+    apply(case_tac a; auto)
+    done
+next
+  case (Cons a l)
+  then show ?case
+    apply(clarsimp)
+    apply(case_tac aa; auto)
+    apply(simp split:if_split_asm sum.splits)
+     apply(clarsimp)
+     apply(drule_tac x = list in spec) apply(drule_tac x = aa in spec) apply(clarsimp)
+     apply(drule_tac encode_static_size) apply(simp) 
+    sorry
+qed
+
 (* TODO: are our dyn cases constraining
    head/head_types/tails enough? *)
 (* here is our full description *)
@@ -793,7 +845,7 @@ qed
 (* need second clause talking about children*)
 lemma abi_encode_succeed_gen_new :
   "(\<forall>  code pre post . encode v = Ok code \<longrightarrow>
-          (can_encode_as v (pre @ code @ post) (int (length pre)))) \<and> True"
+          (can_encode_as v (pre @ code @ post) (int (length pre))))"
 
 (* \<and>
    (
@@ -811,67 +863,67 @@ lemma abi_encode_succeed_gen_new :
         (\<forall> aa ab b . (aa, ab, b) \<in> set (zip l a) \<longrightarrow> can_encode_as aa (pre @ code @ post) (ab + int (length pre))))
         )))"
 *)
-proof(induction rule: my_abi_value_induct)
-case (1 n i)
+proof(induction v )
+case (Vuint n i)
   then show ?case 
     apply(clarify)
     apply(rule_tac Estatic)
      apply(auto simp add:encode_def split:if_split_asm)
     done
 next
-  case (2 n i)
+  case (Vsint n i)
   then show ?case
     apply(clarify)
     apply(rule_tac Estatic)
      apply(auto simp add:encode_def split:if_split_asm)
     done
 next
-  case (3 i)
+  case (Vaddr x)
   then show ?case
     apply(clarify)
     apply(rule_tac Estatic)
      apply(auto simp add:encode_def split:if_split_asm)
     done
 next
-  case (4 b)
+  case (Vbool b)
   then show ?case
     apply(clarify)
     apply(rule_tac Estatic)
      apply(auto simp add:encode_def split:if_split_asm)
     done
 next
-  case (5 m n r)
+  case (Vfixed m n r)
   then show ?case
     apply(clarify)
     apply(rule_tac Estatic)
      apply(auto simp add:encode_def split:if_split_asm)
     done
 next
-  case (6 m n r)
+  case (Vufixed m n r)
   then show ?case 
     apply(clarify)
     apply(rule_tac Estatic)
      apply(auto simp add:encode_def split:if_split_asm)
     done
 next
-  case (7 n bs)
+  case (Vfbytes n bs)
   then show ?case 
     apply(clarify)
     apply(rule_tac Estatic)
      apply(auto simp add:encode_def split:if_split_asm)
     done
 next
-  case (8 i j)
+  case (Vfunction i j)
   then show ?case
     apply(clarify)
     (* function case currently unimplimented - this is a bug. *)
     sorry
 next
-  case (9 t n l)
+  case (Vfarray t n l)
   then show ?case
   proof(cases "abi_type_isstatic t")
     case True
-    then show ?thesis using 9
+    then show ?thesis using Vfarray
       apply(clarsimp)
       apply(rule_tac Estatic)
         apply(simp)
@@ -880,7 +932,7 @@ next
       done
   next
     case False
-    then show ?thesis using 9
+    then show ?thesis using Vfarray
       apply(clarsimp)
 (*      apply(thin_tac "\<forall>t n code.
           encode (Vfarray t n l) = Ok code \<longrightarrow>
@@ -994,37 +1046,28 @@ f =  "(\<lambda>x::abi_value \<times> int \<times> 8 word list. case x of (v::ab
 and x = "(ab, ac, ba)" in Set.imageI) apply(simp) apply(simp)
         apply(force)
 
+       apply(atomize)
+
        apply(simp add:list_all_iff)
-      apply(frule_tac x = ab in bspec) apply(drule_tac set_zip_leftD) apply(simp)
-
-       apply(case_tac ab; clarsimp)    
-           apply(rule_tac
-heads = "(map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr) l a)"
-and
-head_types = "(map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) l)"
-and tails = "(map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip l a)))"
- in Efarray_dyn) apply(auto split:sum.splits simp add:farray_value_valid_aux_def)
-              apply(simp add:list_all_iff) 
-              apply(drule_tac set_zip_leftD)
-      apply(thin_tac " \<forall>x::abi_value\<in>set l. abi_value_valid_aux x")
-              apply(drule_tac x = "Vfarray x91 (length x93) x93" and A = "set l" in bspec)
-               apply(simp) apply(clarsimp)
-      apply(simp)
-      apply(simp)
-              apply(rotate_tac -1) (* bad bad bad*)
-      
-
-(* weird annoying issues with empty fixed arrays. I don't think this should be a massive
-problem but may require a minor revision to AbiTypes.thy. *)
-      apply(case_tac x93; clarsimp)
-      apply(drule_tac x =  x91 in bspec)
-
-(* at this point we need our other lemma about abi_type_isdynamic.*)
-
-
-        defer
+       apply(drule_tac x = ab in spec)  apply(frule_tac set_zip_leftD) apply(simp)
+       apply(rotate_tac -1)
+       apply(drule_tac x = ab_code in spec)
+       apply(simp split:if_split_asm)
+        apply(rotate_tac -1)
+        apply(drule_tac x = "pre @ aa @ prea" in spec)
+      apply(rotate_tac -1)
+        apply(drule_tac x = "posta @ post" in spec) apply(clarsimp) 
+      apply(subgoal_tac
+"int (length pre) + (int (length aa) + int (length prea)) =
+(int (length aa) + int (length prea) + int (length pre))")
+         apply(clarsimp)
       apply(simp)
 
+       apply(simp add:farray_value_valid_aux_def) apply(clarsimp)
+      apply(simp add: list_all_iff)
+
+      apply(drule_tac encode_tuple_heads_headslength) apply(clarsimp)
+      done
       
   qed
 next
