@@ -790,7 +790,7 @@ next
     done
 qed
 
-(* need abi_value_valid premise *)
+(* need second clause talking about children*)
 lemma abi_encode_succeed_gen_new :
   "(\<forall>  code pre post . encode v = Ok code \<longrightarrow>
           (can_encode_as v (pre @ code @ post) (int (length pre)))) \<and> True"
@@ -998,8 +998,21 @@ and x = "(ab, ac, ba)" in Set.imageI) apply(simp) apply(simp)
       apply(frule_tac x = ab in bspec) apply(drule_tac set_zip_leftD) apply(simp)
 
        apply(case_tac ab; clarsimp)    
-           apply(rule_tac Efarray_dyn) apply(auto split:sum.splits simp add:farray_value_valid_aux_def)
+           apply(rule_tac
+heads = "(map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr) l a)"
+and
+head_types = "(map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) l)"
+and tails = "(map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip l a)))"
+ in Efarray_dyn) apply(auto split:sum.splits simp add:farray_value_valid_aux_def)
               apply(simp add:list_all_iff) 
+              apply(drule_tac set_zip_leftD)
+      apply(thin_tac " \<forall>x::abi_value\<in>set l. abi_value_valid_aux x")
+              apply(drule_tac x = "Vfarray x91 (length x93) x93" and A = "set l" in bspec)
+               apply(simp) apply(clarsimp)
+      apply(simp)
+      apply(simp)
+              apply(rotate_tac -1) (* bad bad bad*)
+      
 
 (* weird annoying issues with empty fixed arrays. I don't think this should be a massive
 problem but may require a minor revision to AbiTypes.thy. *)
