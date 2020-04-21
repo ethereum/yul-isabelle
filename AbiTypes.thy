@@ -211,13 +211,14 @@ definition tuple_value_valid_aux :: "abi_type list \<Rightarrow> abi_value list 
 "tuple_value_valid_aux ts vs = (List.map abi_get_type vs = ts)"
 
 definition bytes_value_valid :: "8 word list \<Rightarrow> bool" where
-"bytes_value_valid bs = True"
+"bytes_value_valid bs = uint_value_valid 256 (int (length bs))"
 
 definition string_value_valid :: "char list \<Rightarrow> bool" where
-"string_value_valid s = True"
+"string_value_valid s = uint_value_valid 256 (int (length s))"
 
 definition array_value_valid_aux :: "abi_type \<Rightarrow> abi_value list \<Rightarrow> bool" where
-"array_value_valid_aux t l = list_all (\<lambda> v . abi_get_type v = t) l"
+"array_value_valid_aux t l = 
+  (uint_value_valid 256 (int (length l)) \<and> list_all (\<lambda> v . abi_get_type v = t) l)"
 
 (* additional checks beyond type well-formedness to ensure
    values are permitted *)
