@@ -1768,10 +1768,41 @@ next
 qed
 
 (* induction on is_head_and_tail? *)
-lemma encode_tuple_tails_fail [rule_format]:
-  "\<forall> vs headlen len_total err .
-     encode'_tuple_tails vs headlen len_total = Err err \<longrightarrow>
+
+lemma encode_tuple_tails_overflow_fail [rule_format]:
+  "\<forall> vs headlen len_total err v .
+     encode'_tuple_tails (vs) headlen len_total = Err err \<longrightarrow>
+     (\<forall> v . v \<in> set vs \<longrightarrow> abi_type_isdynamic (abi_get_type v) \<longrightarrow> (\<exists> code . encode' v = Ok code)) \<longrightarrow>
+     \<not> (uint_value_valid 256 (headlen + len_total +
+                              int (length (concat (map encode'  (filter (abi_type_isdynamic o abi_get_type) vs))))))
      "
+  sorry
+
+(* the problem here is that our spec doesn't care if we can't encode
+   (empty) offsets for heads that are too big. but our implementation does *)
+lemma encode_tuple_tails_overflow_fail' [rule_format]:
+  "
+     is_head_and_tail vs hds tvs tls \<Longrightarrow>
+     (\<forall> headlen len_total err v .
+     encode'_tuple_tails (vs) headlen len_total = Err err \<longrightarrow>
+     (\<forall> v . v \<in> set vs \<longrightarrow> abi_type_isdynamic (abi_get_type v) \<longrightarrow> (\<exists> code . encode' v = Ok code)) \<longrightarrow>
+     (\<exists> offset v . (offset, v) \<in> set tls \<and>
+     \<not> (uint_value_valid 256 offset)))
+     "
+proof(induction rule:is_head_and_tail.induct)
+  case iht_nil
+  then show ?case by auto
+next
+  case (iht_static xs ys ts tails x v)
+  then show ?case
+    apply(clarsimp)
+    apply(case_tac "encode'_tuple_tails xs headlen len_total"; clarsimp)
+    apply(simp split:if_split_asm)
+next
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case sorry
+qed
+  sorry
 
 (* lemma for tails will be similar, but we also need to take into
    account the possibility that the encoding fails because the
@@ -1870,6 +1901,27 @@ next
        apply(clarsimp)
        apply(case_tac "abi_type_valid (abi_get_type v) \<and> abi_value_valid_aux v"; clarsimp)
       apply(rule_tac x = full_code in exI) apply(rule_tac x = "offset + start" in exI) apply(clarsimp)
+     apply(clarsimp)
+(* intuition:
+   - we are looking for the case where overflow occurs
+   - this will happen for some specific, dynamic value v (head of list at the time)
+   - but that v will have an entry in heads (offset), which can encode
+thus, contradiction *)
+     apply(drule_tac encode_tuple_tails_overflow_fail)
+      apply(atomize)
+      apply(drule_tac x = v in spec) apply(clarsimp)
+    apply(frule_tac x = v in is_head_and_tail_elem)
+        apply(clarsimp) apply(clarsimp)
+      apply(clarsimp)
+      apply(drule_tac x = offset in spec) apply(drule_tac x = v in spec)
+      apply(clarsimp)
+      apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))")
+       apply(clarsimp)
+       apply(simp split:if_split_asm)
+
+      apply(fastforce)
+
+
 (* there may be a spec bug here.
    specifically, what if the length is too long?
    i think we end up checking for this when we make sure the tuple of offsets is encodable *)
