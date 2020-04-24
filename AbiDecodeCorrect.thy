@@ -10,11 +10,10 @@ lemma abi_decode_succeed :
      decode (abi_get_type v) full_code = Ok v"
   sorry
 
-lemma abi_decode_fail :
+lemma abi_decode_succeed_converse :
   "\<And> v full_code .
-    \<not> (can_encode_as v full_code 0 (length full_code)) \<Longrightarrow>
     decode (abi_get_type v) full_code = Ok v \<Longrightarrow>
-    False"
+    can_encode_as v full_code 0 (length full_code)"
   sorry
 
 end

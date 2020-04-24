@@ -249,6 +249,13 @@ fun abi_value_valid :: "abi_value \<Rightarrow> bool" where
   (abi_type_valid (abi_get_type v) \<and>
    abi_value_valid_aux v)"
 
+definition list_sum :: "int list \<Rightarrow> int" where
+"list_sum xs = List.foldl (+) 0 xs"
+
+(* foldr is easier to reason about *)
+definition list_sumr :: "int list \<Rightarrow> int" where
+"list_sumr xs = List.foldr (+) xs 0"
+
 (* helpers for static value decoding *)
 (* getting the size in bytes of a (presumed static) ABI element *)
 (* TODO: figure out how function decoding is supposed to work. *)
@@ -269,6 +276,31 @@ fun abi_static_size :: "abi_type \<Rightarrow> int" where
                (List.map abi_static_size ts)"
 (* the caller of this function should check that we are static *)
 | "abi_static_size _ = 0"
+
+(* for simplicity (since this is part of the spec), we don't do a precise calculation here.
+   instead we assume everything needs a 32-byte head in addition to its main encoding.
+*)
+fun abi_dynamic_size_bound :: "abi_value \<Rightarrow> int" where
+"abi_dynamic_size_bound v =
+  (if abi_type_isstatic (abi_get_type v) then abi_static_size (abi_get_type v)
+   else (case v of
+          Vfarray t n l \<Rightarrow> n * 32 + list_sum (map abi_dynamic_size_bound l)
+          | Vtuple ts vs \<Rightarrow> (length vs * 32) + list_sum (map abi_dynamic_size_bound vs)
+          | Varray t l \<Rightarrow> 32 + (length l * 32) + list_sum (map abi_dynamic_size_bound l)
+          | Vbytes bs \<Rightarrow> 32 + length bs
+          | Vstring s \<Rightarrow> 32 + length s))"
+
+(* this should capture the exact size of dynamic structures, though I have not proven this yet *)
+fun abi_dynamic_size_precise :: "abi_value \<Rightarrow> int" where
+"abi_dynamic_size_precise v =
+  (if abi_type_isstatic (abi_get_type v) then abi_static_size (abi_get_type v)
+   else (case v of
+          Vfarray t n l \<Rightarrow> n * 32 + list_sum (map abi_dynamic_size_precise l)
+          | Vtuple ts vs \<Rightarrow> (list_sum (map (abi_static_size o abi_get_type) (filter (abi_type_isstatic o abi_get_type) vs))) + 
+                             list_sum (map (\<lambda> x . 32 + abi_dynamic_size_precise x) (filter (abi_type_isdynamic o abi_get_type) vs))
+          | Varray t l \<Rightarrow> 32 + (length l * 32) + list_sum (map abi_dynamic_size_precise l)
+          | Vbytes bs \<Rightarrow> 32 + length bs
+          | Vstring s \<Rightarrow> 32 + length s))"
 
 
 
