@@ -298,7 +298,9 @@ fun abi_dynamic_size_precise :: "abi_value \<Rightarrow> int" where
           Vfarray t n l \<Rightarrow> n * 32 + list_sum (map abi_dynamic_size_precise l)
           | Vtuple ts vs \<Rightarrow> (list_sum (map (abi_static_size o abi_get_type) (filter (abi_type_isstatic o abi_get_type) vs))) + 
                              list_sum (map (\<lambda> x . 32 + abi_dynamic_size_precise x) (filter (abi_type_isdynamic o abi_get_type) vs))
-          | Varray t l \<Rightarrow> 32 + (length l * 32) + list_sum (map abi_dynamic_size_precise l)
+          | Varray t l \<Rightarrow> 
+              (if abi_type_isstatic t then 32 + list_sum (map abi_dynamic_size_precise l)
+                                      else  32 + (length l * 32) + list_sum (map abi_dynamic_size_precise l))
           | Vbytes bs \<Rightarrow> 32 + length bs
           | Vstring s \<Rightarrow> 32 + length s))"
 
