@@ -286,7 +286,6 @@ next
     apply(simp split: if_splits)
      apply(simp split: sum.splits)
      apply(atomize)
-    apply(simp split: if_splits)
      apply(auto)
 
      apply(simp split: sum.splits)
@@ -294,18 +293,6 @@ next
     apply(simp split: if_splits)
     apply(auto)
     done
-qed
-
-lemma allI4 :
-  "(\<And> a b c d . P a b c d) \<Longrightarrow>
-    \<forall> a b c d . P a b c d"
-proof(metis)
-qed
-
-lemma allI5 :
-  "(\<And> a b c d e . P a b c d e) \<Longrightarrow>
-    \<forall> a b c d e . P a b c d e"
-proof(metis)
 qed
 
 lemma encode_tuple_heads_len :
@@ -328,7 +315,8 @@ qed
 lemma encode'_tuple_tails_correct_overflow [rule_format] :
   "\<And> headlen len_total bvs offset enc .
     encode'_tuple_tails vs headlen len_total = Ok bvs \<Longrightarrow>
-   (\<forall> enc . (offset, enc) \<in> set bvs \<longrightarrow>
+   (\<forall> v enc . (v, offset, enc) \<in> set (zip vs bvs) \<longrightarrow>
+   abi_type_isdynamic (abi_get_type v) \<longrightarrow>
    uint_value_valid 256 offset)"
 proof(induction vs)
   case Nil
@@ -338,7 +326,7 @@ next
   then show ?case 
     apply(auto)
     apply(simp split:if_split_asm sum.split_asm)
-    apply(atomize)
+    apply(atomize) apply(clarsimp) 
      apply(fastforce)
 
     apply(case_tac a;  fastforce)
@@ -413,11 +401,12 @@ next
        apply(simp split:if_split_asm sum.split_asm)
 
       apply(case_tac "encode'_tuple_tails vs headlen len_total"; clarsimp)
-      apply(case_tac "uint_value_valid 256 (len_total + headlen)"; clarsimp)
       apply(atomize)
       apply(drule_tac x = headlen in spec) apply(drule_tac x = len_total in spec) apply(clarsimp)
       apply(drule_tac x = a and xs = vs  in iht_static) apply(simp) apply(simp)
-      apply(simp)
+       apply(simp)
+
+      apply(atomize) apply(clarsimp)
       done next
     case False
     then show ?thesis using Cons.prems Cons.IH
@@ -711,7 +700,6 @@ next
     apply(drule_tac x = list in spec) apply(clarsimp)
     apply(simp add:tuple_value_valid_aux_def)
     apply(simp split:sum.splits)
-    apply(simp split:if_splits)
     apply(case_tac x1a; clarsimp)
 
     apply(drule_tac x = heads_lengtha in spec) apply(clarsimp)
@@ -1186,8 +1174,8 @@ and
           apply(drule_tac set_zip_leftD) apply(clarsimp)
 apply(frule_tac set_zip_leftD) apply(clarsimp)
          apply(drule_tac x = ab in bspec) apply(clarsimp)
-apply(drule_tac set_zip_rightD)
-         apply(frule_tac offset = ac and enc = ba in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(simp)
+(*apply(drule_tac set_zip_rightD)*)
+         apply(frule_tac v = ab and offset = ac and enc = ba in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(simp) apply(simp)
 
         apply(rule_tac encode_tuple_heads_correct1; simp)
          apply(simp add:list_all_iff) apply(simp add:farray_value_valid_aux_def)
@@ -1204,8 +1192,8 @@ apply(drule_tac set_zip_rightD)
 
          apply(drule_tac set_zip_leftD) apply(simp)
         apply(frule_tac set_zip_leftD)
-apply(drule_tac set_zip_rightD)
-         apply(frule_tac offset = ac and enc = ba in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(simp)
+(* apply(drule_tac set_zip_rightD) *)
+         apply(frule_tac v = ab and offset = ac and enc = ba in encode'_tuple_tails_correct_overflow)  apply(clarsimp) apply(simp) apply(simp)
 
        apply(simp add:list_ex_iff) apply(clarsimp) apply(fastforce)
 
@@ -1231,11 +1219,10 @@ apply(drule_tac set_zip_rightD)
          apply(rule_tac conjI) apply(clarsimp)
           apply(frule_tac x = ad in set_zip_leftD)
           apply(drule_tac x = ad in bspec) apply(clarsimp)
+      apply(simp) apply(clarsimp)
+         apply(frule_tac v = ad and offset = ae and enc = bb in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(clarsimp)
       apply(simp)
-         apply(frule_tac offset = ae and enc = bb in encode'_tuple_tails_correct_overflow) apply(clarsimp)
-      apply(drule_tac y = "(ae, bb)" in set_zip_rightD)
-          apply(simp)
-         apply(simp)
+      apply(simp add:list_all_iff)
 
       apply(cut_tac
 f =  "(\<lambda>x::abi_value \<times> int \<times> 8 word list. case x of (v::abi_value, ptr::int, enc::8 word list) \<Rightarrow> (ptr, v))"
@@ -1315,8 +1302,8 @@ apply(simp add:list_ex_iff) apply(clarsimp)
            apply(drule_tac set_zip_leftD) apply(clarsimp)
 apply(frule_tac set_zip_leftD) apply(clarsimp)
          apply(drule_tac x = xa in bspec) apply(clarsimp)
-          apply(drule_tac set_zip_rightD)
-          apply(frule_tac offset = aa and enc = b in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(simp)
+          apply(frule_tac set_zip_rightD)
+          apply(frule_tac v = a and offset = aa and enc = b in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(simp) apply(simp)
 
          apply(simp) apply(simp add:list_ex_iff) apply(clarsimp) apply(fastforce)
 
@@ -1343,7 +1330,7 @@ apply(frule_tac set_zip_leftD) apply(clarsimp)
          apply(clarsimp)
          apply(drule_tac set_zip_leftD) apply(clarsimp)
         apply(frule_tac set_zip_leftD)
-        apply(drule_tac set_zip_rightD) apply(clarsimp)
+        apply(frule_tac set_zip_rightD) apply(clarsimp)
         apply(simp add:encode'_tuple_tails_correct_overflow)
 
        apply(simp)
@@ -1581,8 +1568,8 @@ Earray)
           apply(drule_tac set_zip_leftD) apply(clarsimp)
 apply(frule_tac set_zip_leftD) apply(clarsimp)
          apply(drule_tac x = a in bspec) apply(clarsimp)
-apply(drule_tac set_zip_rightD)
-         apply(frule_tac offset = aa and enc = b in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(simp)
+apply(frule_tac set_zip_rightD)
+         apply(frule_tac v = a and offset = aa and enc = b in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(simp)
 
         apply(clarsimp)
          apply(simp add:list_ex_iff) apply(clarsimp)
@@ -1627,10 +1614,10 @@ and
        apply(drule_tac set_zip_leftD) apply(clarsimp)
 
       apply(frule_tac set_zip_leftD) 
-      apply(drule_tac set_zip_rightD)
-      apply(frule_tac offset = aa and enc = b in  encode'_tuple_tails_correct_overflow)
-       apply(simp) apply(simp)
-    apply(simp)
+      apply(frule_tac set_zip_rightD) apply(clarsimp)
+      apply(frule_tac v = a and  offset = aa and enc = b in  encode'_tuple_tails_correct_overflow)
+       apply(simp) apply(simp add:array_value_valid_aux_def)  apply(clarsimp) apply(simp add:list_all_iff)
+
 
     apply(subgoal_tac
 " (int (length pre) + (32::int))
@@ -1648,7 +1635,7 @@ can_encode_as
 and
 t = "(int (length pre) + (32::int))" and s = "int (length (pre @ word_rsplit (word_of_int (int (length vs)) :: 256 word) :: 8 word list))"  in subst
 )
-        apply(simp)
+        apply(simp) 
       (* this is unbelievably confusing *)
        apply(assumption) apply(simp)
 
@@ -1768,54 +1755,45 @@ next
 qed
 
 (* induction on is_head_and_tail? *)
-
+(*
 lemma encode_tuple_tails_overflow_fail [rule_format]:
   "\<forall> vs headlen len_total err v .
      encode'_tuple_tails (vs) headlen len_total = Err err \<longrightarrow>
      (\<forall> v . v \<in> set vs \<longrightarrow> abi_type_isdynamic (abi_get_type v) \<longrightarrow> (\<exists> code . encode' v = Ok code)) \<longrightarrow>
-     \<not> (uint_value_valid 256 (headlen + len_total +
-                              int (length (concat (map encode'  (filter (abi_type_isdynamic o abi_get_type) vs))))))
+     (\<exists> v . v \<in> set vs \<and> 
      "
   sorry
+*)
 
 (* the problem here is that our spec doesn't care if we can't encode
    (empty) offsets for heads that are too big. but our implementation does *)
-lemma encode_tuple_tails_overflow_fail' [rule_format]:
-  "
-     is_head_and_tail vs hds tvs tls \<Longrightarrow>
-     (\<forall> headlen len_total err v .
-     encode'_tuple_tails (vs) headlen len_total = Err err \<longrightarrow>
-     (\<forall> v . v \<in> set vs \<longrightarrow> abi_type_isdynamic (abi_get_type v) \<longrightarrow> (\<exists> code . encode' v = Ok code)) \<longrightarrow>
-     (\<exists> offset v . (offset, v) \<in> set tls \<and>
-     \<not> (uint_value_valid 256 offset)))
-     "
-proof(induction rule:is_head_and_tail.induct)
-  case iht_nil
-  then show ?case by auto
-next
-  case (iht_static xs ys ts tails x v)
-  then show ?case
-    apply(clarsimp)
-    apply(case_tac "encode'_tuple_tails xs headlen len_total"; clarsimp)
-    apply(simp split:if_split_asm)
-next
-  case (iht_dynamic xs ys ts tails x ptr)
-  then show ?case sorry
-qed
-  sorry
+(* need to generalize for different arguments of encode_tuple_tails *)
+
 
 (* lemma for tails will be similar, but we also need to take into
    account the possibility that the encoding fails because the
    length is too large *)
 
 
-lemma is_head_and_tail_elem [rule_format]:
+lemma is_head_and_tail_vs_elem [rule_format]:
 "is_head_and_tail xs ys ts tails \<Longrightarrow>
  (\<forall> x . x \<in> set xs \<longrightarrow>
  abi_type_isdynamic (abi_get_type x) \<longrightarrow>
-   (\<exists> offset . (offset, x) \<in> set tails))"
-  sorry
+   (\<exists> offset . (offset, x) \<in> set tails \<and>
+      (Vuint 256 offset \<in> set ys)))"
+proof(induction rule:is_head_and_tail.induct)
+  case iht_nil
+  then show ?case by auto
+next
+  case (iht_static xs ys ts tails x v)
+  then show ?case by auto
+next
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case by auto
+qed
 
+
+(*
 lemma is_head_and_tail_elem' [rule_format]:
 "is_head_and_tail xs ys ts tails \<Longrightarrow>
  (\<forall> t . t \<in> set ts \<longrightarrow>
@@ -1824,11 +1802,333 @@ lemma is_head_and_tail_elem' [rule_format]:
       x \<in> set xs \<and>
       abi_get_type x = t))"
   sorry
+*)
+lemma is_head_and_tail_tails_elem [rule_format]:
+"is_head_and_tail xs ys ts tails \<Longrightarrow>
+ (\<forall> offset x . (offset, x) \<in> set tails \<longrightarrow>
+ (abi_type_isdynamic (abi_get_type x)  \<and> 
+  Vuint 256 offset \<in> set ys \<and>
+      x \<in> set xs))"
+proof(induction rule:is_head_and_tail.induct; auto)
+qed
 
+(*
+lemma is_head_and_tail_elem''' [rule_format]:
+"is_head_and_tail xs ys ts tails \<Longrightarrow>
+ (\<forall> y . y  \<in> set ys \<longrightarrow>
+    (abi_type_isstatic (abi_get_type y)))"
+  sorry
+*)
+
+(*
+lemma encode_tuple_tails_shift [rule_format]:
+  "\<forall> headlen len_total x bss .
+    encode'_tuple_tails vs headlen len_total = Ok bss \<longrightarrow>
+    encode'_tuple_tails vs headlen (len_total + x) = Ok (map (\<lambda> (offset, bs) . (offset + x, bs)) bss)"
+proof(induction vs)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons a vs)
+  then show ?case
+    apply(clarify)
+    apply(simp only:encode'_tuple_tails.simps)
+    apply(case_tac "abi_type_isstatic (abi_get_type a) ") apply(clarsimp)
+    apply(clarsimp)
+qed
+*)
+
+(*
+lemma encode_tuple_tails_overflow_fail' [rule_format]:
+  "
+     is_head_and_tail vs hds bvs tls \<Longrightarrow>
+     (\<forall> err vs1 vs2 code .
+      vs = vs1 @vs2 \<longrightarrow>
+     encode'_tuple_tails vs1 0 (heads_length vs) = Ok code \<longrightarrow>
+     encode'_tuple_tails (vs2) 0 (foldr (+) (map (\<lambda> (offset, code') . int (length (code'))) code) (heads_length vs) ) = Err err \<longrightarrow>
+     (\<forall> v . v \<in> set vs \<longrightarrow> abi_type_isdynamic (abi_get_type v) \<longrightarrow> (\<exists> code . encode' v = Ok code)) \<longrightarrow>
+     (\<exists> offset v . (offset, v) \<in> set tls \<and>
+     \<not> (uint_value_valid 256 offset)))
+     "
+*)
+
+(* generalization: compare to heads_length vs, subtract
+   this formulation isn't quite right because it doesn't
+   invoke heads_length *)
+lemma encode_tuple_tails_overflow_fail' [rule_format] :
+"
+     is_head_and_tail vs hds bvs tls \<Longrightarrow>
+     (\<forall> err headlen .
+     encode'_tuple_tails (vs) 0 (headlen) = Err err \<longrightarrow>
+     (\<forall> v . v \<in> set vs \<longrightarrow> abi_type_isdynamic (abi_get_type v) \<longrightarrow> (\<exists> code . encode' v = Ok code)) \<longrightarrow>
+     (\<exists> offset v . (offset - headlen, v) \<in> set tls \<and> offset > headlen \<and>
+     \<not> (uint_value_valid 256 (offset - headlen))))
+     "
+proof(induction rule:is_head_and_tail.induct)
+  case iht_nil
+  then show ?case
+    apply(clarsimp)
+    done
+next
+  case (iht_static xs ys ts tails x v)
+  then show ?case 
+    apply(clarsimp)
+    apply(simp split:if_splits sum.splits)
+    done
+next
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case
+    apply(clarsimp)
+    apply(simp split:if_splits sum.splits)
+      apply(frule_tac encode_tuple_tails_correct)
+         apply(simp)
+        apply(simp)
+       apply(simp)
+
+      defer
+
+
+
+      apply(clarsimp)
+      apply(drule_tac x = err in spec)
+    apply(drule_tac x = "headlen + int (length (x1))" in spec)
+      apply(clarsimp)
+      apply(rule_tac x = "offset - ( int (length (x1)))" in exI)
+      apply(clarsimp)
+      apply(rule_tac conjI)
+       apply(rule_tac x = v in exI)
+       apply(clarsimp) 
+       apply(subgoal_tac "offset - (headlen + int (length x1)) = offset - int (length x1) - headlen") apply(clarsimp)
+       apply(arith)
+      apply(clarsimp)
+       apply(subgoal_tac "offset - (headlen + int (length x1)) = offset - int (length x1) - headlen") apply(clarsimp)
+       apply(arith)
+
+     apply(clarsimp)
+
+    apply(drule_tac x = x in spec) apply(clarsimp)
+
+  (* deferred goal *)
+    
+(* need lemma about determinism of is_head_and_tail *)
+    apply(clarsimp)
+    apply(rule_tac x = "ptr + headlen" in exI) apply(clarsimp)
+    apply(rule_tac conjI) apply(rule_tac x = x in exI) apply(clarsimp)
+    apply(subgoal_tac
+"(map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip xs x1a)))
+=
+tails")
+
+    apply(clarsimp)
+
+qed
+
+lemma encode_tuple_tails_overflow_fail_gen [rule_format]:
+  "
+     (\<forall> vs1 hds bvs tls code err .
+     is_head_and_tail (vs2) hds bvs tls \<longrightarrow>
+     encode'_tuple_tails vs1 0 (heads_length (vs1 @ vs2)) = Ok code \<longrightarrow>
+     encode'_tuple_tails (vs2) 0 (foldr (+) (map (\<lambda> (offset, code') . int (length (code'))) code) (heads_length (vs1 @ vs2)) ) = Err err \<longrightarrow>
+     (\<forall> v . v \<in> set (vs2) \<longrightarrow> abi_type_isdynamic (abi_get_type v) \<longrightarrow> (\<exists> code . encode' v = Ok code)) \<longrightarrow>
+     (\<exists> offset v . (offset, v) \<in> set tls \<and>
+     \<not> (uint_value_valid 256 offset)))
+     "
+proof(induction vs2)
+  case Nil
+  then show ?case 
+    apply(clarsimp)
+    done
+next
+  case (Cons a vs2)
+  then show ?case
+    apply(clarify)
+    apply(simp del:encode'.simps)
+    apply(drule_tac x = a in spec) apply(clarify) apply(simp del:encode'.simps)
+    apply(case_tac "abi_type_isdynamic (abi_get_type a)") apply(clarsimp)
+    apply(case_tac " encode'_tuple_tails vs2 (0::int) (foldr (+) (map (\<lambda>(offset::int, code'::8 word list). int (length code')) code) (heads_length (vs1 @ a # vs2)) + int (length codea))")
+      apply(clarsimp)
+      apply(simp split:if_split_asm)
+
+      apply(drule_tac
+P = "\<exists>offset::int. (\<exists>v::abi_value. (offset, v) \<in> set tls) \<and> \<not> uint_value_valid (256::nat) offset"
+in is_head_and_tail.cases)
+         apply(clarsimp)
+        apply(clarsimp)
+       apply(clarsimp)
+
+       apply(frule_tac vs = vs2 in encode_tuple_tails_correct)
+          apply(simp)
+         apply(simp)
+    apply(simp)
+
+       apply(rotate_tac -1)
+      apply(drule_tac x = a in is_head_and_tail_vs_elem)
+    apply
+
+       apply(drule_tac x = vs2 in spec)
+       apply(drule_tac x = ys in spec)
+       apply(drule_tac x = ts in spec)
+       apply(drule_tac x = tails in spec)
+    apply(clarsimp)
+
+      apply(drule_tac x = a in is_head_and_tail_vs_elem)
+    apply(simp) apply(simp)
+      apply(clarsimp)
+      apply(rule_tac x = offset in exI)
+    apply(rule_tac conjI) apply(rule_tac x = a in exI) apply(clarsimp)
+    apply(clarsimp)
+      apply(drule_tac x = "vs1 @ [a]" in spec)
+      apply(clarsimp)
+      apply(drule_tac x = hds in spec)
+    apply(drule_tac x = bvs in spec)
+      apply(drule_tac x = tls in spec)
+    apply(clarsimp)
+
+(*
+      apply(frule_tac x = a in is_head_and_tail_vs_elem)
+        apply(simp) apply(simp)
+*)
+
+      apply(clarsimp)
+      apply(frule_tac encode_tuple_tails_correct) apply(simp) apply(simp) apply(simp)
+
+      apply(drule_tac x = "[]" in spec) apply(clarsimp)
+
+
+      apply(drule_tac x = "[a]" in spec) apply(clarsimp)
+(* zero is a bogus value *)
+    apply(rotate_tac -2)
+      apply(frule_tac x = a and ptr = 0 in iht_dynamic) apply(simp)
+    apply(clarsimp)
+    apply(drule_tac x =
+"(map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr) vs2 aa)"
+in spec) 
+    apply(drule_tac x = 
+"(map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs2)"
+in spec)
+    apply(drule_tac x = 
+" (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs2 aa)))"
+in spec)
+      apply(clarsimp)
+
+
+      apply(frule_tac xs = "a # vs2"  in is_head_and_tail_vs_elem)
+        apply(simp) apply(simp)
+
+
+    apply(frule_tac offset = offset in encode'_tuple_tails_correct_overflow)
+    sorry
+qed
+
+proof(induction rule:is_head_and_tail.induct)
+  case iht_nil
+  then show ?case by auto
+next
+  case (iht_static xs ys ts tails x v)
+  then show ?case
+    apply(clarify)
+    apply(case_tac vs1; clarsimp)
+    apply(simp split:sum.splits if_split_asm) apply(clarsimp)
+    apply(case_tac "encode'_tuple_tails xs (0::int) (heads_length xs)"; clarsimp)
+    apply(frule_tac encode_tuple_tails_correct)
+    apply(simp) apply(simp) apply(simp)
+
+    apply(case_tac "encode'_tuple_tails xs headlen len_total"; clarsimp)
+    done
+next
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case 
+    apply(clarify)
+    apply(simp only:encode'_tuple_tails.simps)
+    apply(clarsimp)
+    apply(simp split:sum.splits if_split_asm)
+      apply(clarsimp)
+    apply(subgoal_tac "(\<exists>(headlen::int) (len_total::int) err::char list. encode'_tuple_tails xs headlen len_total = Err err)")
+       apply(clarsimp) apply(rule_tac x = offset in exI)
+       apply(clarsimp)
+apply(rule_tac x =  v in exI)
+       apply(clarsimp)
+
+
+    sorry
+qed
+
+lemma encode_static_correct_converse [rule_format] :
+  "can_encode_as v full_code start \<Longrightarrow>
+    (\<forall> pre code post . full_code = pre @ code @ post \<longrightarrow>
+       start = length pre \<longrightarrow>
+     abi_type_isstatic (abi_get_type v) \<longrightarrow>
+       abi_static_size (abi_get_type v) = length code \<longrightarrow>
+     (abi_value_valid v \<and> encode_static v = Ok code))"
+proof(induction rule:can_encode_as.induct)
+  case (Estatic v pre post code)
+  then show ?case 
+    apply(clarsimp)
+    apply(frule_tac encode_static_size)
+     apply(simp)
+    apply(simp)
+    done
+next
+  case (Etuple_dyn ts vs t heads head_types tails start full_code)
+  then show ?case
+    apply(clarsimp)
+    apply(simp add:tuple_value_valid_aux_def)
+    apply(simp add:list_ex_iff)
+    done
+next
+  case (Efarray_dyn t n vs heads head_types tails start full_code)
+  then show ?case
+    apply(clarsimp)
+    done
+next
+  case (Earray t vs heads head_types tails start full_code)
+  then show ?case
+    apply(clarsimp)
+    done
+next
+  case (Ebytes l pre post count code)
+  then show ?case by auto
+next
+  case (Estring full_code s l start)
+  then show ?case by auto
+qed
+
+lemma encode_correct_converse_valid [rule_format] :
+  "can_encode_as v full_code start \<Longrightarrow>
+     (abi_value_valid v)"
+proof(induction rule:can_encode_as.induct)
+  case (Estatic v pre post code)
+  then show ?case by auto
+next
+  case (Etuple_dyn ts vs t heads head_types tails start full_code)
+  then show ?case by auto
+next
+  case (Efarray_dyn t n vs heads head_types tails start full_code)
+  then show ?case by auto
+next
+  case (Earray t vs heads head_types tails start full_code)
+  then show ?case by auto
+next
+  case (Ebytes l pre post count code)
+  then show ?case by auto
+next
+  case (Estring full_code s l start)
+  then show ?case by auto
+qed
+
+  
+
+(*
+lemma can_encode_as_inv_static [rule_format] :
+  "abi_type_isstatic (abi_get_type v) \<longrightarrow>
+   can_encode_as v full_code l \<longrightarrow>
+   (\<exists> 
+*)
 
 lemma encode_correct_converse [rule_format] :
   "\<forall> code start . 
       can_encode_as v code start \<longrightarrow>
+      
   (\<exists> code' . encode v = Ok code')"
 proof(induction v)
 case (Vuint x1 x2)
@@ -1891,9 +2191,11 @@ next
      apply(frule_tac encode_tuple_heads_fail)
     apply(simp add:encode_tuple_tails_len)
      apply(clarsimp)
-     apply(frule_tac x = v in is_head_and_tail_elem) apply(simp)
-    defer (* this part will be harder for tuples *)
-      apply(atomize) apply(clarsimp)
+     apply(frule_tac x = v in is_head_and_tail_vs_elem) apply(simp)
+     
+    apply(simp add:list_all_iff)
+     
+     apply(atomize) apply(clarsimp)
       apply(drule_tac x = offset in spec) apply(rotate_tac -1) apply(drule_tac x= v in spec)
       apply(clarsimp)
       apply(drule_tac x = v in spec) apply(clarsimp)
@@ -1907,7 +2209,7 @@ next
    - this will happen for some specific, dynamic value v (head of list at the time)
    - but that v will have an entry in heads (offset), which can encode
 thus, contradiction *)
-     apply(drule_tac encode_tuple_tails_overflow_fail)
+     apply(frule_tac encode_tuple_tails_overflow_fail') apply(simp)
       apply(atomize)
       apply(drule_tac x = v in spec) apply(clarsimp)
     apply(frule_tac x = v in is_head_and_tail_elem)
@@ -1921,28 +2223,37 @@ thus, contradiction *)
 
       apply(fastforce)
 
-
-(* there may be a spec bug here.
-   specifically, what if the length is too long?
-   i think we end up checking for this when we make sure the tuple of offsets is encodable *)
-
-(* proof sketch
-   - use the fact that we know the heads are encodable (this rules out a too long input)
-   - use a lemma saying that if the offsets are all encodable, but encode_tails fails
-     this must be because one of the values isn't encodable
-   - we may also need a lemma related the "can_encode_as (Vtuple head_types types) assumption*)
     apply(clarsimp)
 
+     apply(frule_tac offset = offset and x = v in is_head_and_tail_elem'') apply(clarsimp)
+    apply(case_tac "v \<in> set x3a") apply(clarsimp)
+
+     apply(frule_tac encode_correct_converse_valid)
+     apply(clarsimp)
+     apply(simp add:tuple_value_valid_aux_def)
+     apply(simp add:list_all_iff)
+     apply(rotate_tac -1)
+     apply(drule_tac x = " Vuint (256::nat) offset" in bspec)
+      apply(simp) apply(simp)
+
+    apply(clarsimp)
     done
 next
   case (Vtuple x1 x2)
   then show ?case sorry
 next
   case (Vbytes x)
-  then show ?case sorry
+  then show ?case 
+    apply(clarsimp)
+    apply(drule_tac can_encode_as.cases; auto simp add:encode_def)
+    done
 next
   case (Vstring x)
-  then show ?case sorry
+  then show ?case
+apply(clarsimp)
+    apply(drule_tac can_encode_as.cases; auto simp add:encode_def string_value_valid_def)
+    apply(drule_tac can_encode_as.cases; auto simp add:encode_def string_value_valid_def)
+    done
 next
   case (Varray x1 x2)
   then show ?case sorry
