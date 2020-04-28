@@ -2003,16 +2003,6 @@ qed
 
 
 (*
-lemma abi_dynamic_size_bound_correct [rule_format] :
-"
-(\<forall> bound code . encode v = Ok code \<longrightarrow>
-    abi_dynamic_size_bound v = bound \<longrightarrow>           
-            abi_value_valid v \<longrightarrow>
-            length code \<le> bound)
-"  
-  sorry
-*)
-(*
 lemma can_encode_as_inv_static [rule_format] :
   "abi_type_isstatic (abi_get_type v) \<longrightarrow>
    can_encode_as v full_code l \<longrightarrow>
@@ -2147,6 +2137,118 @@ lemma oneplus_times :
   apply(simp add:int_distrib)
   done
 
+
+lemma abi_dynamic_size_bound_correct [rule_format] :
+"
+(\<forall> bound code . encode v = Ok code \<longrightarrow>
+    abi_dynamic_size_bound v = bound \<longrightarrow>           
+            abi_value_valid v \<longrightarrow>
+            length code \<le> bound)
+"  
+proof(induction v)
+case (Vuint x1 x2)
+  then show ?case 
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+case (Vsint x1 x2)
+  then show ?case
+apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (Vaddr x)
+  then show ?case
+apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (Vbool x)
+  then show ?case 
+apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (Vfixed x1 x2 x3a)
+  then show ?case 
+apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+case (Vufixed x1 x2 x3a)
+  then show ?case 
+apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (Vfbytes x1 x2)
+  then show ?case 
+apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (Vfunction x1 x2)
+  then show ?case 
+apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (Vfarray x1 x2 x3a)
+  then show ?case
+  proof(cases "abi_type_isstatic x1")
+    case True
+    then show ?thesis
+apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+       apply(auto)
+      done
+  next
+    case False
+    then show ?thesis using Vfarray
+      apply(clarsimp) apply(simp add:encode_def)
+      apply(simp split:sum.splits prod.splits if_splits)
+      apply(atomize)
+  qed
+apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (Vtuple x1 x2)
+  then show ?case sorry
+next
+case (Vbytes x)
+  then show ?case sorry
+next
+  case (Vstring x)
+  then show ?case sorry
+next
+  case (Varray x1 x2)
+  then show ?case sorry
+qed
+
+
+
+
 (*
 
      is_head_and_tail vs hds bvs tls \<Longrightarrow>
@@ -2165,7 +2267,7 @@ lemma encode_tuple_tails_overflow_fail_farray' [rule_format] :
      encode'_tuple_tails (vs) 0 (headlen) = Err err \<longrightarrow>
      (\<forall> v . v \<in> set vs \<longrightarrow> abi_type_isdynamic (abi_get_type v) \<longrightarrow> (\<exists> code . encode' v = Ok code)) \<longrightarrow>
      heads_length vs \<le> headlen \<longrightarrow>
-     \<not> uint_value_valid 256 (int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs)))
+     \<not> uint_value_valid 256 (int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs)))
      "
 proof(induction vs)
   case Nil
@@ -2194,7 +2296,7 @@ next
        apply(clarify)
         apply(rule_tac abi_dynamic_size_bound_nonneg)
 
-      apply(subgoal_tac " (0::int) \<le> int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs)")
+      apply(subgoal_tac " (0::int) \<le> int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs)")
        apply(clarify)
 
        apply(simp add:list_sum_def  del: encode'.simps abi_dynamic_size_bound.simps)
@@ -2202,7 +2304,7 @@ next
 in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
        apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
        apply(cut_tac v = a in abi_dynamic_size_bound_nonneg)
-       apply(arith)
+    apply(simp)
 
       apply(cut_tac l = "map abi_dynamic_size_bound vs" in list_nonneg_sum)
        apply(simp only:list_nonneg_def)
@@ -2224,15 +2326,41 @@ in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
        apply(cut_tac x = "(abi_dynamic_size_bound a)" and i = 0 and xs = "map abi_dynamic_size_bound vs"
 in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
        apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-       apply(cut_tac v = a in abi_dynamic_size_bound_nonneg)
-       apply(arith)
+      apply(cut_tac v = a in abi_dynamic_size_bound_nonneg)
+    apply(simp  del: encode'.simps abi_dynamic_size_bound.simps
+ add:uint_value_valid_def) apply(clarify)
+      apply(subgoal_tac "0 \<le> headlen")
+       apply(clarify)
+    apply(subgoal_tac "0 \<le> foldl (+) (0::int) (map abi_dynamic_size_bound vs)")
+              apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
+    apply(subgoal_tac "heads_length vs \<le> foldl (+) (0::int) (map abi_dynamic_size_bound vs)")
+         apply(arith)
+    defer (* lemma about size_bound and heads_length *)
+        defer (* lemma about heads_length > 0 *)
+        defer (* lemma about heads_legth > 0 *)
 
-    apply(subgoal_tac
-"(0::int) \<le> int (length vs) * (32::int) + foldl (+) (0::int) (map abi_dynamic_size_bound vs)"
-)
-    apply(simp)
-           apply(simp add:farray_value_valid_aux_def list_sum_def)
-    apply(case_tac a; clarsimp)
+        apply(clarify)
+        apply(drule_tac x = err in spec) apply(drule_tac x = "headlen + length (x1)" in spec)
+        apply(clarify)
+        apply(subgoal_tac "heads_length vs \<le> headlen + int (length x1)")
+       apply(simp add: list_sum_def del: encode'.simps abi_dynamic_size_bound.simps)
+       apply(cut_tac x = "(abi_dynamic_size_bound a)" and i = 0 and xs = "map abi_dynamic_size_bound vs"
+in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
+       apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
+      apply(cut_tac v = a in abi_dynamic_size_bound_nonneg)
+    apply(simp  del: encode'.simps abi_dynamic_size_bound.simps
+ add:uint_value_valid_def) apply(clarify)
+    apply(subgoal_tac "0 \<le> foldl (+) (0::int) (map abi_dynamic_size_bound vs)")
+          apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
+          apply(subgoal_tac "length x1 \<le> abi_dynamic_size_bound a")
+           apply(arith)
+
+      
+(* lemmas needed
+- abi bound successfully upper bounds size (hardish)
+- heads_length less than dynamic size bound
+- heads_length greater than 0
+*)
 (* old proof was wrong i guess *)
 (*
     apply(clarify)
