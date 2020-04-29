@@ -2137,15 +2137,281 @@ lemma oneplus_times :
   apply(simp add:int_distrib)
   done
 
+lemma mythin :
+  "P \<Longrightarrow> True"
+proof(auto)
+qed
 
+(*
+
+    encode'_tuple_heads (?vs::abi_value list) (?bss::(int \<times> 8 word list) list) =
+    Ok (?result::8 word list \<times> 8 word list) \<Longrightarrow>
+    length ?vs = length ?bss
+
+
+*)
+
+(*
+lemma encode_tuple_heads_len2 [rule_format] :
+  "\<forall> bss heads tails . encode'_tuple_heads vs bss = Ok (heads, tails) \<longrightarrow>
+    length tails = list_sum (map (\<lambda> (i, l) . length l) bss)"
+proof(induction vs)
+  case Nil
+  then show ?case
+    apply(clarsimp)
+    apply(case_tac bss)
+     apply(auto simp add:list_sum_def)
+    done
+next
+  case (Cons a vs)
+  then show ?case
+    apply(clarsimp)
+    apply(case_tac bss; clarsimp)
+    apply(simp split:if_splits sum.splits prod.splits)
+
+     apply(clarsimp)
+     apply(drule_tac x = list in spec) apply(clarsimp)
+    apply(simp add:list_sum_def)
+
+qed
+*)
+(* need the more general induction principle *)
 lemma abi_dynamic_size_bound_correct [rule_format] :
 "
 (\<forall> bound code . encode v = Ok code \<longrightarrow>
     abi_dynamic_size_bound v = bound \<longrightarrow>           
             abi_value_valid v \<longrightarrow>
-            length code \<le> bound)
-"  
-proof(induction v)
+            length code \<le> bound) \<and>
+    (
+     (\<forall> t n v code  .
+        v = (Vfarray t n vs) \<longrightarrow>
+        encode v = Ok code \<longrightarrow>
+        abi_value_valid v \<longrightarrow>
+        (length code \<le> n * 32 + list_sum (map abi_dynamic_size_bound vs))) \<and>
+      ( \<forall> ts v code  .
+        v = (Vtuple ts vs) \<longrightarrow>
+        encode v = Ok code \<longrightarrow>
+        abi_value_valid v \<longrightarrow>
+        length code \<le> (length vs * 32) + list_sum (map abi_dynamic_size_bound vs)) \<and>
+      ( \<forall> t v code  .
+        v = (Varray t vs) \<longrightarrow>
+        encode v = Ok code \<longrightarrow>
+        abi_value_valid v \<longrightarrow>
+        length code \<le> 32 + (length vs * 32) + list_sum (map abi_dynamic_size_bound vs))
+      )"
+
+proof(induction rule: my_abi_value_induct)
+  case (1 n i)
+  then show ?case 
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (2 n i)
+  then show ?case 
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (3 i)
+  then show ?case
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (4 b)
+  then show ?case
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (5 m n r)
+  then show ?case
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (6 m n r)
+  then show ?case
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (7 n bs)
+  then show ?case 
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  case (8 i j)
+  then show ?case 
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(auto)
+    done
+next
+  (* Vfarray *)
+  case (9 t n l)
+  then show ?case 
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps abi_dynamic_size_bound.simps)
+
+    (* static *)
+    apply(case_tac "abi_type_isstatic t") apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+     apply(clarsimp) apply(clarsimp)
+
+    (* dynamic *)
+    apply(clarsimp)
+    apply(simp split:sum.splits prod.splits del:encode_static.simps abi_dynamic_size_bound.simps)
+    apply(clarify)
+    apply(rotate_tac -4) apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac x = t in spec)
+    apply(drule_tac x = n in spec)
+    apply(drule_tac x = "x1b @ x2" in spec) apply(clarsimp)
+    done
+next
+    (* Vtuple *)
+  case (10 ts vs)
+  then show ?case 
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps abi_dynamic_size_bound.simps)
+
+    (* static *)
+    apply(case_tac "\<not> list_ex abi_type_isdynamic ts") apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps)
+    apply(drule_tac encode_static_size)
+      apply(clarsimp) apply(clarsimp)
+
+
+    (* dynamic *)
+    apply(clarsimp)
+    apply(simp split:sum.splits prod.splits del:encode_static.simps abi_dynamic_size_bound.simps)
+    apply(clarify)
+    apply(rotate_tac -3) apply(drule_tac mythin) apply(rotate_tac -3) apply(drule_tac mythin)
+    apply(drule_tac x = ts in spec) 
+    apply(drule_tac x = "x1b @ x2" in spec) apply(clarsimp)
+    done
+next
+  (* Vbytes *)
+  case (11 bs)
+  then show ?case
+    apply(clarsimp) apply(simp add:bytes_value_valid_def encode_def uint_value_valid_def split:prod.splits)
+    apply(clarsimp)
+apply(case_tac x2; clarsimp)
+    apply(simp add:word_rsplit_def bin_rsplit_len)
+        apply(simp add:word_rsplit_def bin_rsplit_len)
+    done
+next
+  (* Vstring *)
+  case (12 s)
+  then show ?case 
+    apply(clarsimp) apply(simp add:Let_def string_value_valid_def bytes_value_valid_def encode_def uint_value_valid_def split:prod.splits)
+    apply(case_tac x2; clarsimp)
+     apply(simp add:word_rsplit_def bin_rsplit_len)
+apply(simp add:word_rsplit_def bin_rsplit_len)
+    done
+next
+  (* Varray *)
+  case (13 t vs)
+  then show ?case
+    apply(clarify)
+    apply(simp add:encode_def del:encode_static.simps abi_dynamic_size_bound.simps)
+    apply(simp split:sum.splits prod.splits del:encode_static.simps abi_dynamic_size_bound.simps)
+    apply(clarify)
+    apply(rotate_tac 1) apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac x = t in spec) 
+    apply(drule_tac x = "word_rsplit (word_of_int (int (length vs)) :: 256 word) @ x1b @ x2" in spec) apply(clarsimp)
+    done
+next
+  case 14
+  then show ?case 
+    apply(auto simp add:encode_def farray_value_valid_aux_def array_value_valid_aux_def list_sum_def)
+    apply(simp add:word_rsplit_def bin_rsplit_len)
+    done
+next
+  case (15 t l)
+  then show ?case 
+    
+    (* farray *)
+    apply(rule_tac conjI)
+     apply(clarify)
+     apply(rotate_tac  2) apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(simp del:abi_dynamic_size_bound.simps add:encode_def)
+     apply(clarify)
+     apply(case_tac "\<not> abi_type_isdynamic ta")
+      apply(simp del:abi_dynamic_size_bound.simps add:encode_def split:sum.splits)
+    apply(clarify)
+      apply(drule_tac x = "nat (abi_dynamic_size_bound t)" in spec)
+      apply(case_tac "encode_static t")
+       apply(simp del:abi_dynamic_size_bound.simps add:encode_def split:sum.splits)
+       apply(clarify)
+    apply(drule_tac x = a in spec)
+       apply(simp del:abi_dynamic_size_bound.simps add:encode_def split:sum.splits)
+
+       apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def)
+       apply(clarify)
+       apply(case_tac "(0::int) \<le> abi_dynamic_size_bound t") 
+        apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def)
+
+    
+        apply(drule_tac x = "(abi_get_type t)" in spec)
+        apply(simp del:abi_dynamic_size_bound.simps)
+        apply(simp del:abi_dynamic_size_bound.simps add:list_sum_def)
+        apply(cut_tac i = 0 and x = "(abi_dynamic_size_bound t)" and xs = "(map abi_dynamic_size_bound l)" in foldl_plus)
+        apply(simp)
+
+       apply(simp add:abi_dynamic_size_bound_nonneg del:abi_dynamic_size_bound.simps)
+
+      apply(clarsimp)
+
+        apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def split:sum.splits prod.splits)
+
+     apply(case_tac "uint_value_valid (256::nat) ((32::int) + heads_length l)")
+        apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def split:sum.splits prod.splits)
+      apply(clarify)
+      apply(drule_tac x = "abi_get_type t" in spec)
+      apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def split:sum.splits prod.splits)
+        apply(clarify)
+
+        apply(drule_tac x = "nat (abi_dynamic_size_bound t)" in spec)
+      apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def split:sum.splits prod.splits)
+        apply(case_tac "(0::int) \<le> abi_dynamic_size_bound t")
+         apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def split:sum.splits prod.splits)
+
+(* idea: need to relate (x1g, x2b) to (x1f, x2a) *)
+    apply(frule_tac bvs = x1c in encode_tuple_tails_len)
+         apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def split:sum.splits prod.splits)
+
+         apply(frule_tac bss = x1b in encode_tuple_heads_len)
+         apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def split:sum.splits prod.splits)
+
+         apply(frule_tac a = x1c in encode_tuple_heads_headslength)
+         apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def list_all_iff split:sum.splits prod.splits)
+         apply(frule_tac a = x1b in encode_tuple_heads_headslength)
+          apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def list_all_iff split:sum.splits prod.splits)
+
+
+    apply(drule_tac x = 
+
+
+qed
 case (Vuint x1 x2)
   then show ?case 
     apply(clarify)
@@ -2226,11 +2492,13 @@ apply(clarify)
       apply(clarsimp) apply(simp add:encode_def)
       apply(simp split:sum.splits prod.splits if_splits)
       apply(atomize)
+      apply(case_tac x3a; clarsimp)
+      apply(simp split:sum.splits prod.splits)
+
   qed
 apply(clarify)
     apply(simp add:encode_def del:encode_static.simps)
     apply(drule_tac encode_static_size)
-     apply(auto)
     done
 next
   case (Vtuple x1 x2)

@@ -287,8 +287,8 @@ fun abi_dynamic_size_bound :: "abi_value \<Rightarrow> int" where
           Vfarray t n l \<Rightarrow> n * 32 + list_sum (map abi_dynamic_size_bound l)
           | Vtuple ts vs \<Rightarrow> (length vs * 32) + list_sum (map abi_dynamic_size_bound vs)
           | Varray t l \<Rightarrow> 32 + (length l * 32) + list_sum (map abi_dynamic_size_bound l)
-          | Vbytes bs \<Rightarrow> 32 + length bs
-          | Vstring s \<Rightarrow> 32 + length s))"
+          | Vbytes bs \<Rightarrow> 32 + length bs + 32
+          | Vstring s \<Rightarrow> 32 + length s + 32))" (* extra 32 at end is for byte padding *)
 
 (* this should capture the exact size of dynamic structures, though I have not proven this yet *)
 fun abi_dynamic_size_precise :: "abi_value \<Rightarrow> int" where
