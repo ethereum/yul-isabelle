@@ -118,7 +118,7 @@ this means we need some way to get the current offset
           Err s \<Rightarrow> Err s
           | Ok head1 \<Rightarrow> (case (encode'_tuple_heads vs bss) of
                           Err s \<Rightarrow> Err s
-                          | Ok (heads', tails) \<Rightarrow> Ok ((head1 @ heads'), (tails))))
+                          | Ok (heads', tails) \<Rightarrow> Ok ((head1 @ heads'), (bs@tails))))
     else (case (encode'_tuple_heads vs bss) of
                 Err s \<Rightarrow> Err s
                 | Ok (heads, tails)  \<Rightarrow> Ok ((encode_int offset @ heads), (bs @ tails))))
