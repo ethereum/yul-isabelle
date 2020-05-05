@@ -103,12 +103,12 @@ and decode_static_tup :: "abi_type list \<Rightarrow> (int * 8 word list) \<Righ
       | Some b \<Rightarrow> Ok (Vbool b)))"
 | "decode_static (Tfixed m n) (ix, l) =
   (let l' = drop (nat ix) l in
-   (let res = decode_fixed m l' in
+   (let res = decode_fixed n l' in
     (if fixed_value_valid m n res then Ok (Vfixed m n res)
      else Err (decode_err ''Invalid fixed'' (ix, l)))))"
 | "decode_static (Tufixed m n) (ix, l) =
   (let l' = drop (nat ix) l in
-   (let res = decode_ufixed m l' in
+   (let res = decode_ufixed n l' in
     (if ufixed_value_valid m n res then Ok (Vufixed m n res)
      else Err (decode_err ''Invalid ufixed'' (ix, l)))))"
 | "decode_static (Tfbytes n) (ix, l) =

@@ -1636,6 +1636,7 @@ and
 t = "(int (length pre) + (32::int))" and s = "int (length (pre @ word_rsplit (word_of_int (int (length vs)) :: 256 word) :: 8 word list))"  in subst
 )
         apply(simp) 
+  (*  try0 *)
       (* this is unbelievably confusing *)
        apply(assumption) apply(simp)
 
@@ -3793,7 +3794,7 @@ next
     done
 qed
 
-
+value "2 ^ 64:: int"
 
 lemma encode_correct_converse [rule_format] :
   "\<forall> code start . 
