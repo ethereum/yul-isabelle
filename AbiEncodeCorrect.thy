@@ -317,7 +317,7 @@ lemma encode'_tuple_tails_correct_overflow [rule_format] :
     encode'_tuple_tails vs headlen len_total = Ok bvs \<Longrightarrow>
    (\<forall> v enc . (v, offset, enc) \<in> set (zip vs bvs) \<longrightarrow>
    abi_type_isdynamic (abi_get_type v) \<longrightarrow>
-   uint_value_valid 256 offset)"
+   sint_value_valid 256 offset)"
 proof(induction vs)
   case Nil
   then show ?case by auto
@@ -329,7 +329,7 @@ next
     apply(atomize) apply(clarsimp) 
      apply(fastforce)
 
-    apply(case_tac a;  fastforce)
+    apply(case_tac a; fastforce)
     done
 qed
 
@@ -377,12 +377,12 @@ lemma encode_tuple_tails_correct :
      vbvs = (List.zip vs bvs) \<Longrightarrow>
      hds = List.map (\<lambda> (v, (ptr, enc)) .
                         (if (abi_type_isstatic (abi_get_type v)) then v
-                            else (Vuint 256 ptr))) vbvs  \<Longrightarrow>
+                            else (Vsint 256 ptr))) vbvs  \<Longrightarrow>
      tls = List.map (\<lambda> (v, (ptr, enc)) . (ptr, v))
                     (List.filter (abi_type_isdynamic o abi_get_type o fst) vbvs) \<Longrightarrow>
      is_head_and_tail vs hds 
                          (List.map (\<lambda> v . if abi_type_isstatic (abi_get_type v) then abi_get_type v
-                                              else Tuint 256) vs) (tls)"
+                                              else Tsint 256) vs) (tls)"
 proof(induction vs)
   case Nil
   then show ?case
@@ -595,8 +595,8 @@ lemma encode_tuple_heads_correct1 [rule_format] :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
    (\<forall> bvs  code pre post heads_code tails_code .
-   xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint 256 ptr) vs bvs) \<longrightarrow>
-   ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint 256) vs) \<longrightarrow>
+   xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) vs bvs) \<longrightarrow>
+   ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint 256) vs) \<longrightarrow>
    tails = (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs bvs)))  \<longrightarrow>
    abi_value_valid (Vtuple ys xs) \<longrightarrow>
    abi_type_isstatic (Ttuple ys) \<longrightarrow>
@@ -676,8 +676,8 @@ lemma encode_tuple_heads_correct2 [rule_format] :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
    (\<forall> bvs heads_length  code heads_code tails_code ab ac ba ab_code.
-   xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint 256 ptr) vs bvs) \<longrightarrow>
-   ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint 256) vs) \<longrightarrow>
+   xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) vs bvs) \<longrightarrow>
+   ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint 256) vs) \<longrightarrow>
    tails = (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs bvs)))  \<longrightarrow>
    encode'_tuple_tails vs (0::int) (heads_length) = Ok bvs \<longrightarrow>
    abi_value_valid (Vtuple ys xs) \<longrightarrow>
@@ -1132,7 +1132,7 @@ vbvs = "(List.zip l a)"
 and
 hds= "List.map (\<lambda> (v, (ptr, enc)) .
                         (if (abi_type_isstatic (abi_get_type v)) then v
-                            else (Vuint 256 ptr))) (List.zip l a)"
+                            else (Vsint 256 ptr))) (List.zip l a)"
 and
 tls = " List.map (\<lambda> (v, (ptr, enc)) . (ptr, v))
                     (List.filter (abi_type_isdynamic o abi_get_type o fst) (List.zip l a)) 
@@ -1148,8 +1148,8 @@ encode_tuple_tails_correct)
        apply(simp)
 
        apply(cut_tac
-v = "(Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) l)
-          (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr) l a))"
+v = "(Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) l)
+          (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint (256::nat) ptr) l a))"
 and
  pre = "pre" and code = "aa" and post = "b@post" in Estatic)
          apply(clarsimp)
@@ -1164,8 +1164,8 @@ and
          apply(rule_tac conjI)
 
       apply(subgoal_tac
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) l =
- map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) (zip l a)")
+"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) l =
+ map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip l a)")
            apply(clarsimp)
           apply(rule_tac map2_map_fst') apply(simp add:encode_tuple_tails_len)
 
@@ -1185,8 +1185,8 @@ apply(frule_tac set_zip_leftD) apply(clarsimp)
 
           apply(simp add:tuple_value_valid_aux_def) 
       apply(subgoal_tac
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) l =
- map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) (zip l a)")
+"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) l =
+ map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip l a)")
            apply(clarsimp)
           apply(rule_tac map2_map_fst') apply(simp add:encode_tuple_tails_len)
 
@@ -1208,8 +1208,8 @@ apply(frule_tac set_zip_leftD) apply(clarsimp)
           apply(clarsimp) 
 
       apply(subgoal_tac
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) l =
- map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) (zip l a)")
+"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) l =
+ map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip l a)")
            apply(clarsimp) 
           apply(rule_tac map2_map_fst') apply(simp add:encode_tuple_tails_len)
 
@@ -1293,8 +1293,8 @@ apply(simp add:list_ex_iff) apply(clarsimp)
 
           apply(rule_tac conjI) apply(clarsimp) 
       apply(subgoal_tac
-" map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs =
- map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) (zip vs x1)")
+" map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs =
+ map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)")
             apply(simp)
             apply(clarsimp) apply(rule_tac map2_map_fst')  apply(simp add:encode_tuple_tails_len)
 
@@ -1320,8 +1320,8 @@ apply(frule_tac set_zip_leftD) apply(clarsimp)
 
         apply(rule_tac conjI)
       apply(subgoal_tac
-" map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs =
- map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) (zip vs x1)")
+" map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs =
+ map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)")
             apply(simp)
           apply(clarsimp) apply(rule_tac map2_map_fst')  apply(simp add:encode_tuple_tails_len)
 
@@ -1379,8 +1379,8 @@ in encode_tuple_heads_correct2)
           apply(rule_tac conjI)
            apply(simp add:tuple_value_valid_aux_def)
            apply(subgoal_tac 
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs =
- map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) (zip vs x1)")
+"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs =
+ map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)")
             apply(clarsimp)
            apply(rule_tac map2_map_fst') apply(simp add: encode_tuple_tails_len)
            apply(simp add:list_all_iff)
@@ -1538,8 +1538,8 @@ next
     apply(rule_tac
 t = t
 and vs = vs
-and heads = " (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr) vs x1)"
-and head_types = "(map (\<lambda>v::abi_value. if abi_type_isstatic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs)"
+and heads = " (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint (256::nat) ptr) vs x1)"
+and head_types = "(map (\<lambda>v::abi_value. if abi_type_isstatic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs)"
 and tails = "(map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs x1)))"
 and full_code = "(pre @ word_rsplit (word_of_int (int (length vs))) @ x1b @ x2 @ post)"
 and start = "int (length (pre))"
@@ -1558,8 +1558,8 @@ Earray)
 
        apply(rule_tac conjI) apply(clarsimp)
       apply(subgoal_tac
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs  =
- map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) (zip vs x1)")
+"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs  =
+ map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)")
            apply(clarsimp)
           apply(rule_tac map2_map_fst') apply(simp add:encode_tuple_tails_len)
 
@@ -1577,8 +1577,8 @@ apply(frule_tac set_zip_rightD)
         apply(clarsimp)
 
        apply(cut_tac
-v = "(Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs)
-          (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr) vs x1))"
+v = "(Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs)
+          (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint (256::nat) ptr) vs x1))"
 and
  pre = "pre @ word_rsplit (word_of_int (int (length vs)))" and code = "x1b" and post = "x2@post" in Estatic)
     apply(clarsimp)
@@ -1602,8 +1602,8 @@ and
        apply(rule_tac conjI)   
     apply(simp add:tuple_value_valid_aux_def)
       apply(subgoal_tac
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs  =
- map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) (zip vs x1)")
+"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs  =
+ map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)")
          apply(clarsimp)
     apply(rule_tac map2_map_fst')
  apply(simp add:encode_tuple_tails_len)
@@ -1629,8 +1629,8 @@ and
 P =
 "(\<lambda> target . 
 can_encode_as
-        (Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs)
-          (map2 (\<lambda>(x::abi_value) y::int \<times> 8 word list. case y of (ptr::int, enc::8 word list) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type x) then x else Vuint (256::nat) ptr) vs x1))
+        (Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs)
+          (map2 (\<lambda>(x::abi_value) y::int \<times> 8 word list. case y of (ptr::int, enc::8 word list) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type x) then x else Vsint (256::nat) ptr) vs x1))
         ((pre @ word_rsplit (word_of_int (int (length vs)))) @ x1b @ x2 @ post) (target))"
 and
 t = "(int (length pre) + (32::int))" and s = "int (length (pre @ word_rsplit (word_of_int (int (length vs)) :: 256 word) :: 8 word list))"  in subst
@@ -1669,15 +1669,15 @@ and heads_code = "x1b" and tails_code = "x2" in
         apply(rule_tac conjI)
          apply(simp add:tuple_value_valid_aux_def)
     apply(subgoal_tac
-" map (abi_get_type \<circ> (\<lambda>(v::abi_value, ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr)) (zip vs x1) =
-       map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) (zip vs x1)
+" map (abi_get_type \<circ> (\<lambda>(v::abi_value, ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint (256::nat) ptr)) (zip vs x1) =
+       map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)
 ") 
     apply(rule_tac t = 
-" map (abi_get_type \<circ> (\<lambda>(v::abi_value, ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr)) (zip vs x1)"
+" map (abi_get_type \<circ> (\<lambda>(v::abi_value, ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint (256::nat) ptr)) (zip vs x1)"
 and s =
-" map2 (\<lambda>(v::abi_value) _::int \<times> 8 word list. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs x1"
+" map2 (\<lambda>(v::abi_value) _::int \<times> 8 word list. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs x1"
 and P =
-"(\<lambda> lhs . lhs = map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) vs)"
+"(\<lambda> lhs . lhs = map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs)"
 in subst) apply(simp)
           apply(simp)
     apply(rule_tac sym)
@@ -1781,7 +1781,7 @@ lemma is_head_and_tail_vs_elem [rule_format]:
  (\<forall> x . x \<in> set xs \<longrightarrow>
  abi_type_isdynamic (abi_get_type x) \<longrightarrow>
    (\<exists> offset . (offset, x) \<in> set tails \<and>
-      (Vuint 256 offset \<in> set ys)))"
+      (Vsint 256 offset \<in> set ys)))"
 proof(induction rule:is_head_and_tail.induct)
   case iht_nil
   then show ?case by auto
@@ -1933,7 +1933,7 @@ lemma is_head_and_tail_tails_elem [rule_format]:
 "is_head_and_tail xs ys ts tails \<Longrightarrow>
  (\<forall> offset x . (offset, x) \<in> set tails \<longrightarrow>
  (abi_type_isdynamic (abi_get_type x)  \<and> 
-  Vuint 256 offset \<in> set ys \<and>
+  Vsint 256 offset \<in> set ys \<and>
       x \<in> set xs))"
 proof(induction rule:is_head_and_tail.induct; auto)
 qed
@@ -2459,7 +2459,7 @@ next
     apply(simp split:if_split_asm)
     apply(clarsimp)
     apply(rule_tac conjI) apply(clarsimp)
-    apply(simp add:uint_value_valid_def)
+    apply(simp add:sint_value_valid_def)
 
     apply(clarsimp)
     apply(drule_tac x = "heads_lengtha + int (length x1b)" in spec)
@@ -2773,7 +2773,7 @@ next
 (* here is where we first hit two subgoals *)
         apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def split:sum.splits prod.splits)
 
-     apply(case_tac "uint_value_valid (256::nat) ((32::int) + heads_length l)")
+     apply(case_tac "sint_value_valid (256::nat) ((32::int) + heads_length l)")
         apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def split:sum.splits prod.splits)
       apply(clarify)
       apply(drule_tac x = "abi_get_type t" in spec)
@@ -2878,7 +2878,7 @@ and list = x1c in List.map.compositionality)
          apply(clarify)
          apply(case_tac " abi_type_isdynamic (abi_get_type t)")
       apply(simp del:abi_dynamic_size_bound.simps add:encode_def split:sum.splits)
-    apply(case_tac "uint_value_valid (256::nat) ((32::int) + heads_length l)")
+    apply(case_tac "sint_value_valid (256::nat) ((32::int) + heads_length l)")
     apply(simp del:abi_dynamic_size_bound.simps add:encode_def split:sum.splits)
 
       apply(drule_tac x = "nat (abi_dynamic_size_bound t)" in spec)
@@ -2954,7 +2954,6 @@ list_sum (map abi_dynamic_size_bound l)")
     apply(clarsimp)
 
 
-(* current  progress *)
         apply(case_tac "(0::int) \<le> abi_dynamic_size_bound t")
         apply(simp del:abi_dynamic_size_bound.simps add:farray_value_valid_aux_def split:sum.splits prod.splits)
 
@@ -3183,7 +3182,7 @@ array
          apply(simp del:abi_dynamic_size_bound.simps add:encode_def Let_def split:sum.splits)
          apply(case_tac "abi_type_isdynamic (abi_get_type t)")
           apply(simp del:abi_dynamic_size_bound.simps add:encode_def split:sum.splits)
-    apply(case_tac "uint_value_valid (256::nat) ((32::int) + heads_length l)")
+    apply(case_tac "sint_value_valid (256::nat) ((32::int) + heads_length l)")
           apply(simp del:abi_dynamic_size_bound.simps add:encode_def split:sum.splits)
 
        apply(clarify)
@@ -3342,7 +3341,7 @@ encode_tuple_tails_dyn_offset)
     apply(simp del:abi_dynamic_size_bound.simps add:list_sum_def array_value_valid_aux_def list_all_iff split:sum.splits prod.splits)
 
     apply(simp del:abi_dynamic_size_bound.simps add:list_sum_def array_value_valid_aux_def list_all_iff split:sum.splits prod.splits)
-    apply(case_tac "uint_value_valid (256::nat) ((32::int) + heads_length l)")
+    apply(case_tac "sint_value_valid (256::nat) ((32::int) + heads_length l)")
      apply(simp del:abi_dynamic_size_bound.simps add:list_sum_def list_all_iff split:sum.splits prod.splits)
      apply(clarify)
      apply(simp del:abi_dynamic_size_bound.simps add:list_sum_def list_all_iff split:sum.splits prod.splits)
@@ -3523,14 +3522,14 @@ xs = "(map abi_dynamic_size_bound vs)" in foldl_plus)
     done
 qed
 
-lemma encode_tuple_tails_overflow_fail_farray' [rule_format] :
+lemma encode_tuple_tails_overflow_fail' [rule_format] :
 "
      (\<forall> err headlen   .
      encode'_tuple_tails (vs) 0 (headlen) = Err err \<longrightarrow>
      list_all abi_value_valid vs \<longrightarrow>
      (\<forall> v . v \<in> set vs \<longrightarrow> abi_type_isdynamic (abi_get_type v) \<longrightarrow> (\<exists> code . encode' v = Ok code)) \<longrightarrow>
      heads_length vs \<le> headlen \<longrightarrow>
-     \<not> uint_value_valid 256 (int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs)))
+     \<not> sint_value_valid 256 (int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs)))
      "
 proof(induction vs)
   case Nil
@@ -3547,7 +3546,7 @@ next
      apply(rotate_tac -2)
      apply(drule_tac x = err in spec) apply(drule_tac x = headlen in spec)
     apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-     apply(simp only:uint_value_valid_def)
+     apply(simp only:sint_value_valid_def)
      apply(subgoal_tac "heads_length vs \<le> headlen") apply(simp only:) apply(clarify)
       apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
       apply(cut_tac l = "(abi_dynamic_size_bound a # map abi_dynamic_size_bound vs)" in list_nonneg_sum)
@@ -3559,7 +3558,11 @@ next
        apply(clarify)
         apply(rule_tac abi_dynamic_size_bound_nonneg)
 
-      apply(subgoal_tac " (0::int) \<le> int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs)")
+(*      apply(subgoal_tac " (0::int) \<le> int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs)")
+*)
+    apply(subgoal_tac
+"- (57896044618658097711785492504343953926634992332820282019728792003956564819968::int)
+       \<le> int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs)")
        apply(clarify)
 
        apply(simp add:list_sum_def  del: encode'.simps abi_dynamic_size_bound.simps)
@@ -3591,8 +3594,11 @@ in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
        apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
       apply(cut_tac v = a in abi_dynamic_size_bound_nonneg)
     apply(simp  del: encode'.simps abi_dynamic_size_bound.simps
- add:uint_value_valid_def) apply(clarify)
+ add:sint_value_valid_def) apply(clarify)
+(*
       apply(subgoal_tac "0 \<le> headlen")
+*)
+    apply(subgoal_tac " - (57896044618658097711785492504343953926634992332820282019728792003956564819968::int) \<le> headlen")
        apply(clarify)
     apply(subgoal_tac "0 \<le> foldl (+) (0::int) (map abi_dynamic_size_bound vs)")
         apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
@@ -3621,7 +3627,7 @@ in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
        apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
       apply(cut_tac v = a in abi_dynamic_size_bound_nonneg)
     apply(simp  del: encode'.simps abi_dynamic_size_bound.simps
- add:uint_value_valid_def) apply(clarify)
+ add:sint_value_valid_def) apply(clarify)
     apply(subgoal_tac "0 \<le> foldl (+) (0::int) (map abi_dynamic_size_bound vs)")
           apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
           apply(subgoal_tac "length x1 \<le> abi_dynamic_size_bound a")
@@ -3799,7 +3805,7 @@ value "2 ^ 64:: int"
 lemma encode_correct_converse [rule_format] :
   "\<forall> code start . 
       can_encode_as v code start \<longrightarrow>
-      uint_value_valid 256 (abi_dynamic_size_bound v)  \<longrightarrow>
+      sint_value_valid 256 (abi_dynamic_size_bound v)  \<longrightarrow>
   (\<exists> code' . encode v = Ok code')"
 proof(induction v)
 case (Vuint x1 x2)
@@ -3876,7 +3882,7 @@ next
       apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))")
        apply(clarsimp)
     apply(case_tac
-"uint_value_valid (256::nat)
+"sint_value_valid (256::nat)
         (case v of Vfarray (t::abi_type) (n::nat) (l::abi_value list) \<Rightarrow> int (n * (32::nat)) + list_sum (map abi_dynamic_size_bound l)
          | Vtuple (ts::abi_type list) (vs::abi_value list) \<Rightarrow> int (length vs * (32::nat)) + list_sum (map abi_dynamic_size_bound vs) | Vbytes (bs::8 word list) \<Rightarrow> int ((32::nat) + length bs + (32::nat))
          | Vstring (s::char list) \<Rightarrow> int ((32::nat) + length s + (32::nat)) | Varray (t::abi_type) (l::abi_value list) \<Rightarrow> int ((32::nat) + length l * (32::nat)) + list_sum (map abi_dynamic_size_bound l))")        apply(clarsimp)
@@ -3897,7 +3903,7 @@ next
          apply(clarsimp)
 
         apply(simp)
-        apply(simp add:uint_value_valid_def)
+        apply(simp add:sint_value_valid_def)
     apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
     apply(simp)
 
@@ -3909,12 +3915,12 @@ next
       apply(simp add:list_all_iff)
 
    apply(clarsimp)
-     apply(frule_tac encode_tuple_tails_overflow_fail_farray') apply(simp add:list_all_iff)
+     apply(frule_tac encode_tuple_tails_overflow_fail') apply(simp add:list_all_iff)
 
        apply(atomize)
          apply(clarsimp)
 
-(* at this point, the intuition is that the offset can't encode as a u256 *)
+(* at this point, the intuition is that the offset can't encode as a s256 *)
        apply(frule_tac x = v in is_head_and_tail_vs_elem) apply(simp) apply(simp) apply(clarify)
        apply(drule_tac x = offset in spec) apply(rotate_tac -1)
        apply(drule_tac x = v in spec) apply(clarsimp)
@@ -3927,7 +3933,7 @@ next
 (* need to talk about how length of full encoding works out implies length of sub encoding
 also does *)
 
-    apply(subgoal_tac " uint_value_valid (256::nat)
+    apply(subgoal_tac " sint_value_valid (256::nat)
         (case v of Vfarray (t::abi_type) (n::nat) (l::abi_value list) \<Rightarrow> int (n * (32::nat)) + list_sum (map abi_dynamic_size_bound l) | Vtuple (ts::abi_type list) (vs::abi_value list) \<Rightarrow> int (length vs * (32::nat)) + list_sum (map abi_dynamic_size_bound vs)
          | Vbytes (bs::8 word list) \<Rightarrow> int ((32::nat) + length bs + (32::nat)) | Vstring (s::char list) \<Rightarrow> int ((32::nat) + length s + (32::nat))
          | Varray (t::abi_type) (l::abi_value list) \<Rightarrow> int ((32::nat) + length l * (32::nat)) + list_sum (map abi_dynamic_size_bound l))")
@@ -3945,7 +3951,7 @@ also does *)
          apply(clarsimp)
          apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
          apply(clarsimp)
-        apply(simp add:uint_value_valid_def)
+        apply(simp add:sint_value_valid_def)
 
        apply(rule_tac x = full_code in exI) apply(fastforce)
       apply(simp)
@@ -3983,7 +3989,7 @@ can_encode_as_tuple_split)
       apply(drule_tac x = xa in spec) apply(clarify)
     apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as xa code))")
          apply(simp del:abi_dynamic_size_bound.simps split:sum.splits)
-       apply(subgoal_tac "uint_value_valid (256::nat) (abi_dynamic_size_bound xa)")
+       apply(subgoal_tac "sint_value_valid (256::nat) (abi_dynamic_size_bound xa)")
     apply(clarify)
         apply(simp del:abi_dynamic_size_bound.simps split:sum.splits if_splits)
 
@@ -3997,7 +4003,7 @@ can_encode_as_tuple_split)
         apply(rule_tac abi_dynamic_size_bound_nonneg)
        apply(cut_tac v = xa in abi_dynamic_size_bound_nonneg)
 
-       apply(simp del:abi_dynamic_size_bound.simps add:uint_value_valid_def list_sum_def)
+       apply(simp del:abi_dynamic_size_bound.simps add:sint_value_valid_def list_sum_def)
        apply(clarify)
     apply(clarsimp)
     apply(rule_tac conjI) apply(clarsimp)
@@ -4039,7 +4045,7 @@ can_encode_as_tuple_split)
     apply(simp del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits)
       apply(clarify)
 
-      apply(subgoal_tac "uint_value_valid (256::nat) (abi_dynamic_size_bound v)")
+      apply(subgoal_tac "sint_value_valid (256::nat) (abi_dynamic_size_bound v)")
     apply(clarify)
 
        apply(simp del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
@@ -4053,11 +4059,31 @@ can_encode_as_tuple_split)
         apply(simp only:list_all_iff)
         apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
 
-        apply(simp add: uint_value_valid_def list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-       apply(simp only:abi_dynamic_size_bound.simps)
-       apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_sum_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+      apply(simp add: sint_value_valid_def list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+(* new *)
+       apply(subgoal_tac "- (57896044618658097711785492504343953926634992332820282019728792003956564819968::int) \<le> abi_dynamic_size_bound v")
+        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+    apply(case_tac "abi_type_isstatic (Ttuple (map abi_get_type x2))")
+         apply(simp only:abi_dynamic_size_bound.simps)
+        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+    apply(cut_tac l = x2 in abi_dynamic_size_bound_static_list)
+        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+           apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+          apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+         apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+        apply(clarify)
+         apply(simp only:abi_dynamic_size_bound.simps)
+apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+    apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
+apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
 
+apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+
+
+(*
     apply(subgoal_tac "map abi_dynamic_size_bound x2 = map (abi_static_size \<circ> abi_get_type) x2")
         apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
         apply(rule_tac map_ext)
@@ -4067,9 +4093,9 @@ apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_s
         apply(simp add:list_all_iff list_ex_iff)
         apply(simp add:list_all_iff list_ex_iff)
         apply(simp add:list_all_iff list_ex_iff)
-
+*)
      apply(case_tac "abi_type_isdynamic (abi_get_type v)")
-    apply(simp del: abi_dynamic_size_bound.simps split:sum.splits)
+(*    apply(simp del:  abi_dynamic_size_bound.simps split:sum.splits) *)
 
       apply(frule_tac x = v in is_head_and_tail_vs_elem)
     apply(simp)
@@ -4089,10 +4115,9 @@ apply(simp)
      apply(clarify)
 
 
-
     apply(clarify)
 
-    apply(frule_tac encode_tuple_tails_overflow_fail_farray')
+    apply(frule_tac encode_tuple_tails_overflow_fail')
     apply(simp add:list_all_iff)
 
       apply(frule_tac x = v in is_head_and_tail_vs_elem)
@@ -4106,7 +4131,7 @@ apply(simp)
 
       apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))")
        apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
-       apply(subgoal_tac "uint_value_valid (256::nat) (abi_dynamic_size_bound v)")
+       apply(subgoal_tac "sint_value_valid (256::nat) (abi_dynamic_size_bound v)")
         apply(clarify)
        apply(simp del: abi_dynamic_size_bound.simps encode'.simps split:if_splits)
 
@@ -4120,25 +4145,34 @@ apply(simp)
         apply(simp only:list_all_iff)
         apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
 
-       apply(simp add: uint_value_valid_def list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps)
-       apply(simp only:abi_dynamic_size_bound.simps)
-       apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_sum_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+       apply(simp add: sint_value_valid_def list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
 
-    apply(subgoal_tac "map abi_dynamic_size_bound x2 = map (abi_static_size \<circ> abi_get_type) x2")
-        apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-        apply(rule_tac map_ext)
+(* new *)
+       apply(subgoal_tac "- (57896044618658097711785492504343953926634992332820282019728792003956564819968::int) \<le> abi_dynamic_size_bound v")
+        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+    apply(case_tac "abi_type_isstatic (Ttuple (map abi_get_type x2))")
+         apply(simp only:abi_dynamic_size_bound.simps)
+        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+    apply(cut_tac l = x2 in abi_dynamic_size_bound_static_list)
+        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+           apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+          apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+         apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
         apply(clarify)
-        apply(simp)
-        apply(clarsimp)
-        apply(simp add:list_all_iff list_ex_iff)
-        apply(simp add:list_all_iff list_ex_iff)
-        apply(simp add:list_all_iff list_ex_iff)
+         apply(simp only:abi_dynamic_size_bound.simps)
+apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+        apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
+    apply(arith)
+apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+
+apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
+(* end new *)
 
       apply(rule_tac x = full_code in exI)
     apply(fastforce)
      apply(clarsimp)
-    apply(simp add:list_sum_def uint_value_valid_def del:abi_dynamic_size_bound.simps)
+    apply(simp add:list_sum_def sint_value_valid_def del:abi_dynamic_size_bound.simps)
     apply(clarify)
 
     apply(simp)
@@ -4188,20 +4222,20 @@ next
       apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code)) ")
          apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
 
-    apply(subgoal_tac "uint_value_valid (256::nat) (abi_dynamic_size_bound v)")
+    apply(subgoal_tac "sint_value_valid (256::nat) (abi_dynamic_size_bound v)")
         apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
         apply(clarify)
         apply(case_tac "abi_type_valid (abi_get_type v) \<and> abi_value_valid_aux v")
          apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
         apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
 
-       apply(simp add:uint_value_valid_def del: abi_dynamic_size_bound.simps encode'.simps)
+       apply(simp add:sint_value_valid_def del: abi_dynamic_size_bound.simps encode'.simps)
        apply(clarify)
         apply(cut_tac x = "abi_dynamic_size_bound v" and l = "(map abi_dynamic_size_bound x2)" in elem_lt_list_sum)
 
     apply(simp)
 
-    apply(case_tac "uint_value_valid (256::nat)
+    apply(case_tac "sint_value_valid (256::nat)
         (case v of Vfarray (t::abi_type) (n::nat) (l::abi_value list) \<Rightarrow> int (n * (32::nat)) + list_sum (map abi_dynamic_size_bound l)
          | Vtuple (ts::abi_type list) (vs::abi_value list) \<Rightarrow> int (length vs * (32::nat)) + list_sum (map abi_dynamic_size_bound vs)
          | Vbytes (bs::8 word list) \<Rightarrow> int ((32::nat) + length bs + (32::nat)) | Vstring (s::char list) \<Rightarrow> int ((32::nat) + length s + (32::nat))
@@ -4267,21 +4301,21 @@ next
          apply(clarsimp)
          apply(clarsimp)
 
-    apply(subgoal_tac "uint_value_valid (256::nat) (abi_static_size (abi_get_type v))")
+    apply(subgoal_tac "sint_value_valid (256::nat) (abi_static_size (abi_get_type v))")
       apply(clarsimp)
       apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))") apply(clarsimp)
        apply(simp split:if_splits)
       apply(rule_tac x = coded in exI) apply(fastforce)
 
-    apply(simp add:uint_value_valid_def)
-     apply(simp del: abi_dynamic_size_bound.simps add:abi_static_size_nonneg)
+     apply(simp add:sint_value_valid_def)
+     apply(cut_tac v = "abi_get_type v" in abi_static_size_nonneg) apply(arith)
 
     apply(clarify)
-    apply(frule_tac "encode_tuple_tails_overflow_fail_farray'")
+    apply(frule_tac "encode_tuple_tails_overflow_fail'")
        apply(simp del: abi_dynamic_size_bound.simps add:list_all_iff)
       apply(atomize)
     
-(* at this point, the intuition is that the offset can't encode as a u256 *)
+(* at this point, the intuition is that the offset can't encode as a s256 *)
        apply(frule_tac x = v in is_head_and_tail_vs_elem) apply(simp) apply(simp) apply(clarify)
        apply(drule_tac x = offset in spec) apply(rotate_tac 1)
        apply(drule_tac x = v in spec) apply(simp del: abi_dynamic_size_bound.simps)
@@ -4294,7 +4328,7 @@ apply(simp del: abi_dynamic_size_bound.simps)
 (* need to talk about how length of full encoding works out implies length of sub encoding
 also does *)
 
-    apply(subgoal_tac " uint_value_valid (256::nat)
+    apply(subgoal_tac " sint_value_valid (256::nat)
 (abi_dynamic_size_bound v)")
       apply(clarify)
 apply(simp del: abi_dynamic_size_bound.simps split:if_splits)
@@ -4309,11 +4343,11 @@ apply(simp del: abi_dynamic_size_bound.simps split:if_splits)
          apply(clarsimp)
          apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
          apply(clarsimp)
-        apply(simp add:uint_value_valid_def)
+        apply(simp add:sint_value_valid_def)
 
        apply(rule_tac x = full_code in exI) apply(fastforce)
       apply(simp)
-     apply(simp add:uint_value_valid_def)
+     apply(simp add:sint_value_valid_def)
 
     apply(subgoal_tac "list_nonneg (map abi_dynamic_size_bound x2)")
      apply(drule_tac list_nonneg_sum)

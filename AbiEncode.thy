@@ -151,7 +151,7 @@ this means we need some way to get the current offset
           (case encode'_tuple_tails rest headlen len_total' of
                                   Err s \<Rightarrow> Err s
                                   | Ok ts \<Rightarrow> 
-                                    (if uint_value_valid 256 (len_total + headlen) then Ok ((len_total + headlen, enc)#ts)
+                                    (if sint_value_valid 256 (len_total + headlen) then Ok ((len_total + headlen, enc)#ts)
                                      else Err ''Encoded value is too long''))))"
         
 

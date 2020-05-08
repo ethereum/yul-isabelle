@@ -107,7 +107,7 @@ iht_nil :  "is_head_and_tail [] [] [] []"
 | iht_dynamic : "\<And> xs ys ts tails x ptr  .
    is_head_and_tail xs ys ts tails \<Longrightarrow>
    abi_type_isdynamic (abi_get_type x) \<Longrightarrow>
-   is_head_and_tail (x#xs) ((Vuint 256 ptr) # ys) ((Tuint 256) # ts) ((ptr, x)#tails)"
+   is_head_and_tail (x#xs) ((Vsint 256 ptr) # ys) ((Tsint 256) # ts) ((ptr, x)#tails)"
 
 (*
 

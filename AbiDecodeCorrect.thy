@@ -500,7 +500,6 @@ lemma abi_decode_dyn_tuple_heads_succeed :
 "is_head_and_tail vs heads head_types tails \<Longrightarrow>
 (\<forall> heads' tails' count' offset pre1 pre2 post l bytes.
 decode'_dyn_tuple_heads (map abi_get_type vs) (int (length pre2)) (length pre1, (pre1 @ pre2 @ l @ post)) = Ok (heads', tails', count', bytes) \<longrightarrow>
-list_ex abi_type_isdynamic (map abi_get_type vs) \<longrightarrow>
 can_encode_as (Vtuple head_types heads) (pre1 @ pre2 @ l @ post) (int (length pre1) + int (length pre2)) \<longrightarrow>
 (\<forall> (offset::int) v::abi_value.
            (offset, v) \<in> set tails \<longrightarrow> can_encode_as v (pre1 @ pre2 @ l @ post) (int (length (pre1)) + offset)) \<longrightarrow>
@@ -564,7 +563,6 @@ and ?a3.0 = "int (length pre1) + int (length pre2)"
       apply(simp add:tuple_value_valid_aux_def)
     apply(clarsimp)
 
-(* i think this case should be a contradiction. *)
     apply(frule_tac vs = xs and heads = ys and h = xa in is_head_and_tail_heads_elem)
      apply(simp)
     apply(clarsimp)
@@ -596,7 +594,12 @@ and ?a3.0 = "int (length pre1) + int (length pre2)"
          apply(subgoal_tac "int (length (word_rsplit (word_of_int ptr :: 256 word) :: 8 word list)) = (32 :: int)") 
        apply(clarsimp)
 
-    (* remaining heads tuple is static *)
+      apply(cut_tac v = "Vtuple(map abi_get_type ys) ys" and code = "concat x1c" and pre = "pre1@pre2@word_rsplit (word_of_int ptr :: 256 word) :: 8 word list" and post = posta in Estatic; simp?)
+        apply(simp add:tuple_value_valid_aux_def)
+    apply(clarsimp)
+
+         apply(subgoal_tac "int (length (word_rsplit (word_of_int ptr :: 256 word) :: 8 word list)) = (32 :: int)") 
+       apply(clarsimp)
 
     sorry
 qed
