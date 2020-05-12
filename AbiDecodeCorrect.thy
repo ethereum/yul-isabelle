@@ -519,7 +519,7 @@ fun ht_combine :: "abi_value option \<Rightarrow> (int option) \<Rightarrow> abi
 
 (* problem - we need to shift tails in order to deal with discrepancy between the offsets. (?) *)
 (* almost there - now we need to fix heads *)
-lemma abi_decode_dyn_tuple_heads_succeed :
+lemma abi_decode_dyn_tuple_heads_succeed [rule_format]:
 "is_head_and_tail vs heads head_types tails \<Longrightarrow>
 (\<forall> heads' tails' count' offset pre1 pre2 post l bytes.
 decode'_dyn_tuple_heads (map abi_get_type vs) (int (length pre2)) (length pre1, (pre1 @ pre2 @ l @ post)) = Ok (heads', tails', count', bytes) \<longrightarrow>
@@ -657,10 +657,212 @@ lengths of l/pre/post etc *)
     done
 qed
 
+(*
+
+*)
+(*
+lemma abi_decode_dyn_tuple_tails_succeed :
+"
+ list_ex abi_type_isdynamic (map abi_get_type vs) \<Longrightarrow>
+       can_encode_as (Vtuple (map abi_get_type vs) vs) full_codea starta \<Longrightarrow>
+       decode'_dyn_tuple_heads (map abi_get_type vs) (0::int) (starta, full_codea) = Ok (a, aa, heads_length vs, b) \<Longrightarrow>
+       decode'_dyn_tuple_tails aa (map abi_get_type vs) a (heads_length vs) (starta, full_codea) = Ok (ac, newa2) \<Longrightarrow>
+       abi_type_isdynamic (abi_get_type x) \<Longrightarrow>
+       is_head_and_tail vs heads head_types tails \<Longrightarrow>
+       can_encode_as (Vtuple head_types heads) full_codea starta \<Longrightarrow>
+       (\<And>(offset::int) v::abi_value. (offset, v) \<in> set tails \<Longrightarrow> can_encode_as v full_codea (offset + starta)) \<Longrightarrow>
+       list_all abi_type_valid (map abi_get_type vs) \<Longrightarrow>
+       list_all abi_value_valid_aux vs \<Longrightarrow>
+       ts = map abi_get_type vs \<Longrightarrow>
+       x \<in> set vs \<Longrightarrow>
+       int (min (length full_codea) (nat starta)) = starta \<Longrightarrow>
+       those (map2 ht_combine a (map (case_option None (\<lambda>t::int. Some (t - starta))) aa)) = Some heads \<Longrightarrow>
+       map (\<lambda>x::int \<times> abi_value. fst x + starta) tails = somes aa \<Longrightarrow> ac = vs
+"
+*)
+
+(*        decode'_dyn_tuple_heads (map abi_get_type vs) (0::int) (start, full_code) = Ok (heads', tails', heads_length vs, bytes) \<longrightarrow>
+ *)
+
+(*
+decode'_dyn_tuple_heads (map abi_get_type vs) (int (length pre2)) (length pre1, (pre1 @ pre2 @ l @ post)) = Ok (heads', tails', count', bytes) \<longrightarrow>
+can_encode_as (Vtuple head_types heads) (pre1 @ pre2 @ l @ post) (int (length pre1) + int (length pre2)) \<longrightarrow>
+*)
+
+(* not sure if needed:
+(* 
+can_encode_as (Vtuple head_types heads) (full_code) (start) \<longrightarrow>
+ *)
+(*
+can_encode_as (Vtuple head_types heads) (pre@code@post) (int (length pre)) \<longrightarrow>
+(\<forall> (offset::int) v::abi_value.
+           (offset, v) \<in> set tails \<longrightarrow> can_encode_as v (pre@code@post) (int (length pre) + offset)) \<longrightarrow>
+*)
+*)
+(* need reasoning about prefix? *)
+lemma abi_decode_dyn_tuple_tails_succeed [rule_format]:
+"     
+  (\<forall>  code start heads' tails' offset bytes vs_out bytes'  heads head_types tails .
+       decode'_dyn_tuple_tails tails' (map abi_get_type vs) heads' offset (start, code) = Ok (vs_out, bytes') \<longrightarrow>
+       is_head_and_tail vs heads head_types tails \<longrightarrow>
+       those (map2 ht_combine heads' (map (case_option None (\<lambda>t::int. Some (t - start))) tails')) = Some heads \<longrightarrow>
+       map (\<lambda>x::int \<times> abi_value. fst x + start) tails = somes (tails') \<longrightarrow>
+       vs_out = vs)
+"
+proof(induction vs)
+  case Nil
+  then show ?case 
+    apply(clarsimp)
+    apply(case_tac tails'; clarsimp)
+    apply(case_tac heads'; clarsimp)
+    done
+next
+  case (Cons a vs)
+  then show ?case
+    apply(clarsimp)
+    apply(case_tac tails'; clarsimp)
+    apply(case_tac heads'; clarsimp)
+    apply(simp split:sum.splits option.splits prod.splits if_splits)
+     apply(clarsimp)
+    apply(case_tac aa; clarsimp)
+     apply(simp split:sum.splits option.splits prod.splits if_splits)
+
+    apply(clarsimp)
+
+
+     apply(drule_tac x = code in spec)
+apply(drule_tac x = "start" in spec) 
+     apply(drule_tac x = lista in spec) apply(drule_tac x = list in spec) 
+    apply(rotate_tac -1)
+apply(drule_tac x = offset in spec) apply(drule_tac x = x1a in spec) 
+     apply(clarsimp)
+
+    apply(case_tac aa; clarsimp)
+      apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
+
+    apply(case_tac "encode_static x"; clarsimp)
+
+
+     apply(drule_tac x = code in spec)
+apply(drule_tac x = "start" in spec) 
+     apply(drule_tac x = lista in spec) apply(drule_tac x = list in spec) 
+    apply(rotate_tac -1)
+    apply(drule_tac x = "offset + 32" in spec) apply(drule_tac x = x1a in spec) 
+    apply(rule_tac conjI)
+     apply(clarsimp)
+
+     defer
+    apply(clarsimp)
+
+qed
+
+
+(* is_head_and_tail.induct version *)
+lemma abi_decode_dyn_tuple_tails_succeed [rule_format]:
+"     
+  is_head_and_tail vs heads head_types tails \<Longrightarrow>
+  (\<forall>  code start heads' tails' offset bytes vs_out bytes'.
+       decode'_dyn_tuple_tails tails' (map abi_get_type vs) heads' offset (start, code) = Ok (vs_out, bytes') \<longrightarrow>
+
+       those (map2 ht_combine heads' (map (case_option None (\<lambda>t::int. Some (t - start))) tails')) = Some heads \<longrightarrow>
+       map (\<lambda>x::int \<times> abi_value. fst x + start) tails = somes (tails') \<longrightarrow>
+       vs_out = vs)
+"
+proof(induction rule:is_head_and_tail.induct)
+  case iht_nil
+  then show ?case
+    apply(clarsimp)
+    apply(case_tac tails'; clarsimp)
+    apply(case_tac heads'; clarsimp)
+    done
+next
+  case (iht_static xs ys ts tails x v)
+  then show ?case
+    apply(clarsimp)
+    apply(case_tac tails'; clarsimp)
+    apply(case_tac heads'; clarsimp)
+    apply(simp split:sum.splits option.splits prod.splits if_splits)
+     apply(clarsimp)
+    apply(case_tac aa; clarsimp)
+     apply(simp split:sum.splits option.splits prod.splits if_splits)
+
+    apply(clarsimp)
+
+
+     apply(drule_tac x = code in spec)
+apply(drule_tac x = "start" in spec) 
+     apply(drule_tac x = lista in spec) apply(drule_tac x = list in spec) 
+    apply(rotate_tac -1)
+apply(drule_tac x = offset in spec) apply(drule_tac x = x1a in spec) 
+     apply(clarsimp)
+
+    apply(case_tac aa; clarsimp)
+      apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
+
+    apply(case_tac "encode_static x"; clarsimp)
+
+
+     apply(drule_tac x = code in spec)
+apply(drule_tac x = "start" in spec) 
+     apply(drule_tac x = lista in spec) apply(drule_tac x = list in spec) 
+    apply(rotate_tac -1)
+    apply(drule_tac x = "offset + 32" in spec) apply(drule_tac x = x1a in spec) 
+    apply(rule_tac conjI)
+     apply(clarsimp)
+
+     defer
+    apply(clarsimp)
+
+
+
+    apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
+    apply(clarsimp)
+
+    apply(cut_tac v = "(Vtuple ts ys)" and pre = pre and code = code and post = post
+in Estatic; simp?)
+    apply(simp add:tuple_value_valid_aux_def)
+    apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
+      apply(clarsimp)
+      apply(case_tac "encode_static x"; clarsimp)
+    apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
+     apply(clarsimp)
+    apply(cut_tac v = "(Vtuple ts ys)" and pre = pre and code = code and post = post
+in Estatic; simp?)
+    apply(simp add:tuple_value_valid_aux_def)
+    apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
+      apply(clarsimp)
+      apply(case_tac "encode_static x"; clarsimp)
+    apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
+     apply(clarsimp)
+
+
+next
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case sorry
+qed
+
+(* 
+how do we get to ac = vs?
+
+*)
+(*
+lemma abi_decode_dyn_tuple_tails_succeed [rule_format]:
+"is_head_and_tail vs heads head_types tails \<Longrightarrow>
+(\<forall> heads' tails' count' offset pre1 pre2 post l bytes.
+decode'_dyn_tuple_heads (map abi_get_type vs) (int (length pre2)) (length pre1, (pre1 @ pre2 @ l @ post)) = Ok (heads', tails', count', bytes) \<longrightarrow>
+can_encode_as (Vtuple head_types heads) (pre1 @ pre2 @ l @ post) (int (length pre1) + int (length pre2)) \<longrightarrow>
+(\<forall> (offset::int) v::abi_value.
+           (offset, v) \<in> set tails \<longrightarrow> can_encode_as v (pre1 @ pre2 @ l @ post) (int (length pre1) + offset)) \<longrightarrow>
+those (map2 ht_combine heads' 
+       (map (\<lambda> to . (case to of None \<Rightarrow> None | Some t \<Rightarrow> Some (t - int (length pre1)))) tails')) = Some heads \<and>
+map (\<lambda> x . fst x + int (length pre1)) tails = (somes tails') \<and>
+count' = heads_length vs + int (length pre2))"
+*)
 lemma abi_decode_succeed2 [rule_format]:
   "\<forall> full_code start . 
    can_encode_as v full_code start \<longrightarrow>
-   decode (abi_get_type v) (drop (nat start) full_code) = Ok v"
+   ((0 :: int) \<le> start) \<longrightarrow>
+   (\<exists> len . decode' (abi_get_type v) (start, full_code) = Ok (v, len))"
 proof(induction v)
   case (Vtuple ts vs) thus ?case
     apply(clarsimp)
@@ -668,24 +870,49 @@ proof(induction v)
     apply(rule_tac conjI)
      defer (* static *)
      apply(clarsimp)
-     apply(rule_tac conjI)
-    defer (* static? *)
-
 (*
       apply(clarsimp) apply(rule_tac conjI) apply(simp add:list_ex_iff) apply(fastforce)
 *)
-      apply(clarsimp)
-    apply(rule_tac conjI)
-      apply(case_tac "decode'_dyn_tuple_heads ts (0::int) (0::int, drop (nat start) full_code)") apply(clarsimp)
+      apply(case_tac "decode'_dyn_tuple_heads ts (0::int) (start, full_code)") apply(clarsimp)
 
-       apply(case_tac "decode'_dyn_tuple_tails aa ts a ab (0::int, drop (nat start) full_code)") apply(clarsimp)
+       apply(case_tac "decode'_dyn_tuple_tails aa ts a ab (start, full_code)") apply(clarsimp)
          apply(rename_tac  newa2)
     apply(rule_tac ?a1.0 = "(Vtuple ts vs) " and
 ?a2.0 = full_code and
 ?a3.0 = start in can_encode_as.cases; clarsimp?)
          apply(simp add:tuple_value_valid_aux_def)
+         apply(frule_tac encode_correct_converse_valid; clarsimp)
+       apply(simp add:tuple_value_valid_aux_def) 
+(*    apply(subgoal_tac *)
+    apply(subgoal_tac "int (min (length full_codea) (nat starta)) = starta")
+(*        apply(frule_tac can_encode_as_start) *)
+         apply(frule_tac
+?pre1.0 = "take (nat starta) full_codea" and ?pre2.0 = "[]"  and l = "drop (nat starta) full_codea" and post = "[]" in
+ abi_decode_dyn_tuple_heads_succeed)
+            apply(simp)
+          apply(simp)
+         apply(simp)
+         apply(atomize) 
+         apply(rotate_tac 1)
+         apply(drule_tac x = offset in spec) apply(rotate_tac -1)
+         apply(drule_tac x = v in  spec) apply(clarsimp) apply(simp add:ab_semigroup_add_class.add.commute)
+    apply(clarsimp)
 
-         apply(atomize)
+(*
+           apply(subgoal_tac "abi_type_isstatic (abi_get_type (Vtuple head_types heads))")
+    apply(rule_tac ?a1.0 = "(Vtuple head_types heads)"
+and ?a2.0 = full_codea and ?a3.0 = starta
+in can_encode_as.cases; simp)
+    apply(cut_tac v = "( (Vtuple head_types heads))" and 
+code = code and pre = "[]" and post = post in Estatic; simp)
+            apply(simp add:list_ex_iff)
+           apply(clarsimp)apply(simp add:list_ex_iff) apply(clarsimp)
+
+           apply(frule_tac ht = xb in is_head_and_tail_head_types_elem; simp) 
+
+    apply(simp)
+
+             apply(atomize)
          apply(subgoal_tac "\<exists> v . v \<in> set vs \<and> abi_get_type v = t") apply(clarsimp)
           apply(drule_tac x = v in  spec) apply(clarsimp)
           apply(frule_tac x = v in is_head_and_tail_vs_elem; simp?)
@@ -787,5 +1014,5 @@ lemma abi_decode_succeed_converse :
     decode (abi_get_type v) full_code = Ok v \<Longrightarrow>
     can_encode_as v full_code 0 (length full_code)"
   sorry
-
+*)
 end
