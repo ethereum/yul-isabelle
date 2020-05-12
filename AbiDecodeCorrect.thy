@@ -648,8 +648,6 @@ apply(drule_tac x = "concat list" in spec)
      apply(simp add:append_eq_conv_conj)
 
     (* dynamic *)
-(* should work but also need to do some annoying reasoning here about
-lengths of l/pre/post etc *)
     apply(clarsimp)
     apply(case_tac "t \<in> set ts"; clarsimp)
 (* contradiction: t is dynamic but ts is head_types *)
@@ -661,7 +659,7 @@ qed
 
 *)
 (*
-lemma abi_decode_dyn_tuple_tails_succeed :
+lemma abi_decode_dyn_tuple_heads_succeed :
 "
  list_ex abi_type_isdynamic (map abi_get_type vs) \<Longrightarrow>
        can_encode_as (Vtuple (map abi_get_type vs) vs) full_codea starta \<Longrightarrow>
@@ -691,22 +689,34 @@ can_encode_as (Vtuple head_types heads) (pre1 @ pre2 @ l @ post) (int (length pr
 
 (* not sure if needed:
 (* 
-can_encode_as (Vtuple head_types heads) (full_code) (start) \<longrightarrow>
  *)
 (*
-can_encode_as (Vtuple head_types heads) (pre@code@post) (int (length pre)) \<longrightarrow>
-(\<forall> (offset::int) v::abi_value.
-           (offset, v) \<in> set tails \<longrightarrow> can_encode_as v (pre@code@post) (int (length pre) + offset)) \<longrightarrow>
+
 *)
 *)
 (* need reasoning about prefix? *)
+(* maybe need to strengthen lemma about encode_dyn_tuple_heads to state that
+   heads will all be static. *)
+(* might be able to get away with just adding can_encode_as premises.
+(from previous theorem). just need to figure out how to generalize them
+it seems like there is some kind of dependency on some of the other is_head_and_tail parameters
+that are making is_head_and_tail induction not work.
+*)
+(* use arbitrary in the induction method *)
+(* needed?        is_head_and_tail vs heads head_types tails \<longrightarrow>
+
+*)
+(* have a smaller lemma for a single head *)
+(*
 lemma abi_decode_dyn_tuple_tails_succeed [rule_format]:
 "     
-  (\<forall>  code start heads' tails' offset bytes vs_out bytes'  heads head_types tails .
-       decode'_dyn_tuple_tails tails' (map abi_get_type vs) heads' offset (start, code) = Ok (vs_out, bytes') \<longrightarrow>
-       is_head_and_tail vs heads head_types tails \<longrightarrow>
-       those (map2 ht_combine heads' (map (case_option None (\<lambda>t::int. Some (t - start))) tails')) = Some heads \<longrightarrow>
-       map (\<lambda>x::int \<times> abi_value. fst x + start) tails = somes (tails') \<longrightarrow>
+  (\<forall>  code pre1 pre2 post start heads' tails' offset bytes vs_out bytes'  heads head_types tails .
+       decode'_dyn_tuple_tails tails' (map abi_get_type vs) heads' offset (int (length pre1), pre1@pre2@code@post) = Ok (vs_out, bytes') \<longrightarrow>
+        can_encode_as (Vtuple (map abi_get_type vs) vs) (pre1@pre2@code@post) (int (length pre1)) \<longrightarrow>
+        (\<forall> (offset::int) v::abi_value.
+           (offset, v) \<in> set tails \<longrightarrow> can_encode_as v (pre1@pre2@code@post) (int (length pre1) + offset)) \<longrightarrow>
+       those (map2 ht_combine heads' (map (case_option None (\<lambda>t::int. Some (t - int (length pre1)))) tails')) = Some heads \<longrightarrow>
+       map (\<lambda>x::int \<times> abi_value. fst x + int (length pre1)) tails = somes (tails') \<longrightarrow>
        vs_out = vs)
 "
 proof(induction vs)
@@ -723,6 +733,9 @@ next
     apply(case_tac tails'; clarsimp)
     apply(case_tac heads'; clarsimp)
     apply(simp split:sum.splits option.splits prod.splits if_splits)
+(* second goal should be resolved by a lemma about how
+decode'_dyn_tuple_tails only succeeds if the inputs have same length
+and don't "collide" *)
      apply(clarsimp)
     apply(case_tac aa; clarsimp)
      apply(simp split:sum.splits option.splits prod.splits if_splits)
@@ -730,13 +743,51 @@ next
     apply(clarsimp)
 
 
+
+    apply(rule_tac ?a1.0 = "(Vtuple (abi_get_type a # map abi_get_type vs) (a # vs))"
+and ?a2.0 = "(pre1 @ pre2 @ code @ post)"
+and ?a3.0 = "(int (length pre1)) "
+in can_encode_as.cases; simp?)
+
+      apply(clarsimp)
+    apply(case_tac "encode_static a"; clarsimp)
+      apply(simp split:sum.splits option.splits prod.splits if_splits)
+      apply(clarsimp)
+    apply(simp add:tuple_value_valid_aux_def)
+      apply(drule_tac x = "concat x1b" in spec)
+      apply(drule_tac x = pre in spec)
+      apply(drule_tac x = "aa" in spec)
+      apply(drule_tac x = "posta" in spec)
+      apply(drule_tac x = "lista" in spec)
+      apply(drule_tac x = list in spec)
+    apply(rotate_tac -1)
+      apply(drule_tac x = offset in spec) (* may need change*)
+      apply(drule_tac x = x1a in spec) apply(clarsimp)
+    apply(cut_tac v = "(Vtuple (map abi_get_type vs) vs)"  and code = "concat x1b" and pre = "pre @ aa" and post = posta in
+Estatic; simp?)
+
+    apply(simp add:tuple_value_valid_aux_def)
+*)
+(*
+
      apply(drule_tac x = code in spec)
-apply(drule_tac x = "start" in spec) 
-     apply(drule_tac x = lista in spec) apply(drule_tac x = list in spec) 
+     apply(drule_tac x = pre1 in spec)
+     apply(drule_tac x = pre2 in spec)
+apply(drule_tac x = post in spec)
+     apply(drule_tac x = lista in spec)
+apply(drule_tac x = list in spec)
+
     apply(rotate_tac -1)
 apply(drule_tac x = offset in spec) apply(drule_tac x = x1a in spec) 
      apply(clarsimp)
 
+      apply(clarsimp)
+    apply(case_tac "encode_static x2"; clarsimp)
+      apply(simp split:sum.splits option.splits prod.splits if_splits)
+      apply(clarsimp)
+    apply(simp add:tuple_value_valid_aux_def) apply(clarsimp)
+    apply(drule_tac x = heads in
+(*
     apply(case_tac aa; clarsimp)
       apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
 
@@ -753,19 +804,23 @@ apply(drule_tac x = "start" in spec)
 
      defer
     apply(clarsimp)
-
-qed
-
+*)
+oops
+*)
 
 (* is_head_and_tail.induct version *)
+(* need an extra assumption to distinguish static signed-int case
+from "real" dynamic header? *)
 lemma abi_decode_dyn_tuple_tails_succeed [rule_format]:
 "     
   is_head_and_tail vs heads head_types tails \<Longrightarrow>
-  (\<forall>  code start heads' tails' offset bytes vs_out bytes'.
-       decode'_dyn_tuple_tails tails' (map abi_get_type vs) heads' offset (start, code) = Ok (vs_out, bytes') \<longrightarrow>
-
-       those (map2 ht_combine heads' (map (case_option None (\<lambda>t::int. Some (t - start))) tails')) = Some heads \<longrightarrow>
-       map (\<lambda>x::int \<times> abi_value. fst x + start) tails = somes (tails') \<longrightarrow>
+  (\<forall>  code pre1 pre2 post heads' tails' offset bytes vs_out bytes'.
+       decode'_dyn_tuple_tails tails' (map abi_get_type vs) heads' offset (int (length(pre1)), pre1@pre2@code@post) = Ok (vs_out, bytes') \<longrightarrow>
+        can_encode_as (Vtuple head_types heads) (pre1@pre2@code@post) (int (length pre1 + length (pre2))) \<longrightarrow>
+        (\<forall> (offset::int) v::abi_value.
+           (offset, v) \<in> set tails \<longrightarrow> can_encode_as v (pre1@pre2@code@post) (int (length pre1) + offset)) \<longrightarrow>
+       those (map2 ht_combine heads' (map (case_option None (\<lambda>t::int. Some (t - int (length pre1)))) tails')) = Some heads \<longrightarrow>
+       map (\<lambda>x::int \<times> abi_value. fst x + int (length pre1)) tails = somes (tails') \<longrightarrow>
        vs_out = vs)
 "
 proof(induction rule:is_head_and_tail.induct)
@@ -788,18 +843,119 @@ next
 
     apply(clarsimp)
 
+    apply(rule_tac ?a1.0 = "(Vtuple (abi_get_type x #  ts) (x # ys))"
+and ?a2.0 = "(pre1 @ pre2 @ code @ post)"
+and ?a3.0 = "(int (length pre1 + length pre2)) "
+in can_encode_as.cases; simp?)
+      apply(clarsimp)
+    apply(case_tac "encode_static x"; clarsimp)
+      apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
+      apply(clarsimp)
 
-     apply(drule_tac x = code in spec)
-apply(drule_tac x = "start" in spec) 
-     apply(drule_tac x = lista in spec) apply(drule_tac x = list in spec) 
+      apply(subgoal_tac "pre1 @ pre2 = pre")
+    apply(thin_tac "int (length pre1) + int (length pre2) = int (length pre)")
+
+     apply(drule_tac x = "concat x1b" in spec)
+apply(drule_tac x = "pre1" in spec) 
+      apply(drule_tac x = "pre2@a" in spec) apply(drule_tac x = posta in spec) 
+      apply(drule_tac x = lista in  spec)
+    apply(drule_tac x = list in  spec)
     apply(rotate_tac -1)
 apply(drule_tac x = offset in spec) apply(drule_tac x = x1a in spec) 
      apply(clarsimp)
 
-    apply(case_tac aa; clarsimp)
-      apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
+    apply(cut_tac v = "(Vtuple ts ys)" and pre = "pre1 @ pre2 @ a" and code = "concat x1b" and post = posta
+in Estatic; simp?)
+    apply(simp add:tuple_value_valid_aux_def)
+    apply(simp add:append_eq_conv_conj)
 
-    apply(case_tac "encode_static x"; clarsimp)
+     apply(clarsimp)
+    apply(case_tac "t \<in> set ts"; clarsimp)
+     apply(frule_tac ht = t in is_head_and_tail_head_types_elem; simp?)
+
+(* contradiction here? *)
+    apply(case_tac aa; clarsimp)
+    apply(simp del:decode_static.simps split:if_split_asm sum.split_asm prod.split_asm)
+    apply(clarify)
+
+        apply(rule_tac ?a1.0 = "(Vtuple (Tsint (256::nat) # ts) (Vsint (256::nat) ab # ys))"
+and ?a2.0 = "(pre1 @ pre2 @ code @ post)"
+and ?a3.0 = "(int (length pre1 + length pre2)) "
+in can_encode_as.cases; (simp del:decode_static.simps)?)
+
+    apply(clarify)
+    apply(simp del:decode_static.simps split:sum.splits)
+
+     apply(drule_tac x = ab in spec)
+     apply(drule_tac x = b in spec)
+    apply(simp del:decode_static.simps split:sum.splits)
+     apply(clarify)
+
+    apply(cut_tac v = "b"
+and code = "concat x1a"
+and pre = "pre1 @ pre2 @ word_rsplit (word_of_int ab :: 256 word) :: 8 word list"
+and post = posta
+in Estatic;
+(simp del:decode_static.simps split:sum.splits)?)
+
+      apply(subgoal_tac "pre1 @ pre2 = pre")
+    apply(thin_tac "int (length pre1) + int (length pre2) = int (length pre)")
+      apply(clarify)
+    apply(simp del:decode_static.simps split:sum.splits)
+    apply(simp add:tuple_value_valid_aux_def del:decode_static.simps split:sum.splits)
+      apply(clarify)
+
+    apply(cut_tac v = "Vtuple (map abi_get_type ys) ys"
+and code = "concat x1a"
+and pre = "pre1 @ pre2 @ word_rsplit (word_of_int ab :: 256 word) :: 8 word list"
+and post = posta
+in Estatic;
+(simp del:decode_static.simps split:sum.splits)?)
+    apply(simp del:decode_static.simps split:sum.splits add:tuple_value_valid_aux_def)
+
+      apply(drule_tac x = "concat x1a" in spec)
+      apply(drule_tac x = "pre1" in spec)
+
+      apply(drule_tac x = "pre2 @ word_rsplit (word_of_int ab :: 256 word) :: 8 word list" in spec)
+
+      apply(drule_tac x = posta in spec)
+
+
+      apply(drule_tac x = lista in spec) 
+      
+      apply(drule_tac x = list in spec)
+   apply(simp add: Let_def del: List.drop_append  split: if_split_asm sum.split_asm prod.split_asm)
+
+      apply(rotate_tac -1)
+
+      apply(drule_tac x = "offset + 32" in spec) apply(drule_tac x = x1d in spec) 
+    
+apply(simp add: Let_def del: List.drop_append  split: if_split_asm sum.split_asm prod.split_asm)
+
+(*
+      apply(rule_tac conjI)
+apply(simp add: Let_def del: List.drop_append  split: if_split_asm sum.split_asm prod.split_asm)
+(* encoding of offset is correct*)
+       apply(rotate_tac -2)
+       apply(clarify)
+    apply(rule_tac conjI) apply(simp del:List.drop_append)
+       apply(frule_tac sint_reconstruct_valid; (simp del: List.drop_append)?)
+       apply(drule_tac sint_reconstruct; (simp del: List.drop_append)?)
+          apply(clarsimp)
+
+
+         apply(subgoal_tac "l @ drop (length l) (word_rsplit (word_of_int ptr :: 256 word) :: 8 word list) = word_rsplit (word_of_int ptr :: 256 word) ")
+          apply(clarsimp)
+    apply(cut_tac n = "length l" and xs = "(word_rsplit (word_of_int ptr :: 256 word) :: 8 word list)" in append_take_drop_id)
+         apply(clarsimp)
+
+        apply(clarsimp)
+         apply(frule_tac sint_reconstruct_valid; simp?)
+        apply(drule_tac sint_reconstruct; simp?)
+       apply(arith)
+
+      apply(drule_tac sint_valid_length;simp?)
+     apply(simp add:append_eq_conv_conj)
 
 
      apply(drule_tac x = code in spec)
@@ -834,8 +990,8 @@ in Estatic; simp?)
       apply(case_tac "encode_static x"; clarsimp)
     apply(simp add:Let_def split: if_split_asm sum.splits prod.splits)
      apply(clarsimp)
-
-
+*)
+    oops
 next
   case (iht_dynamic xs ys ts tails x ptr)
   then show ?case sorry
