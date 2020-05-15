@@ -1429,7 +1429,7 @@ next
   case (Vbytes bs)
   then show ?case
     apply(clarify)
-    apply(cut_tac  l = bs and pre = pre and count = "word_rsplit (word_of_int (int (length bs)))"
+    apply(cut_tac  l = bs and pre = pre and count = "word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list"
 and code = "drop 32 code"
 and post = post in Ebytes)
        apply(simp add:bytes_value_valid_def encode_def) apply(simp split:if_splits)
@@ -1443,18 +1443,19 @@ and post = post in Ebytes)
       apply(simp add: word_rsplit_def)
        apply(simp add:bin_rsplit_len)
      apply(simp add:encode_def) apply(simp add:bytes_value_valid_def)
-     apply(simp split:if_splits)
+      apply(simp split:if_splits)
+
+      apply(simp add: word_rsplit_def)
+     apply(simp add:bin_rsplit_len)
+
      apply(cut_tac
 v = "(Vuint (256::nat) (int (length bs)))"
-and pre = pre and code = "word_rsplit (word_of_int (int (length bs)) :: 256 word)" and post = "(drop 32 code) @ post" in Estatic)
+and pre = pre and code = "word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list" and post = "(drop 32 code) @ post" in Estatic)
         apply(simp) apply(simp add:bytes_value_valid_def)
-      apply(simp)
-     apply(simp)
 
     apply(simp add:encode_def)
     apply(simp add:bytes_value_valid_def split:if_splits prod.splits)
     apply(clarsimp)
-    apply(case_tac x2; clarsimp)
 
     apply(subgoal_tac
 "length (word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list) = 32")
@@ -1462,9 +1463,11 @@ and pre = pre and code = "word_rsplit (word_of_int (int (length bs)) :: 256 word
       apply(simp add: word_rsplit_def)
      apply(simp add:bin_rsplit_len)
 
+    apply(simp add: encode_def  split:if_splits)
+    apply(clarsimp)
         apply(subgoal_tac
 "length (word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list) = 32")
-     apply(clarsimp)
+      apply(simp add: encode_def bytes_value_valid_def split:if_splits)
       apply(simp add: word_rsplit_def)
      apply(simp add:bin_rsplit_len)
     done
@@ -1479,10 +1482,59 @@ next
 
      apply(simp)
 
+(*
+(* new *)
+    apply(cut_tac  l = "string_to_bytes s" and pre = pre and count = "word_rsplit (word_of_int (int (length (string_to_bytes s))))"
+and code = "drop 32 code"
+and post = post in Ebytes)
+       apply(simp add:string_value_valid_def bytes_value_valid_def encode_def) apply(simp split:if_splits)
+       apply(simp add:bytes_value_valid_def encode_def) apply(simp split:if_splits)
+
+    apply(simp split:prod.splits)
+    apply(subgoal_tac
+"length (word_rsplit (word_of_int (int (length s)) :: 256 word) :: 8 word list) = 32")
+       apply(clarsimp)
+      apply(simp add: word_rsplit_def)
+       apply(simp add:bin_rsplit_len)
+     apply(simp add:encode_def) apply(simp add:bytes_value_valid_def)
+      apply(simp split:if_splits)
+
+      apply(simp add: word_rsplit_def)
+     apply(simp add:bin_rsplit_len)
+
+     apply(cut_tac
+v = "(Vuint (256::nat) (int (length bs)))"
+and pre = pre and code = "word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list" and post = "(drop 32 code) @ post" in Estatic)
+        apply(simp) apply(simp add:bytes_value_valid_def)
+
+    apply(simp add:encode_def)
+    apply(simp add:bytes_value_valid_def split:if_splits prod.splits)
+    apply(clarsimp)
+
+    apply(subgoal_tac
+"length (word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list) = 32")
+     apply(clarsimp)
+      apply(simp add: word_rsplit_def)
+     apply(simp add:bin_rsplit_len)
+
+    apply(simp add: encode_def  split:if_splits)
+    apply(clarsimp)
+        apply(subgoal_tac
+"length (word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list) = 32")
+      apply(simp add: encode_def bytes_value_valid_def split:if_splits)
+      apply(simp add: word_rsplit_def)
+     apply(simp add:bin_rsplit_len)
+(* end new *)
+*)
       (* copy-pasted proof from Vbytes case, should fix *)
     apply(cut_tac  l = "string_to_bytes s" and pre = pre and count = "word_rsplit (word_of_int (int (length (string_to_bytes s))))"
 and code = "drop 32 code"
 and post = post in Ebytes)
+(*
+    apply(cut_tac  l = "string_to_bytes s" and pre = pre and count = "word_rsplit (word_of_int (int (length (string_to_bytes s))))"
+and code = "drop 32 code"
+and post = post in Ebytes)
+*)
        apply(simp add:string_value_valid_def bytes_value_valid_def encode_def) apply(simp split:if_splits)
 
       apply(simp add:encode_def) apply(simp add:string_value_valid_def)
@@ -1513,8 +1565,6 @@ and pre = pre and code = "word_rsplit (word_of_int (int (length (string_to_bytes
       apply(simp add: word_rsplit_def)
      apply(simp add:bin_rsplit_len)
 
-    apply(simp)
-
     apply(simp add:encode_def string_value_valid_def split:if_splits prod.splits)
     apply(simp add:Let_def)
         apply(simp add:encode_def string_value_valid_def split:if_splits prod.splits)
@@ -1523,7 +1573,29 @@ and pre = pre and code = "word_rsplit (word_of_int (int (length (string_to_bytes
         apply(simp)
      apply(clarsimp)
       apply(simp add: word_rsplit_def)
-    apply(simp add:bin_rsplit_len)
+      apply(simp add:bin_rsplit_len)
+
+     apply(cut_tac
+v = "(Vuint (256::nat) (int (length (string_to_bytes s))))"
+and pre = pre and code = "word_rsplit (word_of_int (int (length (string_to_bytes s))) :: 256 word)" and post = "(drop 32 code) @ post" in Estatic)
+        apply(simp) apply(simp add:string_value_valid_def encode_def split:if_splits)
+
+    apply(simp add:encode_def)
+     apply(simp add:string_value_valid_def bytes_value_valid_def Let_def split:if_splits prod.splits)
+
+
+        apply(simp add:encode_def)
+    apply(simp add:string_value_valid_def bytes_value_valid_def  split:if_splits prod.splits )
+    apply(simp only:Let_def) apply(clarify)
+
+    apply(subgoal_tac
+"length (word_rsplit (word_of_int (int (length (s))) :: 256 word) :: 8 word list) = 32")
+     apply(simp add: word_rsplit_def)
+
+    apply(simp add:uint_value_valid_def)
+     apply(simp add: word_rsplit_def)
+      apply(simp add:bin_rsplit_len)
+
     done
 next
   case (Varray t vs)

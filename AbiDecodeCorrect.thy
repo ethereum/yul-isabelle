@@ -1482,6 +1482,11 @@ apply(drule_tac x =x in spec)
     done
 qed
 
+lemma my_replicate_map [rule_format]:
+  "list_all (\<lambda> x . f x = y) l \<longrightarrow>
+   map f l = replicate (length l) y"
+proof(induction l; auto) qed
+
 
 declare decode'.simps [simp del]
 lemma abi_decode_succeed2 [rule_format]:
@@ -1578,7 +1583,164 @@ next
     done
 next
   case (Vfarray x1 x2 x3a)
-  then show ?case sorry
+  then show ?case
+  proof(cases "abi_type_isstatic x1")
+    case True
+    then show ?thesis using Vfarray
+    apply(clarify)
+    apply(drule_tac can_encode_as.cases; simp)
+    apply(frule_tac prefix = pre and post = post in abi_encode_decode_static; simp del:decode_static.simps)
+    apply(simp add:decode'.simps)
+    apply(clarify)
+    apply(frule_tac encode_static_size) apply(simp)
+    apply(simp)
+      done
+  next
+    case False
+    then show ?thesis using Vfarray
+    apply(clarify)
+    apply(simp)
+    apply(rule_tac ?a1.0 = "(Vfarray x1 x2 x3a)" and ?a2.0 = full_code and ?a3.0 = start
+in can_encode_as.cases; simp?)
+       apply(clarsimp)
+
+
+    
+     apply(clarsimp)    
+     apply(simp (no_asm_simp) add:decode'.simps)
+      apply(simp add:farray_value_valid_aux_def)
+      apply(clarsimp)
+
+      apply(atomize)
+      apply(simp add:Let_def)
+
+      apply(case_tac "decode'_dyn_tuple_heads (replicate (length x3a) x1) (0::int) (starta, full_codea) ") apply(clarsimp)
+         apply(rename_tac  newa)
+
+           apply(subgoal_tac "int (min (length full_codea) (nat starta)) = starta")
+    apply(subgoal_tac "starta \<ge> 0")
+        apply(frule_tac
+?pre1.0 = "take(nat starta) full_codea" and ?pre2.0 = "[]"
+and ?l = "drop (nat starta) full_codea"
+and post = "[]"
+and heads' = a
+and tails' = aa
+and count' = ab
+and bytes = newa in abi_decode_dyn_tuple_heads_succeed; (simp)?)
+
+      apply(simp add:my_replicate_map)
+
+
+          apply(drule_tac x = offset in spec) apply(rotate_tac -1) apply(drule_tac x = v in spec) apply(clarsimp)
+           apply(subgoal_tac "starta + offset = offset + starta")
+            apply(arith) apply(arith)
+
+       apply(case_tac "decode'_dyn_tuple_tails aa (replicate (length x3a) x1) a ab (starta, full_codea)") apply(clarsimp)
+        apply(rename_tac  newa2)
+    apply(frule_tac can_encode_as_start; simp?)
+
+    apply(cut_tac
+?pre1.0 = "take(nat starta) full_codea" and ?pre2.0 = "[]"
+and ?code = "drop (nat starta) full_codea"
+and post = "[]"
+and heads' = a
+and tails' = aa
+and offset = "heads_length x3a"
+and bytes' = newa2 in abi_decode_dyn_tuple_tails_succeed; (simp)?)
+
+      apply(simp add:my_replicate_map)
+
+          apply(drule_tac x = offset in spec) apply(rotate_tac -1) apply(drule_tac x = v in spec) apply(clarsimp)
+           apply(subgoal_tac "starta + offset = offset + starta")
+           apply(arith) apply(arith)
+
+       apply(case_tac "decode'_dyn_tuple_tails aa (replicate (length x3a) x1) a ab (starta, full_codea)") apply(clarsimp)
+        apply(rename_tac  newa2)
+    apply(frule_tac can_encode_as_start; simp?)
+
+
+    apply(clarsimp)
+
+         apply(frule_tac abi_decode_dyn_tuple_tails_fail) 
+      apply(simp add:my_replicate_map)
+          apply(clarsimp)
+    apply(frule_tac offset' = offset' and t = t and aa = aa and a = a and starta = starta in
+is_head_and_tail_wellbehaved; simp?) apply(simp add:my_replicate_map)
+         apply(clarsimp)
+         apply(drule_tac x = "offset' - starta" in spec) apply(rotate_tac -1) apply(drule_tac x = v in spec) apply(clarsimp)
+         apply(frule_tac offset = "offset' - starta" and x = v in is_head_and_tail_tails_elem; simp?)
+         apply(clarsimp)
+         apply(drule_tac x = v in spec) apply(clarsimp)
+         apply(drule_tac x = full_codea in spec) apply(drule_tac x = offset' in spec)
+    apply(clarsimp)
+
+        apply(simp add:can_encode_as_start_nonneg)
+    apply(frule_tac can_encode_as_start)
+       apply(frule_tac can_encode_as_start_nonneg)
+       apply(subgoal_tac "0 \<le> foldl (+) (0::int) (map (abi_static_size \<circ> abi_get_type) x3a)")
+        apply(arith)
+       apply(cut_tac l = "(map (abi_static_size \<circ> abi_get_type) x3a)" in list_nonneg_sum)
+        apply(simp add:list_nonneg_def)
+        apply(simp add:list_all_iff abi_static_size_nonneg) apply(simp add:list_sum_def)
+
+
+    apply(frule_tac abi_decode_dyn_tuple_heads_fail; simp?)
+        apply(simp add:can_encode_as_start_nonneg)
+       apply(simp add:can_encode_as_start_nonneg)
+
+      apply(subgoal_tac "replicate (length x3a) x1 = map abi_get_type x3a")
+
+       apply(simp add:ty_heads_length_heads_length)
+
+           apply(subgoal_tac "abi_type_isstatic (abi_get_type (Vtuple head_types heads))")
+    apply(rule_tac ?a1.0 = "(Vtuple head_types heads)"
+and ?a2.0 = full_codea and ?a3.0 = starta
+in can_encode_as.cases; simp)
+         apply(clarsimp)
+         apply(frule_tac heads_length_heads; simp?) apply(simp)
+         apply(simp)
+        apply(frule_tac heads_length_heads; simp?)
+    apply(simp add:can_encode_as_start_nonneg)
+        apply(simp)
+
+       apply(clarsimp) apply(simp add:list_ex_iff) apply(clarsimp)
+
+       apply(frule_tac ht = x in is_head_and_tail_head_types_elem; simp) 
+
+      apply(simp add:my_replicate_map)
+
+      apply(clarsimp)
+
+      apply(simp add: can_encode_as_start_nonneg)
+
+     apply(rule_tac ?a1.0 = "(Vtuple head_types heads)"
+and ?a2.0 = full_codea and ?a3.0 = starta
+in can_encode_as.cases; simp)
+        apply(clarsimp)
+
+       apply(simp split:sum.splits)
+
+      apply(subgoal_tac "tbad = x1"; clarsimp)
+       apply(simp add:list_all_iff)
+
+       apply(subgoal_tac "set (replicate (length x3a) x1) = set (tpre @ tbad # tpost)")
+      apply(thin_tac "replicate (length x3a) x1 = tpre @ tbad # tpost")
+        apply(clarsimp) apply(simp add:set_replicate_conv_if)
+      apply(case_tac x3a; clarsimp)
+
+       apply(simp)
+
+      apply(subgoal_tac "tbad = x1"; clarsimp)
+       apply(simp add:list_all_iff)
+
+       apply(subgoal_tac "set (replicate (length x3a) x1) = set (tpre @ tbad # tpost)")
+      apply(thin_tac "replicate (length x3a) x1 = tpre @ tbad # tpost")
+        apply(clarsimp) apply(simp add:set_replicate_conv_if)
+      apply(case_tac x3a; clarsimp)
+
+       apply(simp)
+      done
+  qed
 next
 
   case (Vtuple ts vs) thus ?case
@@ -1754,7 +1916,15 @@ in Estatic; simp)
 
     done
 next
+  (* problem with count in
+bytes case
 
+need to make sure that count is not empty
+and actually contains the encoding
+of the offset
+
+
+*)
   case (Vbytes x)
   then show ?case
     apply(clarsimp)
@@ -1785,122 +1955,467 @@ del:pad_bytes.simps skip_padding.simps decode_uint.simps take_append
      apply(simp add:uint_valid_length)
     apply(simp split:prod.splits option.splits)
     apply(clarsimp)
+    apply(case_tac x2; clarsimp)
+    done
+  next
+case (Vstring x)
+  then show ?case
+    apply(clarsimp)
+    apply(drule_tac can_encode_as.cases; simp del:pad_bytes.simps)
+     apply(clarify) apply(simp)
 
-    apply(frule_tac uint_reconstruct_valid; simp)
-     apply(simp)
-    apply(subgoal_tac "length codea \<ge> 32") apply(simp)
-    apply(subgoal_tac "length (pad_bytes x) \<ge> length x")
-    apply(simp)
+    apply(drule_tac can_encode_as.cases; simp del:pad_bytes.simps)
+    apply(clarsimp)
+    apply(drule_tac can_encode_as.cases; simp del:pad_bytes.simps)
 
-    apply(rule_tac conjI)
     apply(clarify)
+
+    apply(simp add:string_value_valid_def bytes_value_valid_def del:pad_bytes.simps)
     apply(simp add:decode'.simps Let_def
 del:pad_bytes.simps skip_padding.simps decode_uint.simps take_append
 )
-    apply(rule_tac conjI)
-    apply(simp add:Let_def decode'.simps del: decode'_dyn_tuple_heads.simps decode'_dyn_tuple_tails.simps decode_uint.simps
-take_append
-pad_bytes.simps
-split:prod.splits)
-    apply(rule_tac conjI)
-    apply(clarify)
+
+     apply(clarify)
+    apply(frule_tac uint_valid_length)
+     apply(simp del:decode_uint.simps)
+    apply(frule_tac uint_reconstruct_valid; simp)
+     apply(frule_tac uint_reconstruct; simp)
+     apply(rotate_tac -1)
+    apply(frule_tac uint_valid_length)
+     apply(simp del:decode_uint.simps)
+     apply(simp add:uint_valid_length)
+    apply(simp split:prod.splits option.splits)
     apply(clarsimp)
-  next
-case (Vstring x)
-  then show ?case sorry
-next
-  case (Varray x1 x2)
-  then show ?case sorry
-(* idea: decode_heads on head types will produce no tails
-   decode_tails on that result will be a noop*)
-
-(*
-lemma. related output of decode'_dyn_tuple_heads to static head type Vtuple
-
-is_head_and_tail vs heads head_types tails \<Longrightarrow>
-(\<exists> heads' tails headlen .
-heads = filter is_some heads' \<and>
-tails = map (Vuint 256) (filter (is_some) tails) \<and>
-headlen = list_sum (map (heads_length o abi_get_type) vs) \<and>
-decode'_dyn_tuple_heads (map abi_get_type vs) headlen (offset, l) = Ok (heads', tails', headlen, bytes) \<Longrightarrow>
-)
 
 
+    apply(subgoal_tac
+"((\<lambda>b::8 word. char_of_integer (of_int (uint b))) \<circ>
+            (\<lambda>c::char. word_of_int (int_of_integer (integer_of_char c)))) =
+id")
 
-then what about decode'_dyn_tuple_tails?
-is_head_and_tail vs heads head_types tails \<Longrightarrow>
-heads = filter is_some heads'  \<Longrightarrow>
-tails = map (Vuint 256) (filter (is_some) tails) \<Longrightarrow>
-headlen = heads_length ts 
+     apply(case_tac x2; clarsimp)
 
-*)
-    
-(* if a valid encoding exists for our value,
-   the decoder will give it to us *)
-(*
-lemma abi_decode_succeed  :
-  "can_encode_as v full_code start \<Longrightarrow> 
-   decode (abi_get_type v) (drop (nat start) full_code) = Ok v"
-proof(induction rule:can_encode_as.induct)
-  case (Estatic v pre post code)
-  then show ?case 
+    apply(subgoal_tac "\<forall> c .
+char_of_integer (of_int (uint (word_of_int (int_of_integer (integer_of_char c)) :: 8 word)))
+= c") 
+    apply(rule_tac funext)
+      apply(clarsimp)
+
+
     apply(clarsimp)
-    apply(frule_tac prefix = "[]" and code = code and post = post in abi_encode_decode_static)
-     apply(clarsimp)
+      apply(simp add:word_of_int char_of_integer_def integer_of_char_def
+uint_word_of_int)
+      apply(cut_tac x = "of_char c" and xa = 256 in modulo_integer.rep_eq)
     apply(clarsimp)
-    apply(frule_tac encode_static_size) apply(clarsimp) apply(clarsimp)
     done
 next
-  case (Etuple_dyn ts vs t heads head_types tails start full_code)
+  case (Varray x1 x2)
   then show ?case
-    apply(clarsimp)
-    apply(simp add:Let_def) apply(simp split:if_split_asm sum.split_asm)
-    apply(simp add:Let_def)
-    apply(case_tac "list_ex abi_type_isdynamic head_types") apply(clarsimp)
-     apply(simp split:if_split_asm sum.split_asm prod.splits) apply(clarsimp)
+    apply(clarify)
+    apply(simp)
+    apply(rule_tac ?a1.0 = "(Varray x1 x2)" and ?a2.0 = full_code and ?a3.0 = start
+in can_encode_as.cases; simp?)
+       apply(clarsimp)
 
-     apply(rule_tac conjI)
-      apply(clarsimp) apply(rule_tac conjI) apply(simp add:list_ex_iff) apply(fastforce)
 
+    
+     apply(clarsimp)    
+     apply(simp (no_asm_simp) add:decode'.simps)
+      apply(simp add:array_value_valid_aux_def)
       apply(clarsimp)
-      apply(case_tac "decode'_dyn_tuple_heads ts (0::int) (0::int, drop (nat start) full_code)") apply(clarsimp)
-    apply(rename_tac newa)
-       apply(case_tac "decode'_dyn_tuple_tails aa ts a ab (0::int, drop (nat start) full_code)") apply(clarsimp)
-        apply(rename_tac newa2)
 
-(* idea: decode_heads on head types will produce no tails
-   decode_tails on that result will be a noop*)
-        apply(simp add:tuple_value_valid_aux_def)
+      apply(atomize)
+    apply(simp add:Let_def)
+
+    apply(drule_tac ?a1.0 = " (Vuint (256::nat) (int (length x2)))" in can_encode_as.cases; simp?)
+         apply(clarsimp)
+         apply(simp add:uint_valid_length)
+
+
+    apply(subgoal_tac
+"nat (uint (word_rcat (word_rsplit (word_of_int (int (length x2)) :: 256 word) :: 8 word list) :: 256 word)) = length x2")
+          apply(rotate_tac -1)
+
+      apply(case_tac "decode'_dyn_tuple_heads (replicate (nat (uint (word_rcat (word_rsplit (word_of_int (int (length x2)) :: 256 word) :: 8 word list) :: 256 word))) x1) (0::int)
+                 (int (length pre) + (32::int), pre @ word_rsplit (word_of_int (int (length x2)) :: 256 word) @ post)")
+      apply(clarify)
+    apply(clarsimp)
+     apply(rename_tac  newa)
+
+    apply(simp add:uint_valid_length)
+
+
+        apply(frule_tac
+?pre1.0 = " pre @ word_rsplit (word_of_int (int (length x2)) :: 256 word)" and ?pre2.0 = "[]"
+and ?l = "post"
+and post = "[]"
+and heads' = a
+and tails' = aa
+and count' = ab
+and bytes = newa in abi_decode_dyn_tuple_heads_succeed; (simp)?)
+
+         apply(simp add:my_replicate_map)
+         apply(simp add:uint_valid_length)
+         apply(simp add:uint_valid_length)
+
+
+        apply(drule_tac x = offset in spec)
+        apply(rotate_tac -1)
+        apply(drule_tac x = v in spec)
+       apply(clarsimp)
+         apply(simp add:uint_valid_length)
+    
+       apply(subgoal_tac "(offset + int (length pre) + (32::int)) = (int (length pre) + (32::int) + offset)" )
+    apply(clarsimp)
+        apply(arith)
+
+       apply(case_tac "decode'_dyn_tuple_tails aa
+                   (replicate (length x2) x1) a (heads_length x2)
+                   (int (length pre) + (32::int), pre @ word_rsplit (word_of_int (int (length x2)) :: 256 word) @ post)") apply(clarsimp)
+        apply(rename_tac  newa2)
+    apply(frule_tac v = "(Vtuple head_types heads)" in can_encode_as_start; simp?)
+         apply(simp add:uint_valid_length)
+
+
+    apply(cut_tac
+?pre1.0 = "pre @ word_rsplit (word_of_int (int (length x2)) :: 256 word)" and ?pre2.0 = "[]"
+and ?code = "post"
+and post = "[]"
+and heads' = a
+and tails' = aa
+and offset = "heads_length x2"
+and bytes' = newa2 in abi_decode_dyn_tuple_tails_succeed; (simp add:uint_valid_length my_replicate_map)?)
+
+        apply(drule_tac x = offset in spec)
+        apply(rotate_tac -1)
+        apply(drule_tac x = v in spec)
+       apply(subgoal_tac "(offset + int (length pre) + (32::int)) = (int (length pre) + (32::int) + offset)" )
+    apply(clarsimp)
+        apply(arith)
+
+          apply(simp add:my_replicate_map)
+
+ 
+         apply(frule_tac abi_decode_dyn_tuple_tails_fail) 
+       apply(simp add:my_replicate_map)
+         apply(simp add:uint_valid_length)
+          apply(clarsimp)
+    apply(frule_tac offset' = offset' and t = t and aa = aa and a = a and starta = "(int (length pre) + (32::int))" in
+is_head_and_tail_wellbehaved; (simp add:my_replicate_map uint_valid_length)?)
+
+         apply(clarsimp)
+      apply(drule_tac x = "offset' - (int (length pre) + (32::int))" in spec) apply(rotate_tac -1) 
+      apply(drule_tac x = v in spec) apply(clarsimp)
+         apply(frule_tac offset = "offset' - (int (length pre) + (32::int))" and x = v in is_head_and_tail_tails_elem; simp?)
+         apply(clarsimp)
+         apply(drule_tac x = v in spec) apply(clarsimp)
+         apply(drule_tac x = "(pre @ word_rsplit (word_of_int (int (length x2)) :: 256 word) @ post)" in spec) apply(drule_tac x = offset' in spec)
+    apply(clarsimp)
 
 (*
-  is_head_and_tail vs heads head_types tails \<Longrightarrow>
-  map abi_get_type vs = ts \<Longrightarrow>
-  decode'_dyn_tuple_heads head_types (0::int) (0::int, drop (nat start) full_code) = Ok (x1a, x1b, x1c, x2b) \<Longrightarrow>
-  decode'_dyn_tuple_heads head_types (0::int) (0::int, drop (nat start) full_code) = Ok (x1a, x1b, x1c, x2b)
-  decode'_dyn_tuple_tails x1b head_types x1a x1c (0::int, drop (nat start) full_code) = Ok (heads, x2c) \<Longrightarrow>
-decode'_dyn_tuple_heads ts (0::int) (0::int, drop (nat start) full_code) = Ok (a, aa, ab, newa) \<Longrightarrow>
-decode'_dyn_tuple_tails aa ts a ab (0::int, drop (nat start) full_code) = Ok (ac, newa2) \<Longrightarrow>
-  ac = vs
+        apply(simp add:can_encode_as_start_nonneg)
+    apply(frule_tac can_encode_as_start)
+       apply(frule_tac can_encode_as_start_nonneg)
+       apply(subgoal_tac "0 \<le> foldl (+) (0::int) (map (abi_static_size \<circ> abi_get_type) x3a)")
+        apply(arith)
+       apply(cut_tac l = "(map (abi_static_size \<circ> abi_get_type) x3a)" in list_nonneg_sum)
+        apply(simp add:list_nonneg_def)
+        apply(simp add:list_all_iff abi_static_size_nonneg) apply(simp add:list_sum_def)
 *)
 
+     apply(frule_tac abi_decode_dyn_tuple_heads_fail; simp?)
+      apply(simp add:my_replicate_map uint_valid_length)
+      apply(cut_tac f = "abi_get_type" and l = x2 and y = x1 in my_replicate_map) apply(simp)
+    apply(rotate_tac -1) apply(drule_tac sym) apply(simp)
+       apply(simp add:ty_heads_length_heads_length)
+
+
+(*
+           apply(subgoal_tac "abi_type_isstatic (abi_get_type (Vtuple head_types heads))")
+    apply(rule_tac ?a1.0 = "(Vtuple head_types heads)"
+and ?a2.0 = full_codea and ?a3.0 = starta
+in can_encode_as.cases; simp)
+         apply(clarsimp)
+         apply(frule_tac heads_length_heads; simp?) apply(simp)
+         apply(simp)
+        apply(frule_tac heads_length_heads; simp?)
+    apply(simp add:can_encode_as_start_nonneg)
+        apply(simp)
+*)
+
+           apply(subgoal_tac "abi_type_isstatic (abi_get_type (Vtuple head_types heads))")
+    apply(rule_tac ?a1.0 = "(Vtuple head_types heads)"
+and ?a2.0 = "(pre @ word_rsplit (word_of_int (int (length x2)) :: 256 word) @ post)"
+ and ?a3.0 = "(int (length pre) + (32::int))"
+in can_encode_as.cases; simp)
+         apply(clarsimp)
+         apply(frule_tac heads_length_heads; simp?) apply(simp)
+         apply(simp)
+        apply(frule_tac heads_length_heads; simp?)
+    apply(simp add:can_encode_as_start_nonneg)
+        apply(simp add: uint_valid_length)
+        apply(subgoal_tac "code  @ posta = post") apply(clarsimp)
+    apply(simp add: append_eq_append_conv_if) apply(clarsimp)
+        apply(simp add: uint_valid_length)
+
+    apply(clarsimp)
+       apply(simp add:list_ex_iff) apply(clarsimp)
+apply(simp add:list_ex_iff) apply(clarsimp)
+
+       apply(frule_tac ht = x in is_head_and_tail_head_types_elem; simp) 
+
+
+     apply(clarsimp)
+
+
+    apply(rule_tac ?a1.0 = "(Vtuple head_types heads)"
+and ?a2.0 = "(pre @ word_rsplit (word_of_int (int (length x2)) :: 256 word) @ post)"
+ and ?a3.0 = "(int (length pre) + (32::int))"
+in can_encode_as.cases; simp)
+    apply(clarsimp)
+      apply(simp split:sum.splits)
+
+      apply(cut_tac f = "abi_get_type" and l = x2 and y = x1 in my_replicate_map) apply(simp)
+    apply(rotate_tac -1) apply(drule_tac sym) apply(simp)
+
+    apply(subgoal_tac 
+"\<exists> vpre vbad vpost .
+x2 = vpre @ vbad # vpost \<and>
+length tpre = length vpre \<and>
+length tpost = length vpost")
+        apply(clarsimp)
+
+    apply(drule_tac x = vbad in spec; clarsimp)
+
+        apply(drule_tac
+vpre = vpre
+and v = vbad 
+and vpost = vpost in is_head_and_tail_heads_static_split_precise; simp?)
+         apply(simp add:tuple_value_valid_aux_def)
+    apply(clarsimp)
+        apply(simp add:list_all_iff)
+    apply(clarsimp)
+
+        apply(drule_tac those_err_split; clarsimp)
+        apply(case_tac "encode_static vbad"; clarsimp)
+        apply(simp split:sum.splits)
+    apply(clarsimp)
+    apply(cut_tac  v = vbad and code = a
+and pre = "prea @ concat tvs"
+and post = "concat x1a @ posta"
+
+in Estatic; simp)
+
+        apply(drule_tac x = "(prea @ concat tvs @ a @ concat x1a @ posta)" in spec)
+    apply(rotate_tac -1)
+        apply(drule_tac x = "(int (length prea) + heads_length vpre)" in spec)
+        apply(clarsimp)
+         apply(simp add:ty_heads_length_heads_length)
+
+
+
+       apply(clarsimp)
+       apply(drule_tac map_split_precise; clarsimp)
+       apply(metis)
+
+     apply(drule_tac ht = t in is_head_and_tail_head_types_elem; clarsimp)
+
+    apply(frule_tac uint_reconstruct_valid; simp?)
+    apply(frule_tac uint_reconstruct; simp?)
+    apply(simp add:uint_valid_length)
+    done
+qed
+
+(* should be easy to prove, decode just checks if abi_type_valid. *)
+lemma abi_decode_correct :
+  "can_encode_as v full_code 0 \<Longrightarrow>
+   decode (abi_get_type v) full_code = Ok v"
+  apply(frule_tac encode_correct_converse_valid)
+  apply(simp)
+  apply(clarify)
+  apply(frule_tac abi_decode_succeed2)
+  apply(clarsimp)
+  done
+
+lemma abi_decode_encode_static [rule_format]:
+  "\<forall> index (full_code :: 8 word list) v . 
+    abi_type_valid t \<longrightarrow>
+    0 \<le> nat index \<longrightarrow>
+    nat index + nat (abi_static_size t) \<le> length full_code \<longrightarrow>
+    decode_static t (index, full_code) = Ok v \<longrightarrow>
+   (abi_get_type v = t \<and> abi_value_valid v \<and>
+   (\<exists> (code :: 8 word list) . encode_static v = Ok code \<and>
+       take (nat (abi_static_size t)) (drop (nat index) full_code) = code))"
+proof(induction t)
+case (Tuint x)
+  then show ?case
+    apply(clarsimp)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
 next
-  case (Efarray_dyn t n vs heads head_types tails start full_code)
+  case (Tsint x)
+  then show ?case 
+    apply(clarsimp)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+  case Taddr
+  then show ?case
+    apply(clarsimp)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+  case Tbool
+  then show ?case
+    apply(clarsimp)
+    apply(simp add: bool_value_valid_def Let_def split: if_split_asm)
+     apply(clarsimp)
+    apply(simp add: bool_value_valid_def Let_def split: if_split_asm)
+     apply(drule_tac word_uint.Rep_inverse')
+    apply(simp)
+    apply(subgoal_tac
+" word_rsplit (word_rcat (take (32::nat) (drop (nat index) full_code))::256 word) = take (32::nat) (drop (nat index) full_code)")
+
+    apply(simp)
+
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+
+     apply(clarsimp)
+    apply(simp add: bool_value_valid_def Let_def split: if_split_asm)
+     apply(drule_tac word_uint.Rep_inverse')
+    apply(simp)
+    apply(subgoal_tac
+" word_rsplit (word_rcat (take (32::nat) (drop (nat index) full_code))::256 word) = take (32::nat) (drop (nat index) full_code)")
+
+    apply(simp)
+
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+  case (Tfixed x1a x2a)
+  then show ?case 
+    apply(clarsimp)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+    apply(simp add:Rat.quotient_of_int)
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+  case (Tufixed x1a x2a)
+  then show ?case 
+    apply(clarsimp)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+    apply(simp add:Rat.quotient_of_int)
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+  case (Tfbytes x)
+  then show ?case
+    apply(clarsimp)
+    apply(simp add:fbytes_value_valid_def)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+    apply(simp split:prod.splits)
+    apply(clarsimp)
+    apply(simp add:fbytes_value_valid_def)
+    apply(case_tac x2) apply(clarsimp)
+     apply(fastforce)
+    done
+next
+  case Tfunction
   then show ?case sorry
 next
-  case (Earray t vs heads head_types tails start full_code)
+  case (Tfarray t x2a)
   then show ?case sorry
 next
-  case (Ebytes l pre post count code)
+  case (Ttuple x)
   then show ?case sorry
 next
-  case (Estring full_code s l start)
+  case Tbytes
+  then show ?case sorry
+next
+  case Tstring
+  then show ?case sorry
+next
+  case (Tarray t)
   then show ?case sorry
 qed
-*)
-lemma abi_decode_succeed_converse :
-  "\<And> v full_code .
-    decode (abi_get_type v) full_code = Ok v \<Longrightarrow>
-    can_encode_as v full_code 0 (length full_code)"
-  sorry
-*)
+
+lemma abi_decode_succeed_converse [rule_format]:
+  "\<And> v len start full_code .
+    abi_type_valid t \<longrightarrow>
+    decode' t (start, full_code) = Ok (v, len) \<longrightarrow>
+    can_encode_as v full_code len"
+proof(induction t)
+  case (Tuint x)
+  then show ?case
+    apply(clarsimp)
+next
+  case (Tsint x)
+then show ?case sorry
+next
+  case Taddr
+  then show ?case sorry
+next
+  case Tbool
+  then show ?case sorry
+next
+  case (Tfixed x1a x2a)
+  then show ?case sorry
+next
+  case (Tufixed x1a x2a)
+  then show ?case sorry
+next
+  case (Tfbytes x)
+  then show ?case sorry
+next
+  case Tfunction
+  then show ?case sorry
+next
+  case (Tfarray t x2a)
+  then show ?case sorry
+next
+  case (Ttuple x)
+  then show ?case sorry
+next
+  case Tbytes
+  then show ?case sorry
+next
+  case Tstring
+  then show ?case sorry
+next
+  case (Tarray t)
+  then show ?case sorry
+qed
 end

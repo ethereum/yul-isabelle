@@ -165,6 +165,7 @@ Estatic: " \<And> v pre post code .
 | Ebytes : "\<And> l pre post count code .
      abi_value_valid (Vbytes l) \<Longrightarrow>
      code = pad_bytes l \<Longrightarrow>
+     length count = 32 \<Longrightarrow>
      can_encode_as (Vuint 256 (length l)) (pre @ count @ code @ post) (int (length pre)) \<Longrightarrow>
      can_encode_as (Vbytes l) (pre @ count @ code @ post) (int (length pre))"
 | Estring : "\<And> s l start . abi_value_valid (Vstring s) \<Longrightarrow> 
