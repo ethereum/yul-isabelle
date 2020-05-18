@@ -2237,6 +2237,10 @@ lemma abi_decode_correct :
   apply(clarsimp)
   done
 
+(* TODO: need to figure out how to
+deal with "garbage" data that might exist inside the padding
+at the end of bytes/fbytes
+*)
 lemma abi_decode_encode_static [rule_format]:
   "\<forall> index (full_code :: 8 word list) v . 
     abi_type_valid t \<longrightarrow>
@@ -2345,7 +2349,10 @@ next
     apply(clarsimp)
     apply(simp add:fbytes_value_valid_def)
     apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
+    apply(clarify)
+    apply(simp del:pad_bytes.simps)
+    apply(rule_tac conjI)
+    apply(simp add:fbytes_value_valid_def)
     apply(simp split:prod.splits)
     apply(clarsimp)
     apply(simp add:fbytes_value_valid_def)
