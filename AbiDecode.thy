@@ -302,7 +302,8 @@ where
         if int(length l) < 32 + ix then Err (decode_err ''Too few bytes; could not read string size'' (ix, l))
         else let sz = (decode_uint (take 32 l')) in
              if int (length l) < sz + 32 + ix then Err (decode_err ''Fewer bytes remaining than string size'' (ix, l))
-             else Ok (Vstring (bytes_to_string (take (nat sz) (drop 32 l'))), int (skip_padding (nat sz)) + 32)
+             else (if check_padding (nat sz) (drop 32 l') then Ok (Vstring (bytes_to_string (take (nat sz) (drop 32 l'))), int (skip_padding (nat sz)) + 32)
+                   else Err (decode_err ''Invalid string padding'' (ix, l)))
       | _ \<Rightarrow> Err (decode_err ''This should be dead code'' (ix, l)))))"
 
 (*| "decode_dyn_array t 0 [] = Some ([], [])"
