@@ -3082,7 +3082,14 @@ next
     done
 qed
 
-
+(* one option (?) - prove this lemma
+   another: use custom induction rule and see if we can inline it
+   into the induction hypotheses *)
+lemma decode'_dyn_tuple_succeed_converse :
+"
+decode'_dyn_tuple_heads (replicate x2 x1) (0::int) (start, full_code) = Ok (x1a, x1b, x1c, x2b) \<longrightarrow>
+decode'_dyn_tuple_tails x1b (replicate x2 x1) x1a x1c (start, full_code) = Ok (x3a, x2c) \<longrightarrow>
+"
 
 lemma abi_decode_succeed_converse [rule_format]:
   "\<And> t len start full_code .
@@ -3191,7 +3198,17 @@ next
       done  
   next
     case False
-    then show ?thesis using Vfarray sorry
+    then show ?thesis using Vfarray 
+      apply(clarsimp)
+      apply(simp add:decode'.simps Let_def split:sum.splits prod.splits)
+      apply(clarsimp)
+      apply(rule_tac Efarray_dyn; simp?)
+(* sketch of needed lemmas:
+1. abi_decode_dyn_tuple_heads implies is_head_and_tail and that heads tuple encodes
+2. abi_decode_dyn_tuple_tails implies the "for all offsets in tails list,
+we can find the tail" property
+*)
+      sorry
   qed
 
 next
