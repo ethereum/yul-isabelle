@@ -31,10 +31,25 @@ fun decode_fixed :: "nat \<Rightarrow> 8 word list \<Rightarrow> rat" where
 "decode_fixed n l =
   (let i = decode_sint l in (Rat.of_int i / (10 ^ n)))"
 
-(* extract byte strings of known length *)
-fun decode_fbytes :: "nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list" where
-"decode_fbytes n l = (take n l)"
+(* TODO: need to deal with padding bytes to 256-words *)
+fun skip_padding :: "nat \<Rightarrow> nat" where
+"skip_padding n =
+  (case divmod_nat n 32 of
+    (_, 0) \<Rightarrow> n
+    | (_, rem) \<Rightarrow> n + 32 - rem)" (* was n + rem *)
 
+(* ensure padding for bytes/fbytes is zeroes *)
+(* TODO: need to deal with padding bytes to 256-words *)
+fun check_padding :: "nat \<Rightarrow> 8 word list \<Rightarrow> bool" where
+"check_padding n l =
+  (let p = skip_padding n in
+  ((p \<le> length l) \<and> (drop n (take p l) = replicate (p - n) (word_of_int 0))))" 
+
+(* extract byte strings of known length *)
+fun decode_fbytes :: "nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list option" where
+"decode_fbytes n l =
+  (if check_padding n l then Some (take n l)
+   else None)"
 
 (* for dynamic types we need to use the input list to calculate size *)
 (*
@@ -113,9 +128,10 @@ and decode_static_tup :: "abi_type list \<Rightarrow> (int * 8 word list) \<Righ
      else Err (decode_err ''Invalid ufixed'' (ix, l)))))"
 | "decode_static (Tfbytes n) (ix, l) =
   (let l' = drop (nat ix) l in
-   (let res = decode_fbytes n l' in
-    (if fbytes_value_valid n res then Ok (Vfbytes n res)
-     else Err (decode_err ''Invalid fbytes'' (ix, l)))))"
+   (case decode_fbytes n l' of
+      Some res \<Rightarrow> (if fbytes_value_valid n res then Ok (Vfbytes n res)
+                    else Err (decode_err ''Invalid fbytes'' (ix, l)))
+      | None \<Rightarrow> Err (decode_err ''invalid fbytes padding'' (ix, l))))"
 | "decode_static (Tfarray t n) (ix, l) =
   (case decode_static_tup (List.replicate n t) (ix, l) of
     Err s \<Rightarrow> Err s
@@ -218,12 +234,6 @@ fun tails_measure :: "(abi_value + (abi_type * nat)) list \<Rightarrow> nat" whe
 | "tails_measure ((Inr (t, _))#ts) =
     abi_type_measure t + tails_measure ts"
 
-(* TODO: need to deal with padding bytes to 256-words *)
-fun skip_padding :: "nat \<Rightarrow> nat" where
-"skip_padding n =
-  (case divmod_nat n 32 of
-    (_, 0) \<Rightarrow> n
-    | (_, rem) \<Rightarrow> n + 32 - rem)" (* was n + rem *)
 
 (* in order to support negative offsets, we need to keep the entire list around always. *)
 
@@ -286,7 +296,8 @@ where
         if int (length l) < 32 + ix then Err (decode_err ''Too few bytes; could not read bytestream size'' (ix, l))
         else let sz = (decode_uint (take 32 l')) in
              if int (length l) < sz + 32 + ix then Err (decode_err ''Fewer bytes remaining than bytestream size'' (ix, l))
-             else Ok (Vbytes (take (nat sz) (drop 32 l')), int(skip_padding (nat sz)) + 32)
+             else (if check_padding (nat sz) (drop 32 l') then Ok (Vbytes (take (nat sz) (drop 32 l')), int(skip_padding (nat sz)) + 32)
+                   else Err (decode_err ''Invalid bytes padding'' (ix, l)))
       | Tstring \<Rightarrow> 
         if int(length l) < 32 + ix then Err (decode_err ''Too few bytes; could not read string size'' (ix, l))
         else let sz = (decode_uint (take 32 l')) in

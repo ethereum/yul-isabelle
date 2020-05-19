@@ -250,6 +250,7 @@ next
 
     apply(clarsimp)
      apply(case_tac x2a; clarsimp)
+    apply(arith)
 
     apply(case_tac x2a; clarsimp)
     apply(simp)
@@ -1956,6 +1957,7 @@ del:pad_bytes.simps skip_padding.simps decode_uint.simps take_append
     apply(simp split:prod.splits option.splits)
     apply(clarsimp)
     apply(case_tac x2; clarsimp)
+    apply(arith)
     done
   next
 case (Vstring x)
@@ -2237,192 +2239,1222 @@ lemma abi_decode_correct :
   apply(clarsimp)
   done
 
-(* TODO: need to figure out how to
-deal with "garbage" data that might exist inside the padding
-at the end of bytes/fbytes
+(*
+lemma my_abi_type_induct :
+  assumes Huint : "(\<And> n . P1 (Tuint n))"
+  and Hsint : "(\<And> n . P1 (Tsint n))"
+  and Haddr : "(P1 (Taddr))"
+  and Hbool : "(P1 (Tbool))"
+  and Hfixed : "(\<And> m n . P1 (Tfixed m n))"
+  and Hufixed : "(\<And> m n . P1 (Tufixed m n))"
+  and Hfbytes : "(\<And> n . P1 (Tfbytes n))"
+  and Hfunction : "(P1 (Tfunction))"
+  and Hfarray : "(\<And> t n . P2 (replicate n t) \<Longrightarrow> P1 (Tfarray t n))"
+  and Htuple : "(\<And> ts . P2 ts \<Longrightarrow> P1 (Ttuple ts))"
+  and Hbytes : "(P1 (Tbytes))"
+  and Hstring : "(P1 (Tstring))"
+  and Harray : "(\<And> t n . P2 (replicate n t)  \<Longrightarrow> P1 (Tarray t))"
+  and Hln : "P2 []"
+  and Hlc : "(\<And> t l . P1 t \<Longrightarrow> P2 l \<Longrightarrow>  P2 (t # l))"
+shows "P1 v \<and> P2 l"
+proof-
+  {fix v :: abi_type
+    have "P1 v \<and> (\<forall> t n . v = Tfarray t n \<longrightarrow> P2 (replicate n t))
+               \<and> (\<forall> ts . v = Ttuple ts \<longrightarrow> P2 ts)
+               \<and> (\<forall> t n . v = Tarray t \<longrightarrow> P2 (replicate n t))"
+    proof(induction v)
+      case (Tuint x)
+      then show ?case using Huint by auto next
+    next
+      case (Tsint x)
+      then show ?case using Hsint by auto next
+    next
+      case Taddr
+      then show ?case using Haddr by auto next
+    next
+      case Tbool
+      then show ?case using Hbool by auto next
+    next
+      case (Tfixed x1a x2a)
+      then show ?case using Hfixed by auto next
+    next
+      case (Tufixed x1a x2a)
+      then show ?case using Hufixed by auto next
+    next
+      case (Tfbytes x)
+      then show ?case using Hfbytes by auto next
+    next
+      case Tfunction
+      then show ?case using Hfunction by auto next
+next
+  case (Tfarray x1 x2)
+  then show ?case using Hfarray
+    apply(clarsimp)
+  proof(induct x1)
+    case Nil
+    then show ?case using Hln Hfarray by auto next
+  next
+    case (Cons a l)
+    then show ?case using Hlc Hfarray
+      apply(clarsimp)
+      apply(subgoal_tac "P1 a") apply(clarsimp) apply(metis)
+      apply(subgoal_tac "P2 l")  apply(clarsimp) apply(metis)
+      done
+  qed
+next
+  case (Vtuple x1 l)
+  then show ?case using Htuple
+  proof(induct l)
+    case Nil
+    then show ?case using Hln Htuple by auto next
+  next
+    case (Cons a l)
+    then show ?case using Hlc Htuple
+      apply(clarsimp)
+      apply(subgoal_tac "P1 a") apply(clarsimp) apply(metis)
+      apply(subgoal_tac "P2 l")  apply(clarsimp) apply(metis)
+      done
+  qed
+next
+  case (Vbytes x)
+  then show ?case using Hbytes by auto next
+next
+  case (Vstring x)
+then show ?case using Hstring by auto next
+next
+  case (Varray x1 l)
+  then show ?case 
+  proof(induct l)
+    case Nil
+    then show ?case using Hln Harray by auto next
+  next
+    case (Cons a l)
+    then show ?case using Hlc Harray
+      apply(clarsimp)
+      apply(subgoal_tac "P1 a") apply(clarsimp) apply(metis)
+      apply(subgoal_tac "P2 l")  apply(clarsimp) apply(metis)
+      done
+  qed
+qed}
+  thus ?thesis
+    apply(case_tac v) apply(auto)
+    done
+qed
+case (Vuint x1 x2)
+then show ?case using Huint by auto next
+next
+  case (Vsint x1 x2)
+then show ?case using Hsint by auto next
+next
+  case (Vaddr x)
+  then show ?case using Haddr by auto next
+next
+  case (Vbool x)
+  then show ?case using Hbool by auto next
+next
+  case (Vfixed x1 x2 x3a)
+  then show ?case using Hfixed by auto next
+next
+  case (Vufixed x1 x2 x3a)
+  then show ?case using Hufixed by auto next
+next
+case (Vfbytes x1 x2)
+  then show ?case using Hfbytes by auto next
+next
+  case (Vfunction x1 x2)
+  then show ?case using Hfunction by auto next
+next
+  case (Vfarray x1 x2 l)
+  then show ?case using Hfarray
+  proof(induct l)
+    case Nil
+    then show ?case using Hln Hfarray by auto next
+  next
+    case (Cons a l)
+    then show ?case using Hlc Hfarray
+      apply(clarsimp)
+      apply(subgoal_tac "P1 a") apply(clarsimp) apply(metis)
+      apply(subgoal_tac "P2 l")  apply(clarsimp) apply(metis)
+      done
+  qed
+next
+  case (Vtuple x1 l)
+  then show ?case using Htuple
+  proof(induct l)
+    case Nil
+    then show ?case using Hln Htuple by auto next
+  next
+    case (Cons a l)
+    then show ?case using Hlc Htuple
+      apply(clarsimp)
+      apply(subgoal_tac "P1 a") apply(clarsimp) apply(metis)
+      apply(subgoal_tac "P2 l")  apply(clarsimp) apply(metis)
+      done
+  qed
+next
+  case (Vbytes x)
+  then show ?case using Hbytes by auto next
+next
+  case (Vstring x)
+then show ?case using Hstring by auto next
+next
+  case (Varray x1 l)
+  then show ?case 
+  proof(induct l)
+    case Nil
+    then show ?case using Hln Harray by auto next
+  next
+    case (Cons a l)
+    then show ?case using Hlc Harray
+      apply(clarsimp)
+      apply(subgoal_tac "P1 a") apply(clarsimp) apply(metis)
+      apply(subgoal_tac "P2 l")  apply(clarsimp) apply(metis)
+      done
+  qed
+qed}
+  thus ?thesis
+    apply(case_tac v) apply(auto)
+    done
+qed
 *)
-lemma abi_decode_encode_static [rule_format]:
-  "\<forall> index (full_code :: 8 word list) v . 
-    abi_type_valid t \<longrightarrow>
-    0 \<le> nat index \<longrightarrow>
-    nat index + nat (abi_static_size t) \<le> length full_code \<longrightarrow>
-    decode_static t (index, full_code) = Ok v \<longrightarrow>
-   (abi_get_type v = t \<and> abi_value_valid v \<and>
-   (\<exists> (code :: 8 word list) . encode_static v = Ok code \<and>
-       take (nat (abi_static_size t)) (drop (nat index) full_code) = code))"
+
+lemma abi_decode_static_type_ok [rule_format]:
+  "\<forall> index (full_code :: 8 word list) v .
+      decode_static t (index, full_code) = Ok v \<longrightarrow>
+      abi_get_type v = t"
 proof(induction t)
 case (Tuint x)
-  then show ?case
-    apply(clarsimp)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
-
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
+  then show ?case 
+    apply(simp add:Let_def split:if_splits)
     done
 next
   case (Tsint x)
-  then show ?case 
-    apply(clarsimp)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
-
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
+  then show ?case
+    apply(simp add:Let_def split:if_splits)
     done
 next
   case Taddr
-  then show ?case
-    apply(clarsimp)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
-
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
+  then show ?case 
+    apply(simp add:Let_def split:if_splits)
     done
 next
   case Tbool
   then show ?case
-    apply(clarsimp)
-    apply(simp add: bool_value_valid_def Let_def split: if_split_asm)
-     apply(clarsimp)
-    apply(simp add: bool_value_valid_def Let_def split: if_split_asm)
-     apply(drule_tac word_uint.Rep_inverse')
-    apply(simp)
-    apply(subgoal_tac
-" word_rsplit (word_rcat (take (32::nat) (drop (nat index) full_code))::256 word) = take (32::nat) (drop (nat index) full_code)")
-
-    apply(simp)
-
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
-
-     apply(clarsimp)
-    apply(simp add: bool_value_valid_def Let_def split: if_split_asm)
-     apply(drule_tac word_uint.Rep_inverse')
-    apply(simp)
-    apply(subgoal_tac
-" word_rsplit (word_rcat (take (32::nat) (drop (nat index) full_code))::256 word) = take (32::nat) (drop (nat index) full_code)")
-
-    apply(simp)
-
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
+    apply(simp add:Let_def split:if_splits)
     done
 next
   case (Tfixed x1a x2a)
-  then show ?case 
-    apply(clarsimp)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
-    apply(simp add:Rat.quotient_of_int)
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
+  then show ?case
+    apply(simp add:Let_def split:if_splits)
     done
 next
   case (Tufixed x1a x2a)
   then show ?case 
-    apply(clarsimp)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
-    apply(simp add:Rat.quotient_of_int)
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
+    apply(simp add:Let_def split:if_splits)
     done
 next
   case (Tfbytes x)
   then show ?case
-    apply(clarsimp)
-    apply(simp add:fbytes_value_valid_def)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarify)
-    apply(simp del:pad_bytes.simps)
-    apply(rule_tac conjI)
-    apply(simp add:fbytes_value_valid_def)
-    apply(simp split:prod.splits)
-    apply(clarsimp)
-    apply(simp add:fbytes_value_valid_def)
-    apply(case_tac x2) apply(clarsimp)
-     apply(fastforce)
+    apply(simp add:Let_def split:if_splits)
     done
 next
   case Tfunction
-  then show ?case sorry
+  then show ?case
+    apply(simp add:Let_def split:if_splits)
+    done
 next
   case (Tfarray t x2a)
-  then show ?case sorry
+  then show ?case
+    apply(simp add:Let_def split:if_splits sum.splits)
+    done
 next
   case (Ttuple x)
-  then show ?case sorry
+  then show ?case 
+    apply(simp add:Let_def split:if_splits sum.splits)
+    done
 next
   case Tbytes
-  then show ?case sorry
+  then show ?case 
+    apply(simp add:Let_def split:if_splits sum.splits)
+    done
 next
   case Tstring
-  then show ?case sorry
+  then show ?case
+    apply(simp add:Let_def split:if_splits sum.splits)
+    done
 next
   case (Tarray t)
-  then show ?case sorry
+  then show ?case
+    apply(simp add:Let_def split:if_splits sum.splits)
+    done
 qed
 
-lemma abi_decode_succeed_converse [rule_format]:
-  "\<And> v len start full_code .
-    abi_type_valid t \<longrightarrow>
-    decode' t (start, full_code) = Ok (v, len) \<longrightarrow>
-    can_encode_as v full_code len"
+lemma abi_decode'_type_ok [rule_format]:
+  "\<forall> index (full_code :: 8 word list) v sz.
+      decode' t (index, full_code) = Ok (v, sz) \<longrightarrow>
+      abi_get_type v = t"
 proof(induction t)
-  case (Tuint x)
-  then show ?case
-    apply(clarsimp)
+case (Tuint x)
+  then show ?case 
+    apply(simp add:Let_def decode'.simps split:if_splits)
+    done
 next
   case (Tsint x)
-then show ?case sorry
+  then show ?case
+    apply(simp add:Let_def decode'.simps split:if_splits)
+    done
 next
   case Taddr
-  then show ?case sorry
+  then show ?case 
+    apply(simp add:Let_def decode'.simps split:if_splits)
+    done
 next
   case Tbool
-  then show ?case sorry
+  then show ?case
+    apply(simp add:Let_def decode'.simps split:if_splits)
+    done
 next
   case (Tfixed x1a x2a)
-  then show ?case sorry
+  then show ?case
+    apply(simp add:Let_def decode'.simps split:if_splits)
+    done
 next
   case (Tufixed x1a x2a)
-  then show ?case sorry
+  then show ?case 
+    apply(simp add:Let_def decode'.simps split:if_splits)
+    done
 next
   case (Tfbytes x)
-  then show ?case sorry
+  then show ?case
+    apply(simp add:Let_def decode'.simps split:if_splits)
+    done
 next
   case Tfunction
-  then show ?case sorry
+  then show ?case
+    apply(simp add:Let_def decode'.simps split:if_splits)
+    done
 next
   case (Tfarray t x2a)
-  then show ?case sorry
+  then show ?case
+     apply(simp add:Let_def decode'.simps split:if_splits sum.splits)
+    done
 next
   case (Ttuple x)
-  then show ?case sorry
+  then show ?case 
+    apply(simp add:Let_def decode'.simps split:if_splits sum.splits)
+    done
 next
   case Tbytes
-  then show ?case sorry
+  then show ?case 
+    apply(simp add:Let_def decode'.simps split:if_splits sum.splits)
+    done
 next
   case Tstring
-  then show ?case sorry
+  then show ?case
+    apply(simp add:Let_def decode'.simps split:if_splits sum.splits)
+    done
 next
   case (Tarray t)
+  then show ?case
+    apply(simp add:Let_def decode'.simps split:if_splits sum.splits)
+    done
+qed
+
+
+lemma abi_decode_encode_static' [rule_format]:
+  "(\<forall> t index (full_code :: 8 word list) . 
+    abi_type_valid t \<longrightarrow>
+    0 \<le> index \<longrightarrow>
+    nat index + nat (abi_static_size t) \<le> length full_code \<longrightarrow>
+    decode_static t (index, full_code) = Ok v \<longrightarrow>
+    abi_get_type v = t \<longrightarrow>
+   (abi_value_valid v \<and>
+   (\<exists> (code :: 8 word list) . encode_static v = Ok code \<and>
+       take (nat (abi_static_size t)) (drop (nat index) full_code) = code))) \<and>
+    (
+      (\<forall> v t n index full_code  .
+          v = (Vfarray t n vs) \<longrightarrow>
+                  abi_type_valid t \<longrightarrow>
+                  0 \<le>  index \<longrightarrow>
+                  nat index + nat (n * abi_static_size t) \<le> length full_code \<longrightarrow>
+                  decode_static_tup (replicate n t) (index, full_code) = Ok vs \<longrightarrow>
+                  map abi_get_type vs = replicate n t \<longrightarrow>
+                  (list_all abi_value_valid vs \<and>
+                  (\<exists> (codes :: 8 word list list) . those_err (map encode_static vs) = Ok codes \<and>
+                           take (nat (n * (abi_static_size t))) (drop (nat index) full_code) = concat codes))) \<and>
+      (\<forall> v ts  index full_code  .
+          v = (Vtuple ts vs) \<longrightarrow>
+                  list_all abi_type_valid ts \<longrightarrow>
+                  0 \<le> index \<longrightarrow>
+                  nat index + nat (list_sum (map abi_static_size ts)) \<le> length full_code \<longrightarrow>
+                  decode_static_tup (ts) (index, full_code) = Ok vs \<longrightarrow>
+                  map abi_get_type vs = ts \<longrightarrow>
+                  (list_all abi_value_valid vs \<and>
+                  (\<exists> (codes :: 8 word list list) . those_err (map encode_static vs) = Ok codes \<and>
+                           take (nat (list_sum (map abi_static_size ts))) (drop (nat index) full_code) = concat codes)))
+    )"
+proof(induction rule:my_abi_value_induct)
+(* Vuint *)
+case (1 x1 x2)
+  then show ?case
+    apply(clarsimp)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+    apply(rule_tac sym)
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+(* Vsint *)
+  case (2 x1 x2)
+  then show ?case 
+    apply(clarsimp)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+
+    apply(rule_tac sym)
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+(* Vaddr *)
+  case (3 x)
+  then show ?case
+    apply(clarsimp)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+
+    apply(rule_tac sym)
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+  case (4 x)
+  then show ?case
+    apply(clarsimp)
+    apply(simp add: bool_value_valid_def Let_def split: if_split_asm)
+
+     apply(drule_tac word_uint.Rep_inverse')
+    apply(simp)
+    apply(subgoal_tac
+" word_rsplit (word_rcat (take (32::nat) (drop (nat index) full_code))::256 word) = take (32::nat) (drop (nat index) full_code)")
+
+    apply(simp)
+
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+
+     apply(drule_tac word_uint.Rep_inverse')
+    apply(simp)
+    apply(subgoal_tac
+" word_rsplit (word_rcat (take (32::nat) (drop (nat index) full_code))::256 word) = take (32::nat) (drop (nat index) full_code)")
+
+    apply(simp)
+
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+(* Vfixed *)
+  case (5 m n r)
+  then show ?case 
+    apply(clarsimp)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+    apply(simp add:Rat.quotient_of_int)
+    apply(rule_tac sym)
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+(* Vufixed *)
+  case (6 m n r)
+  then show ?case 
+    apply(clarsimp)
+    apply(simp add: Let_def split: if_split_asm)
+    apply(clarsimp)
+    apply(simp add:Rat.quotient_of_int)
+    apply(rule_tac sym)
+    apply(rule_tac word_rsplit_rcat_size)
+    apply(simp)
+    apply(simp add:min_absorb2)
+    apply(simp add:word_size)    
+    done
+next
+(* Fbytes *)
+  case (7 n bs)
+  then show ?case
+    apply(clarsimp)
+    apply(simp add: Let_def fbytes_value_valid_def split: if_split_asm)
+    apply(clarify)
+    apply(simp del:pad_bytes.simps)
+
+    apply(simp split:prod.splits del:pad_bytes.simps)
+    apply(case_tac x2) 
+     apply(subgoal_tac "n = 32") apply(clarsimp)
+    apply(simp add:divmod_nat_def; clarsimp)
+     apply(fastforce)
+
+    apply(clarsimp)
+    apply(rule_tac sym)
+    apply(simp add: append_eq_conv_conj) 
+    apply(rule_tac conjI) 
+     apply(subgoal_tac "min n (32 :: nat) = n") apply(clarsimp)
+     apply(arith)
+    apply(simp add:divmod_nat_def; clarsimp)
+
+    apply(subgoal_tac "n = Suc nata")
+     apply(simp)
+
+    apply(cut_tac k = n and l = 32 in int_mod_eq')
+      apply(simp)
+    apply(case_tac "n = 32"; clarsimp)
+    apply(simp)
+    done
+next
+  (* function *)
+  case 8
+  then show ?case sorry
+next
+  (* Farray *)
+  case (9 t n l)
+  then show ?case
+    apply(clarsimp)
+    apply(rotate_tac 1) apply(drule_tac mythin) apply(clarsimp)
+    apply(simp split:sum.splits if_split_asm)
+    apply(clarsimp)
+    apply(simp add:farray_value_valid_aux_def; clarsimp)
+    apply(drule_tac x = t in spec)
+    apply(clarsimp)
+    apply(drule_tac x = "length l" in spec)
+    apply(drule_tac x = index in spec) apply(clarsimp)
+    apply(drule_tac x = full_code in spec)
+    apply(clarsimp)
+    apply(simp add:list_all_iff)
+    apply(subgoal_tac " map abi_get_type l = replicate (length l) t")
+     apply(clarsimp)
+
+    apply(simp add:my_replicate_map list_all_iff)
+    done
+next
+(* Tuple *)
+  case (10 ts vs)
+  then show ?case
+    apply(clarsimp)
+    apply(drule_tac mythin) apply(clarsimp)
+    apply(simp split:sum.splits if_split_asm)
+    apply(clarsimp)
+    apply(simp add:tuple_value_valid_aux_def; clarsimp)
+    apply(drule_tac x = ts in spec)
+    apply(clarsimp)
+    apply(drule_tac x = index in spec) apply(clarsimp)
+    apply(drule_tac x = full_code in spec)
+    apply(clarsimp)
+    apply(simp add:list_all_iff list_sum_def)
+     apply(clarsimp)
+    done
+next
+(* Bytes *)
+  case (11)
+  then show ?case apply(clarsimp)
+    done
+next
+(* String *)
+  case (12)
+  then show ?case by clarsimp
+next
+(* Array *)
+  case (13 t vs)
+  then show ?case by clarsimp
+next
+
+(* Nil *)
+  case 14
+  then show ?case
+    apply(clarsimp) apply(simp add:list_sum_def)
+    done
+(* Cons *)
+  case (15 v vs)
+  then show ?case
+    apply(clarsimp)
+    apply(rule_tac conjI)
+
+    (* Farray *)
+     apply(rotate_tac 2) apply(drule_tac mythin) apply(clarsimp)
+     apply(case_tac n; clarsimp)
+     apply(simp split:sum.splits) apply(clarsimp)
+    apply(drule_tac x = "(abi_get_type v)" in spec) apply(rotate_tac -1) apply(clarsimp)
+     apply(drule_tac x = index in spec) apply(clarsimp)
+    apply(rotate_tac -1)
+    apply(drule_tac x = full_code in spec)
+     apply(clarsimp)
+
+    apply(cut_tac v = "abi_get_type v" in abi_static_size_nonneg)
+
+     apply(subgoal_tac "nat index + nat (abi_static_size (abi_get_type v)) \<le> length full_code") apply(clarsimp)
+      apply(drule_tac x = "(abi_get_type v)" in spec) apply(clarsimp)
+
+    apply(drule_tac x = nata in spec)
+      apply(drule_tac x = "index +  abi_static_size (abi_get_type v)" in spec)
+    apply(subgoal_tac "(0::int) \<le> index + abi_static_size (abi_get_type v)") apply(clarsimp)
+      apply(drule_tac x = full_code in spec)
+      apply(clarsimp)
+
+      apply(subgoal_tac "nat (index + abi_static_size (abi_get_type v)) + nat (int nata * abi_static_size (abi_get_type v))
+\<le> length full_code") apply(clarsimp)
+
+    apply(subgoal_tac "nat (((1::int) + int nata) * abi_static_size (abi_get_type v)) =
+nat (abi_static_size (abi_get_type v)) + nat ((int nata) * abi_static_size (abi_get_type v))")
+
+    apply(clarsimp)
+        apply(simp add:take_add)
+    apply(subgoal_tac "(nat (abi_static_size (abi_get_type v)) + nat index) = (nat (index + nat (abi_static_size (abi_get_type v))))")
+         apply(clarsimp)
+         apply(clarsimp)
+    apply(arith)
+
+    apply(simp add:Int.nat_mult_distrib)
+    apply(simp add:Int.nat_add_distrib)
+
+    apply(simp add:Int.nat_mult_distrib)
+    apply(simp add:Int.nat_add_distrib)
+
+      apply(arith)
+
+    apply(simp add:Int.nat_mult_distrib)
+        apply(simp add:Int.nat_add_distrib)
+
+    (* Tuple *)
+    apply(rotate_tac 1) apply(drule_tac mythin) apply(clarsimp)
+    apply(simp split:sum.splits) apply(clarsimp)
+
+    apply(drule_tac x = "(abi_get_type v)" in spec) apply(rotate_tac -1) apply(clarsimp)
+     apply(drule_tac x = index in spec) apply(clarsimp)
+    apply(rotate_tac -1)
+    apply(drule_tac x = full_code in spec)
+     apply(clarsimp)
+
+    apply(drule_tac x = "(map abi_get_type vs)" in spec) apply(rotate_tac -1) apply(clarsimp)
+     apply(drule_tac x = "index + abi_static_size (abi_get_type v)" in spec) 
+
+    apply(cut_tac v = "abi_get_type v" in abi_static_size_nonneg)
+
+    apply(subgoal_tac "(0::int) \<le> index + abi_static_size (abi_get_type v)"; clarsimp)
+    apply(subgoal_tac "nat index + nat (abi_static_size (abi_get_type v)) \<le> length full_code") apply(clarsimp)
+    apply(drule_tac x = full_code in spec) apply(clarsimp)
+
+     apply(subgoal_tac " nat (index + abi_static_size (abi_get_type v)) + nat (list_sum (map (abi_static_size \<circ> abi_get_type) vs)) \<le> length full_code")
+      apply(clarsimp)
+
+      apply(simp add:list_sum_def)
+    apply(cut_tac x = "(abi_static_size (abi_get_type v))" and i = 0
+and xs = "(map (abi_static_size \<circ> abi_get_type) vs)" in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
+      apply(clarsimp)
+
+    apply(subgoal_tac
+"nat (abi_static_size (abi_get_type v) + foldl (+) (0::int) (map (abi_static_size \<circ> abi_get_type) vs)) =
+nat (abi_static_size (abi_get_type v)) + nat (foldl (+) (0::int) (map (abi_static_size \<circ> abi_get_type) vs))"  )
+      apply(simp add:take_add)
+
+    apply(subgoal_tac "(nat (abi_static_size (abi_get_type v)) + nat index) = (nat (index + nat (abi_static_size (abi_get_type v))))")
+        apply(clarsimp)
+
+    apply(clarsimp)
+    apply(arith)
+
+      apply(cut_tac l = " (map (abi_static_size \<circ> abi_get_type) vs)" in list_nonneg_sum)
+       apply(simp add:list_nonneg_def list_all_iff) apply(clarsimp)
+    apply(simp add:abi_static_size_nonneg)
+    apply(simp add:Int.nat_add_distrib list_sum_def)
+
+      apply(cut_tac l = " (map (abi_static_size \<circ> abi_get_type) vs)" in list_nonneg_sum)
+       apply(simp add:list_nonneg_def list_all_iff) apply(clarsimp)
+    apply(simp add:abi_static_size_nonneg)
+     apply(simp add:Int.nat_add_distrib list_sum_def)
+
+    apply(cut_tac x = "(abi_static_size (abi_get_type v))" and i = 0
+and xs = "(map (abi_static_size \<circ> abi_get_type) vs)" in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
+      apply(clarsimp)
+    apply(simp add:Int.nat_add_distrib)
+
+    apply(simp add:Int.nat_add_distrib)
+    apply(simp add:list_sum_def)
+      apply(cut_tac l = " (map (abi_static_size \<circ> abi_get_type) vs)" in list_nonneg_sum)
+       apply(simp add:list_nonneg_def list_all_iff) apply(clarsimp)
+    apply(simp add:abi_static_size_nonneg)
+    apply(simp add:Int.nat_add_distrib list_sum_def)
+    apply(cut_tac x = "(abi_static_size (abi_get_type v))" and i = 0
+and xs = "(map (abi_static_size \<circ> abi_get_type) vs)" in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
+      apply(clarsimp)
+    apply(simp add:Int.nat_add_distrib)
+    done
+
+qed
+
+lemma abi_decode_encode_static [rule_format]:
+"(\<forall> t index (full_code :: 8 word list) . 
+    decode_static t (index, full_code) = Ok v \<longrightarrow>
+    abi_type_valid t \<longrightarrow>
+    0 \<le> index \<longrightarrow>
+    nat index + nat (abi_static_size t) \<le> length full_code \<longrightarrow>
+   (abi_value_valid v \<and>
+   (\<exists> (code :: 8 word list) . encode_static v = Ok code \<and>
+       take (nat (abi_static_size t)) (drop (nat index) full_code) = code)))"
+  apply(clarsimp)
+  apply(cut_tac t = t in abi_decode_static_type_ok; simp?)
+  apply(cut_tac v = v in abi_decode_encode_static'; simp?)
+  apply(clarsimp)
+  done
+
+
+lemma Estatic_easier :
+  "abi_type_isstatic (abi_get_type v) \<Longrightarrow>
+   abi_value_valid v \<Longrightarrow>
+   encode_static v = Ok code \<Longrightarrow>
+   0 \<le> start \<Longrightarrow>
+   nat start + nat (abi_static_size (abi_get_type v))  \<le> length full_code \<Longrightarrow>
+   code = take (nat (abi_static_size (abi_get_type v))) (drop (nat start) full_code) \<Longrightarrow>
+   can_encode_as v full_code start"
+  apply(clarsimp)
+    apply(cut_tac v = "v"
+and code = "take (nat (abi_static_size (abi_get_type v)) ) (drop (nat start) full_code)"
+and pre = "take (nat start) full_code"
+and post = "drop (nat (abi_static_size (abi_get_type v))) (drop (nat start) full_code)"
+in Estatic; (simp del:encode_static.simps)?)
+  apply(subgoal_tac "(int (min (length full_code) (nat start))) = nat start")
+   apply(clarsimp)
+   apply(subgoal_tac "take (nat start) full_code @ take (nat (abi_static_size (abi_get_type v))) (drop (nat start) full_code) @ drop (nat (abi_static_size (abi_get_type v))) (drop (nat start) full_code)
+= full_code")
+    apply(clarsimp)
+  apply(subgoal_tac 
+" take (nat (abi_static_size (abi_get_type v))) (drop (nat start) full_code) @ drop (nat (abi_static_size (abi_get_type v))) (drop (nat start) full_code) =
+drop (nat start) full_code")
+    apply(clarsimp)
+   apply(simp only:append_take_drop_id)
+
+  apply(arith)
+  done
+
+(*
+lemma check_padding_pad_bytes [rule_format] :
+  "(\<forall> sz . 
+    check_padding sz l \<longrightarrow>
+    (\<exists> code  . length code = sz \<and> code  = pad_bytes l))"
+  apply(clarsimp)
+      apply(simp add:Let_def split:prod.splits)
+    apply(clarsimp)
+   apply(simp add:divmod_nat_def)
+   apply(clarsimp)
+  apply(case_tac sz; clarsimp)
+   apply(case_tac "length l"; clarsimp)
+  *)
+(*
+  case Nil
+  then show ?case
+    apply(clarsimp)
+    apply(simp add:Let_def split:prod.splits nat.splits)
+    apply(clarsimp)
+    apply(simp add:divmod_nat_def) apply(arith)
+    done
+next
+  case (Cons a l)
+  then show ?case
+    apply(clarsimp)
+    apply(simp add:Let_def divmod_nat_def split:prod.splits)
+    apply(clarsimp)
+    apply(case_tac sz; clarsimp)
+    apply(case_tac "Suc (length l) mod (32::nat)"; clarsimp)
+qed
+*)
+
+lemma decode_uint_valid :
+  "uint_value_valid 256 (decode_uint l)"
+  apply(clarsimp)
+  apply(cut_tac x = "(word_rcat (take (32::nat) l))"
+in decode_uint_max)
+  apply(simp add:uint_value_valid_def max_u256_def)
+  done
+
+lemma pad_bytes_skip_padding :
+"length (pad_bytes l) =
+ skip_padding (length l)"
+  apply(simp split:prod.splits)
+  apply(clarsimp)
+  apply(case_tac x2; clarsimp)
+  apply(simp add:divmod_nat_def)
+  apply(clarsimp)
+  apply(arith)
+  done
+
+
+lemma take_min :
+"take (min (length l) n) l = take n l"
+proof(induction l arbitrary: n)
+  case Nil
+  then show ?case apply(clarsimp) done
+next
+  case (Cons a l)
+  then show ?case
+    apply(clarsimp)
+    apply(case_tac n; clarsimp)
+    done
+qed
+
+lemma skip_padding_gt :
+  "n \<le> skip_padding n"
+  apply(clarsimp)
+  apply(simp add:divmod_nat_def)
+  apply(case_tac "n mod 32"; clarsimp)
+  apply(arith)
+  done
+
+lemma check_padding_pad_bytes :
+"check_padding n l \<Longrightarrow>
+pad_bytes (take n l) = take (length (pad_bytes (take n l))) l"
+  apply(simp split:prod.splits)
+  apply(clarsimp) apply(simp add:Let_def)
+  apply(case_tac x2; clarsimp)
+   apply(case_tac x2a; clarsimp)
+    apply(simp only:take_min)
+
+  apply(subgoal_tac "min (length l) n = n")
+    apply(clarsimp)
+  apply(arith)
+
+  apply(case_tac x2a; clarsimp)
+  apply(subgoal_tac "min (length l) n = n")
+    apply(clarsimp)
+  apply(simp add:divmod_nat_def; clarsimp)
+  apply(arith)
+
+  apply(subgoal_tac "min (length l) n = n")
+   apply(clarsimp)
+   apply(simp add:List.drop_take)
+
+  apply(simp add:List.take_add)
+
+  apply(simp add:divmod_nat_def; clarsimp)
+  apply(arith)
+  done
+
+
+lemma abi_decode_succeed_converse [rule_format]:
+  "\<And> t len start full_code .
+    decode' t (start, full_code) = Ok (v, len) \<longrightarrow>
+    abi_type_valid t \<longrightarrow>
+    0 \<le> start \<longrightarrow>
+    abi_get_type v = t \<longrightarrow>
+    can_encode_as v full_code start"
+proof(induction v)
+  case (Vuint x1 x2)
+  then show ?case 
+    apply(clarify)
+    apply(simp add:decode'.simps del: decode_static.simps split:if_splits sum.splits)
+    apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
+    apply(clarify)
+    apply(rule_tac Estatic_easier; simp?)
+    done
+next
+  case (Vsint x1 x2)
+  then show ?case
+    apply(clarify)
+    apply(simp add:decode'.simps del: decode_static.simps split:if_splits sum.splits)
+    apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
+    apply(clarify)
+    apply(rule_tac Estatic_easier; simp?)
+    done
+next
+  case (Vaddr x)
+  then show ?case
+    apply(clarify)
+    apply(simp add:decode'.simps del: decode_static.simps split:if_splits sum.splits)
+    apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
+    apply(clarify)
+    apply(rule_tac Estatic_easier; simp?)
+    done
+next
+  case (Vbool x)
+  then show ?case
+    apply(clarify)
+    apply(simp add:decode'.simps del: decode_static.simps split:if_splits sum.splits)
+    apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
+    apply(clarify)
+    apply(rule_tac Estatic_easier; simp?)
+    done
+next
+  case (Vfixed x1 x2 x3a)
+  then show ?case
+    apply(clarify)
+    apply(simp add:decode'.simps del: decode_static.simps split:if_splits sum.splits)
+    apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
+    apply(clarify)
+    apply(rule_tac Estatic_easier; simp?)
+    done
+next
+  case (Vufixed x1 x2 x3a)
+  then show ?case
+    apply(clarify)
+    apply(simp add:decode'.simps del: decode_static.simps split:if_splits sum.splits)
+    apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
+    apply(clarify)
+    apply(rule_tac Estatic_easier; simp?)
+    done
+next
+  case (Vfbytes x1 x2)
+  then show ?case
+    apply(clarify)
+    apply(simp add:decode'.simps del: decode_static.simps split:if_splits sum.splits)
+    apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
+    apply(clarify)
+    apply(rule_tac Estatic_easier; simp?)
+    done
+next
+  case (Vfunction x1 x2)
+  then show ?case sorry
+next
+  case (Vfarray x1 x2 x3a)
+  then show ?case
+  proof(cases "abi_type_isstatic x1")
+    case True
+    then show ?thesis using Vfarray.prems
+          apply(clarify)
+        apply(simp add:Let_def decode'.simps del: decode_static.simps split:if_splits sum.splits)
+        apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
+        apply(clarify)
+       apply(simp add:abi_static_size_nonneg)
+       apply(simp add:Int.nat_mult_distrib)   
+       apply(cut_tac v = x1 in abi_static_size_nonneg) 
+      apply(subgoal_tac "nat start + x2 * nat (abi_static_size x1) = nat (int x2 * abi_static_size x1 + start)")
+        apply(arith)
+             apply(simp add:Int.nat_add_distrib)   
+       apply(simp add:Int.nat_mult_distrib)   
+
+      apply(rule_tac Estatic_easier; (simp del:encode_static.simps)?)
+      apply(subgoal_tac "nat start + nat len = nat (len + start)")
+       apply(arith)
+      apply(simp add:Int.nat_add_distrib)
+       apply(cut_tac v = x1 in abi_static_size_nonneg) 
+      apply(clarsimp)
+       apply(simp add:abi_static_size_nonneg)
+       apply(simp add:Int.nat_mult_distrib)   
+       apply(cut_tac v = x1 in abi_static_size_nonneg) 
+      apply(subgoal_tac "nat start + x2 * nat (abi_static_size x1) = nat (int x2 * abi_static_size x1 + start)")
+        apply(arith)
+             apply(simp add:Int.nat_add_distrib)   
+       apply(simp add:Int.nat_mult_distrib)   
+      done  
+  next
+    case False
+    then show ?thesis using Vfarray sorry
+  qed
+
+next
+  case (Vtuple x1 x2)
+  then show ?case
+  proof(cases "list_all abi_type_isstatic x1")
+    case True
+    then show ?thesis using Vtuple.prems
+                apply(clarify)
+        apply(simp add:Let_def decode'.simps del: decode_static.simps split:if_splits sum.splits)
+        apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
+        apply(clarify)
+        apply(simp add:abi_static_size_nonneg)
+        apply(cut_tac l = "(map abi_static_size x1)" in list_nonneg_sum)
+         apply(simp add:list_nonneg_def) apply(simp add:list_all_iff) apply(clarsimp)
+         apply(simp add:abi_static_size_nonneg)
+
+      apply(simp add:list_sum_def)
+
+      apply(rule_tac Estatic_easier; (simp del:encode_static.simps)?)
+      apply(subgoal_tac "nat start + nat len = nat (len + start)")
+       apply(arith)
+       apply(simp add:Int.nat_add_distrib)
+        apply(cut_tac l = "(map abi_static_size x1)" in list_nonneg_sum)
+         apply(simp add:list_nonneg_def) apply(simp add:list_all_iff) apply(clarsimp)
+         apply(simp add:abi_static_size_nonneg)
+       apply(clarsimp)
+
+       apply(simp add:list_sum_def)
+
+      (* dynamic case - contradiction *)
+      apply(simp add:list_all_iff list_ex_iff)
+      done
+  next
+    case False
+    then show ?thesis sorry
+  qed
+next
+  case (Vbytes x)
+  then show ?case
+    apply(clarsimp)
+    apply(simp add:decode'.simps Let_def)
+    apply(simp add:split:if_splits del:decode_uint.simps)
+    apply(simp add:Let_def del:decode_uint.simps)
+    apply(simp add:split:if_splits del:check_padding.simps skip_padding.simps decode_uint.simps)
+    apply(clarify)
+
+    apply(subgoal_tac
+"(int (min (length full_code - ((32::nat) + nat start)) (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))))
+= int (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))")
+       apply(simp del:check_padding.simps decode_uint.simps skip_padding.simps)
+
+    apply(cut_tac
+l = "(take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code))"
+and pre = "take (nat start) full_code"
+and post = "(drop (nat start) (drop 32 (drop (skip_padding (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))) full_code)))"
+and count = "take 32 (drop (nat start) full_code)"
+in Ebytes)
+
+    apply(simp del:check_padding.simps pad_bytes.simps skip_padding.simps decode_uint.simps)
+    apply(simp add:bytes_value_valid_def del:skip_padding.simps decode_uint.simps)
+
+
+    apply(rotate_tac 1)
+         apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+         apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+         apply(drule_tac mythin)
+    apply(rule_tac conjI) apply(clarify)
+    apply(simp add: decode_uint_valid del:decode_uint.simps)
+         apply(simp add:uint_value_valid_def)
+
+    apply(simp only:)
+
+       apply(simp del:check_padding.simps decode_uint.simps skip_padding.simps)
+
+
+       apply(arith)
+
+      apply(rule_tac Estatic_easier)
+         apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+         apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+           apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(simp)
+
+    apply(cut_tac l = "(take (32::nat) (drop (nat start) full_code))"
+in decode_uint_valid)
+
+    apply(rotate_tac 1)
+          apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(rotate_tac 1)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+          apply(drule_tac mythin) 
+
+    apply(simp)
+
+         apply(simp only: encode_static.simps)
+
+    apply(drule_tac mythin) apply(drule_tac mythin)
+         apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+        apply(simp)
+
+
+    apply(rotate_tac 1)
+       apply(drule_tac mythin)
+       apply(rotate_tac 2)
+       apply(drule_tac mythin)
+       apply(drule_tac mythin)
+       apply(drule_tac mythin)
+       apply(drule_tac mythin)
+
+    apply(clarsimp)
+
+
+       apply(subgoal_tac "min (length full_code - nat start) 32 = 32")
+        apply(arith)
+       apply(arith)
+
+    apply(rotate_tac 1)
+      apply(drule_tac mythin)
+    apply(rotate_tac 1)
+      apply(drule_tac mythin)
+       apply(drule_tac mythin)
+      apply(drule_tac mythin)
+      apply(drule_tac mythin)
+
+      apply(simp (no_asm) del:decode_uint.simps split:prod.split)
+    apply(clarify)
+
+    apply(simp del: decode_uint.simps add:uint_value_valid_def)
+       apply(subgoal_tac "min (length full_code - nat start) 32 = 32")
+
+    apply(simp del:decode_uint.simps)
+
+    apply(cut_tac l = "(take (32::nat) (drop (nat start) full_code))"
+in decode_uint_valid)
+
+       apply(frule_tac uint_valid_length)
+       apply(rule_tac conjI)
+    apply(clarify)
+        apply(simp del:decode_uint.simps)
+    apply(simp)
+
+        apply(rule_tac "word_rsplit_rcat_size")
+        apply(simp add:word_size)    
+
+       apply(clarsimp)
+
+    apply(arith)
+
+       apply(subgoal_tac "min (length full_code) (nat start) = nat start")
+    apply(rotate_tac 1)
+       apply(drule_tac mythin)
+       apply(drule_tac mythin)
+      apply(drule_tac mythin)
+    apply(rotate_tac 1)
+       apply(drule_tac mythin)
+       apply(drule_tac mythin)
+      apply(drule_tac mythin)
+
+    apply(subgoal_tac
+"(skip_padding (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))) =
+length (pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)))")
+    apply(simp del:pad_bytes.simps skip_padding.simps check_padding.simps decode_uint.simps)
+
+    apply(subgoal_tac "
+take (32::nat) (drop (nat start) full_code) @
+      pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)) @
+      drop (nat start + ((32::nat) + length (pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code))))) full_code
+= drop (nat start) full_code
+")
+
+    apply(simp del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps)
+
+
+
+    apply(subgoal_tac
+" pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)) @
+    drop (nat start + ((32::nat) + length (pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code))))) full_code
+= drop 32 (drop (nat start) full_code)
+")
+    apply(simp del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps List.drop_drop)
+
+    apply(subgoal_tac
+" take (length (pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop (32 + nat start) full_code)))) (drop ((32::nat) + nat start) full_code) @
+    drop (nat start + ((32::nat) + length (pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code))))) full_code =
+    drop (32::nat) (drop (nat start) full_code)")
+
+    apply(drule_tac check_padding_pad_bytes)
+    apply(simp del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps List.drop_drop)
+
+    apply(subgoal_tac
+"drop (nat start + ((32::nat) + nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))) full_code
+= drop (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))) (drop (32 + nat start) full_code)") 
+         apply(simp del:List.drop_drop)
+
+        apply(clarsimp)
+
+    apply(subgoal_tac
+"(nat start + ((32::nat) + nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))) =
+ (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)) + ((32::nat) + nat start))")
+         apply(rotate_tac -1)
+         apply(drule_tac f = "\<lambda> x . drop x full_code" in arg_cong) apply(assumption)
+
+    apply(simp add:nat_add_distrib)
+
+
+
+
+
+
+             apply(simp add:List.drop_drop)
+
+    apply(simp add:List.drop_take)
+
+      apply(clarify) apply(rotate_tac 1)
+             apply(drule_tac mythin) apply(drule_tac mythin)
+      apply(rotate_tac 1)
+apply(drule_tac mythin) 
+         apply(drule_tac mythin) apply(drule_tac mythin)
+      apply(simp del:skip_padding.simps decode_uint.simps)
+
+
+(* TODO: this is really, really poor form *)
+       apply(simp only:decode_uint.simps split:if_splits)
+         apply(simp only:uint_value_valid_def encode_static.simps)
+    apply(cut_tac x = "(word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))))" in decode_uint_max)
+         apply(simp only:max_u256_def uint_value_valid_def max_uint.simps)
+         apply(cut_tac z = 2 and n = 256 in nat_power_eq) apply(rotate_tac 1)
+          apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+          apply(drule_tac mythin) apply(drule_tac mythin)
+          apply(drule_tac mythin) apply(drule_tac mythin)
+          apply(simp)
+
+    apply(rotate_tac 1)
+         apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+         apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+         apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(simp)
+
+        apply(clarify)
+
+        apply(rule_tac conjI)
+        apply(clarify)
+
+         apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+         apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(drule_tac mythin) apply(drule_tac mythin)
+       apply(drule_tac mythin) apply(drule_tac mythin)
+    apply(simp add:uint_value_valid_def)
+
+    apply(cut_tac 
+v = "(Vuint (256::nat) (int (min (length full_code - ((32::nat) + nat start)) (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))))))"
+and pre = "take (nat start) full_code @
+      take (32::nat) (drop (nat start) full_code)"
+and code = "take (32::nat) (drop (nat start) full_code)"
+and post = "pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)) @
+      drop (nat start + ((32::nat) + skip_padding (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))))) full_code)"
+in Estatic)
+
+
+
+(*
+    apply(simp add:Let_def divmod_nat_def split:prod.splits)
+    apply(case_tac "nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)) mod (32::nat)")
+     apply(simp)
+     apply(clarsimp)
+
+    apply(cut_tac
+l = "(take (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code))))) (drop ((32::nat) + nat start) full_code)"
+and code = "(take (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code))))) (drop ((32::nat) + nat start) full_code)"
+and pre = "take (nat start) full_code"
+and post = "drop (nat start (drop 32 (drop (word_rcat (take (32::nat) (drop (nat start) full_code)))))) full_code"
+in Ebytes)
+
+    defer
+
+    apply(simp)
+    apply(case_tac x2; clarsimp)
+
+    apply(cut_tac 
+    apply(rule_tac Ebytes)
+*)
+  next
+  case (Vstring x)
+  then show ?case sorry
+next
+  case (Varray x1 x2)
   then show ?case sorry
 qed
 end
