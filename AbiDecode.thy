@@ -254,6 +254,9 @@ and decode'_dyn_tuple_tails :: "(int option) list \<Rightarrow> abi_type list \<
 where
 (* we need to zip earlier. *)
 "decode' t (ix, l) =
+(if ix < 0 then Err (decode_err ''Tried to decode at a negative index'' (ix, l))
+ else (if (ix > length l) then Err (decode_err ''Tried to decode at an index out of range'' (ix, l))
+ else
  (let l' = drop (nat ix) l in
   
   (if abi_type_isstatic t
@@ -304,7 +307,7 @@ where
              if int (length l) < sz + 32 + ix then Err (decode_err ''Fewer bytes remaining than string size'' (ix, l))
              else (if check_padding (nat sz) (drop 32 l') then Ok (Vstring (bytes_to_string (take (nat sz) (drop 32 l'))), int (skip_padding (nat sz)) + 32)
                    else Err (decode_err ''Invalid string padding'' (ix, l)))
-      | _ \<Rightarrow> Err (decode_err ''This should be dead code'' (ix, l)))))"
+      | _ \<Rightarrow> Err (decode_err ''This should be dead code'' (ix, l)))))))"
 
 (*| "decode_dyn_array t 0 [] = Some ([], [])"
 | "decode_dyn_array t n [] = None" *)
