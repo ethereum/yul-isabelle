@@ -3082,14 +3082,236 @@ next
     done
 qed
 
+(*
+lemma abi_decode_dyn_tuple_heads_succeed_strong :
+"
+decode'_dyn_tuple_heads (map abi_get_type vs) (int (length pre2)) (length pre1, (pre1 @ pre2 @ l @ post)) = Ok (heads', tails', count', bytes) \<longrightarrow>
+decode'_dyn_tuple_tails (?tails'::int option list) (map abi_get_type (?vs::abi_value list)) (?heads'::abi_value option list) (?offset::int) \<longrightarrow>
+(\<exists>
+heads head_types tails .
+is_head_and_tail vs heads head_types htails
+those (map2 ht_combine heads' (map (case_option None (\<lambda> t . Some (t - int (length pre1)))) tails')) = Some heads \<and>
+can_encode_as (Vtuple head_types heads) (pre1 @ pre2 @ l @ l @ post) (int (length (pre1)) + int (length pre2)) \<and>
+"
+*)
+
+
 (* one option (?) - prove this lemma
    another: use custom induction rule and see if we can inline it
    into the induction hypotheses *)
-lemma decode'_dyn_tuple_succeed_converse :
+(*
+lemma abi_decode_dyn_tuple_heads_succeed_converse :
 "
-decode'_dyn_tuple_heads (replicate x2 x1) (0::int) (start, full_code) = Ok (x1a, x1b, x1c, x2b) \<longrightarrow>
-decode'_dyn_tuple_tails x1b (replicate x2 x1) x1a x1c (start, full_code) = Ok (x3a, x2c) \<longrightarrow>
+\<forall> heads' tails' count' offset pre1 pre2 post l bytes heads head_types tails.
+decode'_dyn_tuple_heads (map abi_get_type vs) (int (length pre2)) (length pre1, (pre1 @ pre2 @ l @ post)) = Ok (heads', tails', count', bytes) \<longrightarrow>
+decode'_dyn_tuple_tails (?tails'::int option list) (map abi_get_type (?vs::abi_value list)) (?heads'::abi_value option list) (?offset::int)
+     (int (length (?pre1.0::8 word list)), ?pre1.0 @ (?pre2.0::8 word list) @ (?code::8 word list) @ (?post::8 word list))
+those (map2 ht_combine heads' 
+       (map (\<lambda> to . (case to of None \<Rightarrow> None | Some t \<Rightarrow> Some (t - int (length pre1)))) tails')) = Some heads \<longrightarrow>
+map (\<lambda> x . fst x + int (length pre1)) tails = (somes tails') \<longrightarrow>
+(is_head_and_tail vs heads head_types tails \<and>
+ can_encode_as (Vtuple head_types heads) (pre1 @ pre2 @ l @ post) (int (length pre1) + int (length pre2)) \<and>
+(\<forall> (offset::int) v::abi_value.
+           (offset, v) \<in> set tails \<longrightarrow> can_encode_as v (pre1 @ pre2 @ l @ post) (int (length pre1) + offset)))
 "
+*)
+
+(* ok, so i think we need to revisit the idea of "vs_pre"
+basically as an inductive assumption we have a "head" that already has is_head_and_tail proven about it
+then we just need to "extend"
+*)
+
+lemma abi_decode_succeed_converse_new [rule_format]:
+  "(\<forall> t len start full_code .
+    decode' t (start, full_code) = Ok (v, len) \<longrightarrow>
+    abi_type_valid t \<longrightarrow>
+    0 \<le> start \<longrightarrow>
+    abi_get_type v = t \<longrightarrow>
+    can_encode_as v full_code start) \<and>
+   (
+    (\<forall> v t n pre1 pre2 code heads' tails' count' count'' bytes bytes'.
+          v = (Vfarray t n vs) \<longrightarrow> 
+          abi_type_isdynamic t \<longrightarrow>
+          abi_type_valid t \<longrightarrow>
+          decode'_dyn_tuple_heads (replicate n t) (int (length pre2)) (int (length pre1), pre1@pre2@code) = Ok (heads', tails', count', bytes) \<longrightarrow>
+          decode'_dyn_tuple_tails tails' (replicate n t) heads' count'' (int (length pre1), pre1@pre2@code) = Ok (vs, bytes') \<longrightarrow>
+          (\<exists> heads head_types tails . 
+            is_head_and_tail vs heads head_types tails \<and>
+            can_encode_as (Vtuple head_types heads) ( pre1@pre2@code) (int (length pre1) + int (length pre2)) \<and>
+            (\<forall> (offset::int) v::abi_value.
+             (offset, v) \<in> set tails \<longrightarrow> can_encode_as v ( pre1@pre2@code) (int (length pre1) + offset)) \<and>
+             those (map2 ht_combine heads' 
+               (map (\<lambda> to . (case to of None \<Rightarrow> None | Some t \<Rightarrow> Some (t - int (length pre1)))) tails')) = Some heads \<and>
+                map (\<lambda> x . fst x + int (length pre1)) tails = (somes tails') \<and>
+                ht_wellbehaved tails' (map abi_get_type vs) heads')
+          ) \<and>
+    ( True) \<and>
+    ( True)
+   )"
+proof(induction rule:my_abi_value_induct)
+case (1 n i)
+  then show ?case
+    
+    
+    sorry
+next
+  case (2 n i)
+  then show ?case sorry
+next
+  case (3 i)
+  then show ?case sorry
+next
+  case (4 b)
+  then show ?case sorry
+next
+  case (5 m n r)
+  then show ?case sorry
+next
+  case (6 m n r)
+  then show ?case sorry
+next
+  case (7 n bs)
+  then show ?case sorry
+next
+  case (8 i j)
+  then show ?case sorry
+next
+  (* Vfarray *)
+  case (9 t n l)
+  then show ?case
+    apply(clarsimp)
+    apply(simp add:decode'.simps Let_def del: decode_static.simps split:if_splits sum.splits prod.splits)
+    defer (* static *)
+     apply(drule_tac x = t in spec)
+     apply(clarsimp) apply(drule_tac x = n in spec)
+     apply(drule_tac x = start in spec) apply(drule_tac x = full_code in spec) apply(clarsimp)
+     apply(rule_tac Efarray_dyn; simp?)
+      apply(simp add: farray_value_valid_aux_def)
+      defer (* value validity could be a separate lemma *)
+      apply(drule_tac x = offset in spec) apply(drule_tac x = v in spec) apply(clarsimp)
+      apply(simp add:add.commute)
+    sorry (* OK this one seems like kind of OK... *)
+next
+  case (10 ts vs)
+  then show ?case sorry
+next
+  case (11 bs)
+  then show ?case sorry
+next
+  case (12 s)
+  then show ?case sorry
+next
+  case (13 t vs)
+  then show ?case sorry
+next
+  case 14
+  then show ?case sorry
+next
+  case (15 t l)
+  then show ?case
+    apply(clarsimp)
+
+    (* Vfarray *)
+    (* tails did something, let's figure out what. *)
+    apply(case_tac tails'; clarsimp)
+     apply(case_tac n; clarsimp)
+     apply(case_tac n; clarsimp)
+    apply(case_tac heads'; clarsimp)
+    apply(simp add:Let_def split:if_splits sum.splits prod.splits)
+    apply(clarsimp)
+    apply(simp split:if_splits sum.splits prod.splits)
+    apply(clarsimp)
+    apply(drule_tac x = ta in spec) apply(clarsimp)
+    apply(drule_tac x = nat in spec) apply(rotate_tac -1)
+    apply(drule_tac x = pre1 in spec)
+    apply(drule_tac x = "pre2@(take 32 (code))" in spec)
+    apply(drule_tac x = "(drop 32 (code))" in spec)
+    apply(drule_tac x = lista in spec) apply(drule_tac x = list in spec)
+    apply(rotate_tac -1)
+    apply(clarsimp)
+
+    apply(subgoal_tac "int (min (length code) (32::nat)) = 32")
+     apply(clarsimp)
+
+    apply(subgoal_tac
+"(\<exists>(count''::int) bytes'::int. decode'_dyn_tuple_tails list (replicate nat ta) lista count'' (int (length pre1), pre1 @ pre2 @ code) = Ok (l, bytes'))")
+      apply(clarsimp)
+(*      defer apply(fastforce) *)
+
+      apply(rule_tac x = "(Tsint 256) # head_types" in exI)
+      apply(rule_tac x = "((sint (word_rcat (take (32::nat) code) :: 256 word)), t)#tails" in exI) 
+      apply(clarsimp)
+
+      apply(rule_tac conjI)
+       apply(rule_tac iht_dynamic; simp?)
+       apply(frule_tac abi_decode'_type_ok; clarsimp)
+
+    apply(frule_tac ?a1.0 = "(Vtuple head_types heads)" in can_encode_as.cases; simp?)
+           apply(clarsimp) apply(simp add:tuple_value_valid_aux_def)
+
+       apply(rule_tac conjI)
+
+        apply(clarsimp)
+    apply(cut_tac
+v = "(Vtuple (Tsint (256::nat) # map abi_get_type heads) (Vsint (256::nat) (sint (word_rcat (take (32::nat) code) :: 256 word)) # heads))"
+and pre = "take (length pre1 + length pre2) pre"
+and code = "drop (length pre1 + length pre2) pre @ codea"
+and post = post in
+Estatic; simp?)
+       
+           apply(simp add:tuple_value_valid_aux_def)
+           apply(cut_tac w= "(word_rcat (take (32::nat) code) :: 256 word)" in sint_range_size)
+    apply(simp add:word_size)
+          apply(simp add:sint_value_valid_def)
+
+         apply(simp split:sum.splits)
+         apply(clarsimp)
+
+    apply(subgoal_tac
+"word_rsplit (word_rcat (take (32::nat) code) :: 256 word) = take 32 code")
+          apply(simp)
+          apply(simp add: append_eq_conv_conj)
+          apply(simp add:add.commute)
+
+         apply(rule_tac word_rsplit_rcat_size)
+         apply(simp add:word_size)
+
+    apply(subgoal_tac
+"(min (length pre) (length pre1 + length pre2)) = (length pre1 + length pre2)")
+         apply(clarsimp)
+
+    apply(subgoal_tac
+"(take (length pre1 + length pre2) pre @ drop (length pre1 + length pre2) pre @ codea @ post)
+=
+pre @ codea @ post")
+          apply(clarsimp)
+         apply(clarsimp)
+        apply(arith)
+
+       apply(drule_tac x = x2 in spec)
+apply(rotate_tac -1)
+    apply(drule_tac x = "int (length pre1) + sint (word_rcat (take (32::nat) code) :: 256 word)" in spec)
+       apply(frule_tac abi_decode'_type_ok)
+       apply(clarsimp)
+       apply(drule_tac x = "pre @ codea @ post" in spec)
+    apply(clarsimp)
+
+
+    apply(subgoal_tac
+"take (length pre1 + length pre2) pre @ drop (length pre1 + length pre2) pre = pre")
+    apply(clarsimp)
+    apply(cut_tac n = "(length pre1 + length pre2)" and xs = pre in
+List.append_take_drop_id) apply(simp)
+    
+
+    apply(subgoal_tac 
+"length pre1 + length pre2 + (32::nat) = length pre")
+           apply(clarsimp)
+    apply(simp only:sym[OF List.drop_drop])
+    apply(arith)
+    
+    sorry
+qed
 
 lemma abi_decode_succeed_converse [rule_format]:
   "\<And> t len start full_code .
