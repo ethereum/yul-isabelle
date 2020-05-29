@@ -3185,7 +3185,7 @@ next
 qed
 
 (* Vtuple and Varray cases are under construction *)
-lemma abi_decode_succeed_converse_new [rule_format]:
+lemma abi_decode_succeed_converse_gen [rule_format]:
   "(\<forall> t len start full_code .
     decode' t (start, full_code) = Ok (v, len) \<longrightarrow>
     abi_type_valid t \<longrightarrow>
@@ -4940,13 +4940,37 @@ pre @ codea @ post")
     done
 qed
 
+lemma abi_decode_succeed_converse_clause1 :
+  assumes H1 : "decode' t (start, full_code) = Ok (v, len)"
+  assumes H2 : "abi_type_valid t"
+  assumes H3 : "abi_get_type v = t"
+  shows  "can_encode_as v full_code (start)"
+proof(-)
+
+  have "decode' t (start, full_code) = Ok (v::abi_value, len) \<Longrightarrow> abi_type_valid t \<Longrightarrow> abi_get_type v = t \<Longrightarrow> can_encode_as v full_code start"
+    using conjE[OF abi_decode_succeed_converse_gen[of v "[]"]] by(clarify; fast)
+
+  thus ?thesis using H1 H2 H3 by auto
+qed
+
 
 (* idea here is that we need to discharge the premises of
 the inductive version. but we have other lemmas that can do it. *)
-lemma abi_decode_succeed_converse :
-   "decode' t (start, full_code) = Ok (v, len) \<longrightarrow>
-    can_encode_as v full_code (start)"
-  sorry
+lemma abi_decode_correct_converse :
+  assumes H : "decode t full_code = Ok v"
+  shows "can_encode_as v full_code (0)"
+proof(-)
 
+  have 0 : "abi_type_valid t" using H by(simp split:if_splits)
+
+  have 1 : "\<exists> len . decode' t (0, full_code) = Ok (v, len)" using H 
+    by(simp split:if_splits sum.splits prod.splits)
+
+  then obtain len where 2 : "decode' t (0, full_code) = Ok (v, len)" ..
+
+  have 3 : "abi_get_type v = t" using abi_decode'_type_ok[OF 2] by auto
+
+  show ?thesis using abi_decode_succeed_converse_clause1[OF 2 0 3] by assumption
+qed
 
 end
