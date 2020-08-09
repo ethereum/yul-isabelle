@@ -6,20 +6,21 @@ begin
 https://solidity.readthedocs.io/en/v0.5.12/abi-spec.html
 *)
 
-value "Word.slice 0 ((word_of_int 2) :: 4 word) :: 1 word"
-
+(* Abstract representation types of (structured) ABI data
+   i.e., encoder input/decoder output *)
 datatype abi_type =
   Tuint "nat"
   | Tsint "nat"
   | Taddr
   (* uint, sint : synonyms for uint256/sint256 *)
   | Tbool
-  | Tfixed "nat" "nat"
-  | Tufixed "nat" "nat"
   (* tfixed, ufixed : synonyms for 
      fixed(128, 18) and ufixed (128,18) *)
+  | Tfixed "nat" "nat"
+  | Tufixed "nat" "nat"
   (* fixed length bytes *)
   | Tfbytes "nat"
+  (* function selector *)
   | Tfunction
   (* fixed length array *)
   | Tfarray "abi_type" "nat"
@@ -30,46 +31,20 @@ datatype abi_type =
   | Tarray "abi_type"
 
 
-(* for use in termination proofs
-   some of the termination proofs can't be completed automatically
-   due to the size of the mutually recurisve functions involved. *)
-
 definition max_u256 :: "nat" where
 "max_u256 = 2 ^ 256 - 1"
 
-(* do not use this outside of proofs - it will blow up. *)
-(*
-fun abi_type_measure :: "abi_type \<Rightarrow> nat"
-and abi_type_list_measure :: "abi_type list \<Rightarrow> nat" where
-"abi_type_measure (Ttuple ts) = 1 + abi_type_list_measure ts"
-| "abi_type_measure (Tfarray t n) = 1 + n + (abi_type_measure t)"
-| "abi_type_measure (Tarray t) = 1 + max_u256 + abi_type_measure t" (* curious about this one *)
-| "abi_type_measure _ = 1"
 
-| "abi_type_list_measure [] = 1"
-| "abi_type_list_measure (th#tt) =
-    abi_type_measure th + abi_type_list_measure tt + 1"
-*)
-
-(*
-fun abi_type_measure :: "abi_type \<Rightarrow> nat"
-and abi_type_list_measure :: "abi_type list \<Rightarrow> nat" where
-"abi_type_measure (Ttuple ts) = 1 + abi_type_list_measure ts"
-| "abi_type_measure (Tfarray t n) = 1 + n + n * (abi_type_measure t)"
-| "abi_type_measure (Tarray t) = 1 + (max_u256) +  (max_u256) * abi_type_measure t" (* curious about this one *)
-| "abi_type_measure _ = 1"
-
-| "abi_type_list_measure [] = 1"
-| "abi_type_list_measure (th#tt) =
-    1 + abi_type_measure th + abi_type_list_measure tt"
-*)
-
+(* for use in termination proofs (encoder/decoder)
+   some of the termination proofs can't be completed automatically
+   due to the size of the mutually recurisve functions involved
+   so we use this as a measure *)
 
 fun abi_type_measure :: "abi_type \<Rightarrow> nat"
 and abi_type_list_measure :: "abi_type list \<Rightarrow> nat" where
 "abi_type_measure (Ttuple ts) = 1 + abi_type_list_measure ts"
 | "abi_type_measure (Tfarray t n) = 1 + n + n * (abi_type_measure t)"
-| "abi_type_measure (Tarray t) = 1 + (1 + max_u256) +  (1 + max_u256) * abi_type_measure t" (* curious about this one *)
+| "abi_type_measure (Tarray t) = 1 + (1 + max_u256) +  (1 + max_u256) * abi_type_measure t" 
 | "abi_type_measure _ = 1"
 
 | "abi_type_list_measure [] = 1"
@@ -86,7 +61,8 @@ and abi_type_list_empties :: "abi_type list \<Rightarrow> nat" where
 
 | "abi_type_list_empties [] = 0"
 | "abi_type_list_empties (h#t) = abi_type_empties h + abi_type_list_empties t"
-  
+
+(* well-formedness of ABI types *)
 fun abi_type_valid where
 "abi_type_valid (Tuint n) = 
     (0 < n \<and> n \<le> 256 \<and> n mod 8 = 0)"
@@ -116,6 +92,7 @@ fun abi_type_isdynamic :: "abi_type \<Rightarrow> bool" where
 fun abi_type_isstatic :: "abi_type \<Rightarrow> bool" where
 "abi_type_isstatic t = (\<not> (abi_type_isdynamic t))"
 
+(* Abstract representation of (structured) ABI data *)
 datatype abi_value =
   Vuint "nat" "int"
   | Vsint "nat" "int"
@@ -127,6 +104,9 @@ datatype abi_value =
      fixed(128, 18) and ufixed (128,18) *)
   (* fixed length bytes *)
   | Vfbytes "nat" "8 word list"
+  (* function selector
+     first int is a 20-bit address
+     second is a 4-byte selector *)
   | Vfunction "int" "int"
   (* fixed length array *)
   | Vfarray "abi_type" "nat" "abi_value list"
@@ -171,6 +151,7 @@ fun int_of_fixed :: "nat \<Rightarrow> rat \<Rightarrow> int option" where
     (num, den) \<Rightarrow>
       (if den = 1 then Some num else None))"
 
+(* validity checks on abstract data *)
 definition uint_value_valid :: "nat \<Rightarrow> int \<Rightarrow> bool" where
 "uint_value_valid n i = (0 \<le> i \<and> i \<le> max_uint n)"  
 
@@ -202,6 +183,7 @@ definition function_value_valid :: "int \<Rightarrow> int \<Rightarrow> bool" wh
 "function_value_valid i1 i2 = 
   (uint_value_valid 160 i1 \<and> uint_value_valid 32 i2)"
 
+(* auxiliary checks for structured/recursive ABI data *)
 definition farray_value_valid_aux :: "abi_type \<Rightarrow> nat \<Rightarrow> abi_value list \<Rightarrow> bool" where
 "farray_value_valid_aux t n l = 
     (length l = n \<and> 
@@ -220,7 +202,7 @@ definition array_value_valid_aux :: "abi_type \<Rightarrow> abi_value list \<Rig
 "array_value_valid_aux t l = 
   (uint_value_valid 256 (int (length l)) \<and> list_all (\<lambda> v . abi_get_type v = t) l)"
 
-(* additional checks beyond type well-formedness to ensure
+(* additional checks beyond typechecking to ensure
    values are permitted *)
 fun abi_value_valid_aux :: "abi_value \<Rightarrow> bool" where
 "abi_value_valid_aux (Vuint n i) = uint_value_valid n i"
@@ -237,7 +219,6 @@ fun abi_value_valid_aux :: "abi_value \<Rightarrow> bool" where
 | "abi_value_valid_aux (Vtuple ts vs) =
     (tuple_value_valid_aux ts vs \<and>
      list_all abi_value_valid_aux vs)"
-(* in practice are there any restrictions on bytes? *)
 | "abi_value_valid_aux (Vbytes bs) = bytes_value_valid bs"
 | "abi_value_valid_aux (Vstring s) = string_value_valid s"
 | "abi_value_valid_aux (Varray t l) =
@@ -256,10 +237,8 @@ definition list_sum :: "int list \<Rightarrow> int" where
 definition list_sumr :: "int list \<Rightarrow> int" where
 "list_sumr xs = List.foldr (+) xs 0"
 
-(* helpers for static value decoding *)
-(* getting the size in bytes of a (presumed static) ABI element *)
+(* size in bytes of a (static) ABI datum *)
 (* TODO: figure out how function decoding is supposed to work. *)
-(* TODO: enforce somewhere that sizes are less than 2 ^ 256 *)
 fun abi_static_size :: "abi_type \<Rightarrow> int" where
 "abi_static_size (Tuint n) = 32"
 | "abi_static_size (Tsint n) = 32"
@@ -277,8 +256,16 @@ fun abi_static_size :: "abi_type \<Rightarrow> int" where
 (* the caller of this function should check that we are static *)
 | "abi_static_size _ = 0"
 
-(* for simplicity (since this is part of the spec), we don't do a precise calculation here.
-   instead we assume everything needs a 32-byte head in addition to its main encoding.
+(* 
+  Upper bound on encoded size of (canonically-encoded) dynamic ABI data
+  This is necessary because if the canonically-encoded size > ~2^256,
+  A "compressed" non-canonical encoding may exist, but not a canonical one.
+  See AbincodeCorrect.thy for details
+  
+  This calculation is designed to be simpler than a precise calculation of
+  encoded length. This is important because it forms part of the specification
+  (shows up as a premise to encoder-correctness theorems).
+  We assume everything needs a 32-byte head in addition to its body encoding.
 *)
 fun abi_dynamic_size_bound :: "abi_value \<Rightarrow> int" where
 "abi_dynamic_size_bound v =
@@ -290,7 +277,10 @@ fun abi_dynamic_size_bound :: "abi_value \<Rightarrow> int" where
           | Vbytes bs \<Rightarrow> 32 + length bs + 32
           | Vstring s \<Rightarrow> 32 + length s + 32))" (* extra 32 at end is for byte padding *)
 
-(* this should capture the exact size of dynamic structures, though I have not proven this yet *)
+(* this should capture the exact size of dynamic structures
+   its correctness hasn't been proven and in practice we use the upper bound given above
+   the implementation is retained partly to demonstrate how much simpler the
+   upper-bound calculation is. *)
 fun abi_dynamic_size_precise :: "abi_value \<Rightarrow> int" where
 "abi_dynamic_size_precise v =
   (if abi_type_isstatic (abi_get_type v) then abi_static_size (abi_get_type v)

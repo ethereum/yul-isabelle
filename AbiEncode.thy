@@ -1,8 +1,9 @@
 theory AbiEncode imports AbiTypes Ok
 begin
 
-(* a minimal ABI encoder, used mostly for sanity checking/testing
-the decoder (AbiDecoder.thy) *)
+(* An encoder for the Solidity ABI.
+   It is designed to produce "canonical" encodings; that is,
+   it will produce outputs that match Solidity's output *)
 
 (* TODO: decide whether to add checks to these encoders,
    or to do so outside *)
@@ -29,6 +30,17 @@ fun encode_fbytes :: "nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list" w
 "encode_fbytes n l = 
   pad_bytes (take n l)"
 
+(* TODO: do we need to capture the process of 
+    calculating the selector with Keccak?
+    If we wanted we could use Eth-Isabelle's implementation.
+    For now we assume the 4-byte selector is precomputed *)
+fun encode_function_sel :: "int \<Rightarrow> int \<Rightarrow> 8 word list" where
+"encode_function_sel addr sel =
+  Word.word_rsplit (Word.word_of_int addr :: 160 word) @
+  Word.word_rsplit (Word.word_of_int sel :: 32 word)"
+
+(* NB: This function is part of the spec. See AbiEncodeSpec.thy.
+*)
 fun encode_static :: "abi_value \<Rightarrow> 8 word list orerror" where
 "encode_static (Vuint n i) = Ok (encode_int i)"
 | "encode_static (Vsint n i) = Ok (encode_int i)"
@@ -37,6 +49,8 @@ fun encode_static :: "abi_value \<Rightarrow> 8 word list orerror" where
 | "encode_static (Vfixed m n r) = Ok (encode_fixed n r)"
 | "encode_static (Vufixed m n r) = Ok (encode_fixed n r)"
 | "encode_static (Vfbytes n l) = Ok (encode_fbytes n l)"
+| "encode_static (Vfunction addr sel) =
+    Ok (encode_function_sel addr sel)"
 | "encode_static (Vfarray t n l) =
     (case those_err (List.map encode_static l) of
       Err s \<Rightarrow> Err s
@@ -47,7 +61,7 @@ fun encode_static :: "abi_value \<Rightarrow> 8 word list orerror" where
          | Ok bs \<Rightarrow> Ok (List.concat bs))"
 | "encode_static _ = Err ''Called static encoder on dynamic value''"
 
-
+(* TODO: This does not (I believe) support Unicode/UTF8 *)
 fun string_to_bytes :: "char list \<Rightarrow> 8 word list" where
 "string_to_bytes s = 
   List.map (\<lambda> c . word_of_int (int_of_integer (integer_of_char c))) s"
@@ -61,21 +75,26 @@ fun heads_length :: "(abi_value) list \<Rightarrow> int" where
         else 32 + heads_length t))"
 
 
-(* 3 stages
-   first calculate heads length
-   then do encode_tails
-   finally, encode heads
-*)
+(* 
+   Auxiliary encoder functions that do the "heavy lifting" of encoding.
+   This encoder operates in 3 stages:
+   1. Calculate heads length
+   2. Encode tails (if data is dynamic)
+   3. Encode heads (if data is dynamic)
 
+   NB: this function does not do validity checking on parameters.
+   Implementations should call encode (see below) instead, which does.
+*)
 fun encode' :: "abi_value \<Rightarrow> 8 word list orerror" 
 
-(* change: encode'_tuple_heads now gives us back a pair (heads, tails) *)
+(* Given a list of (offset, tail-bytes) pairs
+   We return a pair of byte-lists
+   First is heads; second is tails. *)
 and encode'_tuple_heads :: "abi_value list \<Rightarrow> (int * 8 word list) list \<Rightarrow> (8 word list * 8 word list) orerror"
-(*
-and encode_tuple_tails :: "(8 word list + abi_value) list \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list option" where *)
 
 (* first int input is length of tails so far *)
-(* second int input is length of head (statically calculated) *)
+(* second int input is length of all (encoded) head-bytes
+   for this data structure (statically calculated) *)
 and encode'_tuple_tails :: "(abi_value) list \<Rightarrow> int \<Rightarrow> int \<Rightarrow> (int * 8 word list) list orerror" where
 "encode' v =
   (if abi_type_isstatic (abi_get_type v) then
@@ -105,12 +124,6 @@ and encode'_tuple_tails :: "(abi_value) list \<Rightarrow> int \<Rightarrow> int
                          Ok (encode_int (length bs) @ pad_bytes bs)
           | _ \<Rightarrow> Err ''Should be dead code (encode')''))"
 
-(* need to refactor for cleaner termination proof
-idea: encode tails first?
-ok, now we need some kind of way to get which tail we are on
-what is n? n should be the offset of the current tail
-this means we need some way to get the current offset
-*)
 | "encode'_tuple_heads [] []  = Ok ([], [])"
 | "encode'_tuple_heads (v#vs) ((offset, bs)#bss) =
     (if abi_type_isstatic (abi_get_type v) then
@@ -123,20 +136,9 @@ this means we need some way to get the current offset
                 Err s \<Rightarrow> Err s
                 | Ok (heads, tails)  \<Rightarrow> Ok ((encode_int offset @ heads), (bs @ tails))))
     "
-(* offset + headlen? offset + headlen + 32? *)
 | "encode'_tuple_heads _ _   = Err ''Should be dead code (encode'_tuple_heads)''"
 
-(* OK - we need to make it so that we track the length of the entire thing
-   so far.
-
-
-
- *)
 (* len_total tracks where the tail starts, including lengths of all heads *)
-(* the issue is that we're starting from the wrong place?  *)
-(* we need a way to calculate the lengths of all heads before we start encoding tails (?)
-
-*)
 | "encode'_tuple_tails [] _ _ = Ok []"
 | "encode'_tuple_tails (v # rest) headlen len_total =
   (if abi_type_isstatic (abi_get_type v)
@@ -159,12 +161,5 @@ definition encode :: "abi_value \<Rightarrow> 8 word list orerror"  where
 "encode v =
   (if abi_value_valid v then encode' v
    else Err ''Invalid ABI value'')"
-
-(* encoding tails
-idea: we can encode the data part of the tails without knowing heads
-however, when encoding heads, we need information from the tails
-*)
-
-value "Word.word_of_int (-1) :: 256 word"
 
 end

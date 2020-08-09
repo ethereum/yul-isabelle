@@ -1,6 +1,9 @@
 theory Ok imports Main
 
 begin
+
+(* A quick-and-dirty approach for getting error messages out of functions
+   using the sum type *)
 type_synonym 'a orerror = "'a + char list"
 
 abbreviation Ok :: "'a \<Rightarrow> 'a orerror" where
