@@ -365,12 +365,7 @@ next
       using Cons iht_static.prems iht_static.hyps Bvh Hd_code
       by(cases "encode'_tuple_tails xs 0 (int heads_len)"; auto)
 
-(*
-    have Tl_present :
-      "(ac, ab) \<in> (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip xs bvt). abi_type_isdynamic (abi_get_type (fst x))}"
-      using Cons iht_static.prems iht_static.hyps
-      by(auto)
-*)
+
     have Tl_present :
       "(ac, ab) \<in> set tails"
       using Cons iht_static.prems iht_static.hyps
@@ -401,22 +396,6 @@ next
         "encode'_tuple_tails xs 0 (int heads_len + int (length enc')) = Ok tails''"
       using iht_dynamic.prems iht_dynamic.hyps  Cons Enc' Hdt'_code
       by(cases "encode'_tuple_tails xs 0 (int heads_len + int (length enc'))"; auto)
-(*
-    hence Tenc : "encode'_tuple_tails xs 0 (int heads_len) = Ok bvt"
-      using Cons iht_dynamic.prems iht_dynamic.premhyps Bvh Hd_code
-      by(cases "encode'_tuple_tails xs 0 (int heads_len)"; auto)
-*)
-
-
-(* need some kind of argument here about how the element we're looking at is/isn't the first one *)
-
-(*
-    have Tl_present :
-      "(ac, ab) \<in> set tails"
-    using iht_dynamic.prems iht_dynamic.hyps
-                            Cons Bvh Hdt'_code Enc' T''_code
-      apply(auto simp add:tuple_value_valid_aux_def split:if_split_asm)
-*)
 
     show ?thesis
 
@@ -435,7 +414,6 @@ next
     obtain ab_code pre post where
       "encode' ab = Ok ab_code \<and> tails' = pre @ ab_code @ post \<and> ac = int (heads_len + length enc') + int (length pre)"
       using iht_dynamic.prems iht_dynamic.hyps
-  (* correct instantiations? *)
                               iht_dynamic.IH[of bvt "heads_len + (length enc')" 
                                                 heads' tails' ac ab]
                               Cons Bvh Hdt'_code T''_code Enc' Tl_present
