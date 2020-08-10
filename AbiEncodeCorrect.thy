@@ -28,81 +28,76 @@ proof-
                \<and> (\<forall> vs ts . v = Vtuple ts vs \<longrightarrow> P2 vs)
                \<and> (\<forall> vs t . v = Varray t vs \<longrightarrow> P2 vs)"
     proof(induction)
-case (Vuint x1 x2)
-then show ?case using Huint by auto next
-next
-  case (Vsint x1 x2)
-then show ?case using Hsint by auto next
-next
-  case (Vaddr x)
-  then show ?case using Haddr by auto next
-next
-  case (Vbool x)
-  then show ?case using Hbool by auto next
-next
-  case (Vfixed x1 x2 x3a)
-  then show ?case using Hfixed by auto next
-next
-  case (Vufixed x1 x2 x3a)
-  then show ?case using Hufixed by auto next
-next
-case (Vfbytes x1 x2)
-  then show ?case using Hfbytes by auto next
-next
-  case (Vfunction x1 x2)
-  then show ?case using Hfunction by auto next
-next
-  case (Vfarray x1 x2 l)
-  then show ?case using Hfarray
-  proof(induct l)
-    case Nil
-    then show ?case using Hln Hfarray by auto next
-  next
-    case (Cons a l)
-    then show ?case using Hlc Hfarray
-      apply(clarsimp)
-      apply(subgoal_tac "P1 a") apply(clarsimp) apply(metis)
-      apply(subgoal_tac "P2 l")  apply(clarsimp) apply(metis)
-      done
-  qed
-next
-  case (Vtuple x1 l)
-  then show ?case using Htuple
-  proof(induct l)
-    case Nil
-    then show ?case using Hln Htuple by auto next
-  next
-    case (Cons a l)
-    then show ?case using Hlc Htuple
-      apply(clarsimp)
-      apply(subgoal_tac "P1 a") apply(clarsimp) apply(metis)
-      apply(subgoal_tac "P2 l")  apply(clarsimp) apply(metis)
-      done
-  qed
-next
-  case (Vbytes x)
-  then show ?case using Hbytes by auto next
-next
-  case (Vstring x)
-then show ?case using Hstring by auto next
-next
-  case (Varray x1 l)
-  then show ?case 
-  proof(induct l)
-    case Nil
-    then show ?case using Hln Harray by auto next
-  next
-    case (Cons a l)
-    then show ?case using Hlc Harray
-      apply(clarsimp)
-      apply(subgoal_tac "P1 a") apply(clarsimp) apply(metis)
-      apply(subgoal_tac "P2 l")  apply(clarsimp) apply(metis)
-      done
-  qed
-qed}
-  thus ?thesis
-    apply(case_tac v) apply(auto)
-    done
+    case (Vuint x1 x2)
+    then show ?case using Huint by auto next
+    next
+      case (Vsint x1 x2)
+    then show ?case using Hsint by auto next
+    next
+      case (Vaddr x)
+      then show ?case using Haddr by auto next
+    next
+      case (Vbool x)
+      then show ?case using Hbool by auto next
+    next
+      case (Vfixed x1 x2 x3a)
+      then show ?case using Hfixed by auto next
+    next
+      case (Vufixed x1 x2 x3a)
+      then show ?case using Hufixed by auto next
+    next
+    case (Vfbytes x1 x2)
+      then show ?case using Hfbytes by auto next
+    next
+      case (Vfunction x1 x2)
+      then show ?case using Hfunction by auto next
+    next
+      case (Vfarray x1 x2 l)
+      then show ?case using Hfarray
+      proof(induct l)
+        case Nil
+        then show ?case using Hln Hfarray by auto next
+      next
+        case (Cons a l)
+        hence 0 : "P1 a" by (auto)
+        hence 1 : "P2 l" using Cons by(clarsimp; metis)
+        show ?case using 0 1 Hlc Hfarray
+          by auto
+      qed
+    next
+      case (Vtuple x1 l)
+      then show ?case using Htuple
+      proof(induct l)
+        case Nil
+        then show ?case using Hln Htuple by auto next
+      next
+        case (Cons a l)
+        hence 0 : "P1 a" by auto
+        have 1 : "P2 l" using Cons by (clarsimp; metis)
+        show ?case using 0 1 Hlc Htuple
+          by auto
+      qed
+    next
+      case (Vbytes x)
+      then show ?case using Hbytes by auto next
+    next
+      case (Vstring x)
+    then show ?case using Hstring by auto next
+    next
+      case (Varray x1 l)
+      then show ?case 
+      proof(induct l)
+        case Nil
+        then show ?case using Hln Harray by auto next
+      next
+        case (Cons a l)
+        hence 0 : "P1 a" by auto
+        have 1 : "P2 l" using Cons by (clarsimp; metis)
+        then show ?case using 0 1 Hlc Harray
+          by auto
+      qed
+    qed}
+  thus ?thesis by(cases v; auto)
 qed
 
 (* encoder success implies input validity *)
@@ -256,7 +251,7 @@ next
         proof cases
           case Vfarray
           show ?thesis using Cons Vfarray False Cons' Cons'' Bvh
-            (* this oneliner is kind of on the long side. *)
+            (* TODO: this oneliner is kind of on the long side. *)
             by(auto simp add: Let_def split:if_split_asm sum.split_asm intro:iht_dynamic)
         next
           case Vtuple
@@ -333,71 +328,135 @@ next
   qed
 qed
 
-lemma encode_tuple_heads_correct2 [rule_format] :
+
+
+lemma encode'_tuple_heads_correct2 [rule_format] :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
-   (\<forall> bvs heads_length  code heads_code tails_code ab ac ba ab_code.
-   xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) vs bvs) \<longrightarrow>
-   ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint 256) vs) \<longrightarrow>
-   tails = (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs bvs)))  \<longrightarrow>
-   encode'_tuple_tails vs (0::int) (heads_length) = Ok bvs \<longrightarrow>
-   abi_value_valid (Vtuple ys xs) \<longrightarrow>
-   encode'_tuple_heads vs bvs = Ok (heads_code, tails_code) \<longrightarrow>
-   (ac, ab) \<in> set tails \<longrightarrow>
-   abi_type_isdynamic (abi_get_type ab) \<longrightarrow>
-   (\<exists> ab_code pre post . encode' ab = Ok ab_code \<and> tails_code = pre @ ab_code @ post \<and>
-       ac = int (heads_length) + int (length pre)))"
-proof(induction rule:AbiEncodeSpec.is_head_and_tail.induct)
+   xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) vs bvs) \<Longrightarrow>
+   ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint 256) vs) \<Longrightarrow>
+   tails = (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs bvs)))  \<Longrightarrow>
+   encode'_tuple_tails vs (0::int) (heads_len) = Ok bvs \<Longrightarrow>
+   abi_value_valid (Vtuple ys xs) \<Longrightarrow>
+   encode'_tuple_heads vs bvs = Ok (heads_code, tails_code) \<Longrightarrow>
+   (ac, ab) \<in> set tails \<Longrightarrow>
+   abi_type_isdynamic (abi_get_type ab) \<Longrightarrow>
+   (\<exists> ab_code pre post . encode' ab = Ok ab_code \<and> 
+       tails_code = pre @ ab_code @ post \<and>
+       ac = int (heads_len) + int (length pre))"
+proof(induction arbitrary: bvs heads_len heads_code tails_code ac ab rule:AbiEncodeSpec.is_head_and_tail.induct)
   case iht_nil
-  then show ?case
-    apply(clarsimp)
-    done
+  then show ?case by auto
 next
   case (iht_static xs ys ts tails x v)
-  then show ?case 
-    apply(clarify)
-    apply(case_tac bvs; clarsimp)
-    apply(case_tac "encode_static x"; clarsimp) 
-    apply(drule_tac x = list in spec) apply(clarsimp)
-    apply(simp add:tuple_value_valid_aux_def)
-    apply(simp split:sum.splits)
-    apply(case_tac x1a; clarsimp)
+  show ?case
+  proof(cases bvs)
+    case Nil
+    then show ?thesis using iht_static by auto
+  next
+    case (Cons bvh bvt)
+    obtain ph bh where Bvh : "bvh = (ph, bh)" by(cases bvh; auto)
+    obtain head where Hd_code : "encode_static x = Ok head"
+      using iht_static.prems iht_static.hyps Cons Bvh by (cases "encode_static x"; auto)
+    then obtain heads' tails' where Hdt'_code : "encode'_tuple_heads xs bvt = Inl (heads', tails')"
+      using iht_static.prems iht_static.hyps  Cons Bvh  by(cases "encode'_tuple_heads xs bvt"; auto)
 
-    apply(drule_tac x = heads_lengtha in spec) apply(clarsimp)
-    apply(drule_tac x = ae in spec)
-    apply(drule_tac x = af in spec)
+    hence Tenc : "encode'_tuple_tails xs 0 (int heads_len) = Ok bvt"
+      using Cons iht_static.prems iht_static.hyps Bvh Hd_code
+      by(cases "encode'_tuple_tails xs 0 (int heads_len)"; auto)
 
-    apply(subgoal_tac
-"(af, ae)
-       \<in> (\<lambda>x::abi_value \<times> int \<times> 8 word list. case x of (v::abi_value, ptr::int, enc::8 word list) \<Rightarrow> (ptr, v)) `
-          {x::abi_value \<times> int \<times> 8 word list \<in> set (zip xs list). abi_type_isdynamic (abi_get_type (fst x))}")
-     apply(clarsimp) apply(clarsimp)
+(*
+    have Tl_present :
+      "(ac, ab) \<in> (\<lambda>x. case x of (v, ptr, enc) \<Rightarrow> (ptr, v)) ` {x \<in> set (zip xs bvt). abi_type_isdynamic (abi_get_type (fst x))}"
+      using Cons iht_static.prems iht_static.hyps
+      by(auto)
+*)
+    have Tl_present :
+      "(ac, ab) \<in> set tails"
+      using Cons iht_static.prems iht_static.hyps
+      by(auto)
 
-    apply(force)
-    done
-    
+    then show ?thesis using Cons iht_static.prems iht_static.hyps  Hd_code Hdt'_code Tenc
+      iht_static.IH[of bvt heads_len heads' tails_code ac ab] Tl_present
+      by(auto simp add:tuple_value_valid_aux_def)
+  qed
 next
   case (iht_dynamic xs ys ts tails x ptr)
-  then show ?case
-    apply(clarify)
-    apply(case_tac bvs; clarsimp)
-        apply(simp split:sum.splits)
-    apply(simp split:if_splits)
-    apply(drule_tac x = list in spec)
-    apply(clarsimp)
-    apply(drule_tac x = "(heads_lengtha + length bb)" in spec)
-    apply(clarsimp)
-      apply(simp add:tuple_value_valid_aux_def)
-    apply(drule_tac x = ab in spec)
-    apply(drule_tac x = ac in spec)
-    apply(clarsimp)
-    apply(case_tac "ac = int heads_lengtha \<and> ab = x") apply(clarsimp)
-    apply(clarsimp)
-     apply(rule_tac x = "bb @ pre" in exI) apply(clarsimp)
+  show ?case
+  proof(cases bvs)
+    case Nil
+    then show ?thesis using iht_dynamic by auto
+  next
+    case (Cons bvh bvt)
+    obtain ph bh where Bvh : "bvh = (ph, bh)" by(cases bvh; auto)
 
-    done
+    then obtain heads' tails' where Hdt'_code : "encode'_tuple_heads xs bvt = Inl (heads', tails')"
+      using iht_dynamic.prems iht_dynamic.hyps  Cons  by(cases "encode'_tuple_heads xs bvt"; auto)
+
+    obtain enc' where Enc': "encode' x = Ok enc'"
+      using iht_dynamic.prems iht_dynamic.hyps  Cons
+      by(cases "encode' x";  auto)
+
+  then obtain tails'' where T''_code : 
+        "encode'_tuple_tails xs 0 (int heads_len + int (length enc')) = Ok tails''"
+      using iht_dynamic.prems iht_dynamic.hyps  Cons Enc' Hdt'_code
+      by(cases "encode'_tuple_tails xs 0 (int heads_len + int (length enc'))"; auto)
+(*
+    hence Tenc : "encode'_tuple_tails xs 0 (int heads_len) = Ok bvt"
+      using Cons iht_dynamic.prems iht_dynamic.premhyps Bvh Hd_code
+      by(cases "encode'_tuple_tails xs 0 (int heads_len)"; auto)
+*)
+
+
+(* need some kind of argument here about how the element we're looking at is/isn't the first one *)
+
+(*
+    have Tl_present :
+      "(ac, ab) \<in> set tails"
+    using iht_dynamic.prems iht_dynamic.hyps
+                            Cons Bvh Hdt'_code Enc' T''_code
+      apply(auto simp add:tuple_value_valid_aux_def split:if_split_asm)
+*)
+
+    show ?thesis
+
+    proof(cases "ac = ptr \<and> ab = x")
+      case True
+      then show ?thesis using iht_dynamic.prems iht_dynamic.hyps 
+        by(auto split:if_split_asm split:sum.split_asm) 
+    next
+      case False
+      hence Tl_present :
+        "(ac, ab) \<in> set tails"
+      using iht_dynamic.prems iht_dynamic.hyps
+                              Cons Bvh 
+      by(auto)
+
+    obtain ab_code pre post where
+      "encode' ab = Ok ab_code \<and> tails' = pre @ ab_code @ post \<and> ac = int (heads_len + length enc') + int (length pre)"
+      using iht_dynamic.prems iht_dynamic.hyps
+  (* correct instantiations? *)
+                              iht_dynamic.IH[of bvt "heads_len + (length enc')" 
+                                                heads' tails' ac ab]
+                              Cons Bvh Hdt'_code T''_code Enc' Tl_present
+        by(auto simp add: Let_def tuple_value_valid_aux_def 
+                        split:if_split_asm)
+
+      then show ?thesis using iht_dynamic.prems iht_dynamic.hyps
+                              Cons Bvh Hdt'_code T''_code Enc' Tl_present
+        by(auto simp add: Let_def tuple_value_valid_aux_def 
+                        split:if_split_asm
+                        intro: exI[of _ "enc' @ pre"])
+    qed
+  qed
 qed
 
+
+
+
+(* begin masking out rest of file *)
+
+(*
 lemma those_err_success [rule_format]:
   "\<forall> x out . those_err xs = Ok out \<longrightarrow>
     x \<in> set xs \<longrightarrow> (? x' . x = Ok x')"
