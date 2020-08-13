@@ -247,6 +247,7 @@ fun abi_static_size :: "abi_type \<Rightarrow> int" where
 | "abi_static_size (Tfixed _ _) = 32"
 | "abi_static_size (Tufixed _ _) = 32"
 | "abi_static_size (Tfbytes _) = 32"
+| "abi_static_size (Tfunction) = 32"
 | "abi_static_size (Tfarray t n) =
     n * (abi_static_size t)"
 | "abi_static_size (Ttuple ts) =

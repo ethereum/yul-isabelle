@@ -36,8 +36,9 @@ fun encode_fbytes :: "nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list" w
     For now we assume the 4-byte selector is precomputed *)
 fun encode_function_sel :: "int \<Rightarrow> int \<Rightarrow> 8 word list" where
 "encode_function_sel addr sel =
-  Word.word_rsplit (Word.word_of_int addr :: 160 word) @
-  Word.word_rsplit (Word.word_of_int sel :: 32 word)"
+  pad_bytes (
+    Word.word_rsplit (Word.word_of_int addr :: 160 word) @
+    Word.word_rsplit (Word.word_of_int sel :: 32 word))"
 
 (* NB: This function is part of the spec. See AbiEncodeSpec.thy.
 *)

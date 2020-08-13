@@ -21,7 +21,7 @@ lemma my_abi_value_induct :
   and Harray : "(\<And> t vs . P2 vs \<Longrightarrow> P1 (Varray t vs))"
   and Hln : "P2 []"
   and Hlc : "(\<And> t l . P1 t \<Longrightarrow> P2 l \<Longrightarrow>  P2 (t # l))"
-shows "P1 v \<and> P2 l"
+shows "P1 v &&& P2 l"
 proof-
   {fix v
     have "P1 v \<and> (\<forall> l t n . v = Vfarray t n l \<longrightarrow> P2 l)
@@ -97,7 +97,9 @@ proof-
           by auto
       qed
     qed}
-  thus ?thesis by(cases v; auto)
+  hence Conc' : "P1 v \<and> P2 l" by (cases v; auto)
+  show "P1 v" using Conc' by auto
+  show "P2 l" using Conc' by auto
 qed
 
 (* encoder success implies input validity *)
@@ -139,7 +141,7 @@ next
 qed
 
 lemma encode'_tuple_heads_len :
-  "\<And> bss tails result .
+  "\<And> bss result .
     encode'_tuple_heads vs bss  = Ok result \<Longrightarrow>
     length vs = length bss"
 proof(induction vs)
@@ -281,7 +283,8 @@ lemma funext :
 proof(auto)
 qed
 
-(* Encoding correctness of static tuples *)
+(* Encoding correctness of static tuples
+   - first element of pair returned by encode'_tuple_heads *)
 lemma encode'_tuple_heads_correct1 :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
@@ -330,6 +333,8 @@ qed
 
 
 
+(* Encoding correctness of static tuples
+   - second element of pair returned by encode'_tuple_heads *)
 lemma encode'_tuple_heads_correct2 [rule_format] :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
@@ -343,7 +348,7 @@ lemma encode'_tuple_heads_correct2 [rule_format] :
    abi_type_isdynamic (abi_get_type ab) \<Longrightarrow>
    (\<exists> ab_code pre post . encode' ab = Ok ab_code \<and> 
        tails_code = pre @ ab_code @ post \<and>
-       ac = int (heads_len) + int (length pre))"
+       ac = (heads_len) + int (length pre))"
 proof(induction arbitrary: bvs heads_len heads_code tails_code ac ab rule:AbiEncodeSpec.is_head_and_tail.induct)
   case iht_nil
   then show ?case by auto
@@ -361,9 +366,9 @@ next
     then obtain heads' tails' where Hdt'_code : "encode'_tuple_heads xs bvt = Inl (heads', tails')"
       using iht_static.prems iht_static.hyps  Cons Bvh  by(cases "encode'_tuple_heads xs bvt"; auto)
 
-    hence Tenc : "encode'_tuple_tails xs 0 (int heads_len) = Ok bvt"
+    hence Tenc : "encode'_tuple_tails xs 0 (heads_len) = Ok bvt"
       using Cons iht_static.prems iht_static.hyps Bvh Hd_code
-      by(cases "encode'_tuple_tails xs 0 (int heads_len)"; auto)
+      by(cases "encode'_tuple_tails xs 0 (heads_len)"; auto)
 
 
     have Tl_present :
@@ -393,9 +398,9 @@ next
       by(cases "encode' x";  auto)
 
   then obtain tails'' where T''_code : 
-        "encode'_tuple_tails xs 0 (int heads_len + int (length enc')) = Ok tails''"
+        "encode'_tuple_tails xs 0 (heads_len + int (length enc')) = Ok tails''"
       using iht_dynamic.prems iht_dynamic.hyps  Cons Enc' Hdt'_code
-      by(cases "encode'_tuple_tails xs 0 (int heads_len + int (length enc'))"; auto)
+      by(cases "encode'_tuple_tails xs 0 (heads_len + int (length enc'))"; auto)
 
     show ?thesis
 
@@ -412,7 +417,7 @@ next
       by(auto)
 
     obtain ab_code pre post where
-      "encode' ab = Ok ab_code \<and> tails' = pre @ ab_code @ post \<and> ac = int (heads_len + length enc') + int (length pre)"
+      "encode' ab = Ok ab_code \<and> tails' = pre @ ab_code @ post \<and> ac = heads_len + int (length enc') + int (length pre)"
       using iht_dynamic.prems iht_dynamic.hyps
                               iht_dynamic.IH[of bvt "heads_len + (length enc')" 
                                                 heads' tails' ac ab]
@@ -429,137 +434,120 @@ next
   qed
 qed
 
-
-
-
-(* begin masking out rest of file *)
-
-(*
-lemma those_err_success [rule_format]:
-  "\<forall> x out . those_err xs = Ok out \<longrightarrow>
-    x \<in> set xs \<longrightarrow> (? x' . x = Ok x')"
-proof(induction xs)
+lemma those_err_success :
+  "those_err xs = Ok out \<Longrightarrow>
+    x \<in> set xs \<Longrightarrow> 
+  (\<exists> x' . x = Ok x')"
+proof(induction xs arbitrary: x out)
   case Nil
   then show ?case by auto
 next
   case (Cons a xs)
   then show ?case
-    apply(clarsimp)
-    apply(case_tac a; clarsimp)
-    apply(case_tac "those_err xs"; clarsimp)
-    done
+    by(cases a; auto split:sum.split_asm)
 qed
 
 definition err_force :: "'x orerror \<Rightarrow> 'x" where
 "err_force xe =
   (case xe of Ok x \<Rightarrow> x)"
 
-lemma those_err_map [rule_format]:
-  "\<forall> x out . those_err xs = Ok out \<longrightarrow>
-     out = map err_force xs"
-proof(induction xs)
+lemma those_err_map :
+  "those_err xs = Ok out \<Longrightarrow>
+   out = map err_force xs"
+proof(induction xs arbitrary: out)
   case Nil
   then show ?case by auto
 next
   case (Cons a xs)
   then show ?case 
-    apply(clarsimp)
-    apply(case_tac a; clarsimp)
-    apply(case_tac "those_err xs"; clarsimp)
-    apply(simp add:err_force_def)
-    done
+    by(cases a; auto simp add:err_force_def split:sum.split_asm)
 qed
-     
-
-declare [[show_types]]
 
 lemma foldl_plus [rule_format]:
-  "\<forall>  x  i.
-      x + (foldl ((+) :: int \<Rightarrow> int \<Rightarrow> int) (i :: int) xs) =
-      foldl ((+) :: int \<Rightarrow> int \<Rightarrow> int) (x + i) xs"
-proof(induction xs)
+  "x + (foldl ((+) :: int \<Rightarrow> int \<Rightarrow> int) (i :: int) xs) =
+   foldl ((+) :: int \<Rightarrow> int \<Rightarrow> int) (x + i) xs"
+proof(induction xs arbitrary: x i)
   case Nil
   then show ?case by auto
 next
   case (Cons a xs)
-  then show ?case 
-    apply(clarsimp)
-    apply(simp add: add.assoc)
-    done
+  then show ?case by(auto simp add:add.assoc)
 qed
-(*
-\<forall> ts v code v' t' code' .
-        v = (Vtuple ts vs) \<longrightarrow>
-        encode_static v = Ok code \<longrightarrow>
-        abi_value_valid v \<longrightarrow>
-        (v', t') \<in> set (zip vs ts) \<longrightarrow>
-        encode_static v' = Ok code' \<longrightarrow>
-        (abi_static_size t' = length code'
-*)
 
-lemma encode_static_size' [rule_format]:
-  "(\<forall> code . 
-     encode_static v = Ok code \<longrightarrow>
-     abi_value_valid v \<longrightarrow>
-     abi_static_size (abi_get_type v) = length code) \<and>
-    (
-     (\<forall> t n v code  .
-        v = (Vfarray t n vs) \<longrightarrow>
-        encode_static v = Ok code \<longrightarrow>
-        abi_value_valid v \<longrightarrow>
-        (
-         n * (abi_static_size t) = length code)) \<and>
-      ( \<forall> ts v code  .
-        v = (Vtuple ts vs) \<longrightarrow>
-        encode_static v = Ok code \<longrightarrow>
-        abi_value_valid v \<longrightarrow>
-        foldl (+) 0 (map abi_static_size ts) = length code))"
-proof(induction rule: my_abi_value_induct)
+(* correctness of static size calculation  *)
+lemma encode_static_size':
+  shows
+  "(\<And> code. 
+     encode_static v = Ok code \<Longrightarrow>
+     abi_value_valid v \<Longrightarrow>
+     abi_static_size (abi_get_type v) = length code)" and
+   "(\<And> t n v code  .
+      v = (Vfarray t n vs) \<Longrightarrow>
+      encode_static v = Ok code \<Longrightarrow>
+      abi_value_valid v \<Longrightarrow>
+      n * (abi_static_size t) = length code)" and
+    "(\<And> ts v code  .
+        v = (Vtuple ts vs) \<Longrightarrow>
+        encode_static v = Ok code \<Longrightarrow>
+        abi_value_valid v \<Longrightarrow>
+        foldl (+) 0 (map abi_static_size ts) = length code)"
+proof(induction v and vs rule: my_abi_value_induct)
 case (1 n i)
-  then show ?case by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
+  then show ?case
+    by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
 next
   case (2 n i)
-  then show ?case by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
+  then show ?case
+    by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
 next
   case (3 i)
-  then show ?case by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
+  then show ?case
+    by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
 next
   case (4 b)
-  then show ?case by (case_tac b; auto simp add:word_rsplit_def bin_rsplit_len)
+  then show ?case
+    by (cases b; auto simp: word_rsplit_def bin_rsplit_len; fail)
 next
   case (5 m n r)
-  then show ?case by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
+  then show ?case
+    by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
 next
   case (6 m n r)
-  then show ?case by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
+  then show ?case
+    by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
 next
   case (7 n bs)
-  then show ?case 
-    apply(clarsimp)
-    apply(simp split:prod.splits) apply(auto)
-    apply(case_tac x2;auto) 
-  apply(simp add:fbytes_value_valid_def)
-     apply(simp add:divmod_nat_def) apply(clarsimp)
-     apply(case_tac bs; clarsimp) 
-     apply(drule_tac Nat.dvd_imp_le) apply(simp) apply(simp)
-  apply(simp add:fbytes_value_valid_def)
-     apply(simp add:divmod_nat_def) apply(clarsimp)
-    apply(case_tac bs; clarsimp) 
-    apply(subgoal_tac "length list = nat") apply(clarsimp)
-    apply(case_tac "length list = 31"; clarsimp)  done
+  obtain d rem where Drem : "divmod_nat (min (length bs) n) 32 = (d, rem)"
+    by (cases "divmod_nat (min (length bs) n) 32"; auto)
+
+  then show ?case
+  proof(cases rem)
+    case 0
+    then show ?thesis using 7 Drem Nat.dvd_imp_le[of 32 "length code"]
+      by(auto simp add:fbytes_value_valid_def divmod_nat_def) 
+  next
+    case (Suc n')
+    then obtain bsh and bst where Bs : "bs = bsh # bst"
+      using 7 Drem
+      unfolding fbytes_value_valid_def divmod_nat_def
+      by (cases bs; auto)
+    hence "length bst = n'" using 7 Drem Suc
+      by(cases "length bst = 31";
+         auto simp add: divmod_nat_def fbytes_value_valid_def)
+    thus ?thesis using 7 Drem Suc Bs
+      by(auto simp add: divmod_nat_def fbytes_value_valid_def)
+  qed
 next
   case (8 i j)
-  then show ?case by (auto simp: word_rsplit_def bin_rsplit_len; fail)?
+  then show ?case
+    by(auto simp add: divmod_nat_def function_value_valid_def
+        word_rsplit_def bin_rsplit_len)
 next
   case (9 t n l)
-  then show ?case 
-    apply(clarsimp)
-    done
-  next
+  then show ?case by auto
+next
   case (10 ts vs)
-  then show ?case 
-    apply(clarsimp)
-    done
+  then show ?case by auto
 next
   case (11 bs)
   then show ?case by auto
@@ -571,144 +559,80 @@ next
   then show ?case by auto
 next
   case 14
-  then show ?case
-    apply(clarsimp) apply(simp add:farray_value_valid_aux_def tuple_value_valid_aux_def)
-    done
+  { case 1 then show ?case 
+      by (simp add:farray_value_valid_aux_def tuple_value_valid_aux_def) 
+  next
+    case 2 then show ?case
+      by (simp add:farray_value_valid_aux_def tuple_value_valid_aux_def)
+  }
 next
-  case (15 v l)
-  then show ?case
-    apply(clarsimp)
-    apply(rule_tac conjI)
+  case (15 h l)
+  { case 1 
+    then obtain henc where Henc : "encode_static h = Ok henc"
+      by (cases "encode_static h"; auto)
 
-    apply(thin_tac
-"\<forall>(ts::abi_type list) code::8 word list.
-       (case those_err (map encode_static l) of Inl (bs::8 word list list) \<Rightarrow> Ok (concat bs) | Inr (x::char list) \<Rightarrow> Err x) = Ok code \<longrightarrow>
-       list_all abi_type_valid ts \<and> tuple_value_valid_aux ts l \<and> list_all abi_value_valid_aux l \<longrightarrow> foldl (+) (0::int) (map abi_static_size ts) = int (length code)"
-)
-     apply(clarsimp)
-     apply(drule_tac x = t in spec) apply(clarsimp)
-     apply(case_tac n; clarsimp)
-      apply(simp add:farray_value_valid_aux_def)
-     apply(simp add:farray_value_valid_aux_def)
-    apply(clarsimp)
-    apply(case_tac "encode_static v"; clarsimp)
-     apply(simp split:sum.splits)
-     apply(clarsimp)
-    apply(simp add:int_distrib)
+    then obtain lenc where Lenc : "those_err (map encode_static l) = Ok lenc"
+      using 1 
+      by (cases "those_err (map encode_static l)"; auto)
 
-    (* tuple *)
-    apply(thin_tac "\<forall>(t::abi_type) (n::nat) code::8 word list.
-       (case those_err (map encode_static l) of Inl (bs::8 word list list) \<Rightarrow> Ok (concat bs) | Inr (x::char list) \<Rightarrow> Err x) = Ok code \<longrightarrow>
-       abi_type_valid t \<and> farray_value_valid_aux t n l \<and> list_all abi_value_valid_aux l \<longrightarrow> int n * abi_static_size t = int (length code)")
+    show ?case using Henc Lenc
+                    1 "15.IH"(1)[of henc] 
+                    "15.IH"(2)[of "Vfarray t (length l) l"
+                                  "abi_get_type h" "length l" "concat lenc"]
+      by(auto simp add:farray_value_valid_aux_def int_distrib split:sum.split_asm)
 
-     apply(clarsimp)
-     apply(case_tac ts; clarsimp)
-      apply(simp add:tuple_value_valid_aux_def)
-     apply(simp add:tuple_value_valid_aux_def)
+  next
+    case 2  
+    then obtain henc where Henc : "encode_static h = Ok henc"
+      by (cases "encode_static h"; auto)
 
-     apply(case_tac " those_err (encode_static v # map encode_static l) "; clarsimp)
-    apply(case_tac "encode_static v"; clarsimp)
-     apply(case_tac "those_err (map encode_static l)"; clarsimp)
-    apply(cut_tac f = "(+)"
-and a = "0 :: int"
-and x = "abi_static_size (abi_get_type v)"
-and xs = "(map (abi_static_size \<circ> abi_get_type) l)" in foldl_Cons)
-     apply(rotate_tac -1)
-    apply(drule_tac sym)
-    apply(clarsimp)
-    apply(cut_tac
-x = "int (length a)"
-and i = "0"
-and xs = "(map (abi_static_size \<circ> abi_get_type) l)"
-in foldl_plus)
-    apply(simp)
-    done
+    then obtain lenc where Lenc : "those_err (map encode_static l) = Ok lenc"
+      using 2
+      by (cases "those_err (map encode_static l)"; auto)
 
+    obtain th tt where T : "ts = th # tt" using 2 by (auto simp add:tuple_value_valid_aux_def)
+
+    then show ?case using Henc Lenc
+                    2 "15.IH"(1)[of henc] 
+                    "15.IH"(3)[of "Vtuple tt l" tt "concat lenc"]
+                    foldl_plus[of "int (length henc)" 0
+                                  "map (abi_static_size \<circ> abi_get_type) l"]
+      by(auto simp add:tuple_value_valid_aux_def  split:sum.split_asm)
+  }
 qed
+
+
 
 lemma encode_static_size :
 "encode_static v = Ok code \<Longrightarrow>
-     abi_value_valid v \<Longrightarrow>
-     abi_static_size (abi_get_type v) = length code"
-  apply(cut_tac encode_static_size')
-  apply(auto)
-  done
+ abi_value_valid v \<Longrightarrow>
+ abi_static_size (abi_get_type v) = length code"
+  using encode_static_size' by auto
 
-(*
-  "encode v = Ok code \<Longrightarrow> encode v = Ok code \<Longrightarrow> can_encode_as v code _ _" (done)
 
---------
-
-  "is_canonical code \<Longrightarrow> can_encode_as v code _ _ \<Longrightarrow> encode v = Ok code" (next)
-
-  "encode v = Err _ \<Longrightarrow> can_encode_as v code \<Longrightarrow> False" (my version)
-
-  "can_encode_as v code \<Longrightarrow> (\<exists> code' . encode v = Ok code')" (daniel's version - more intuitive)
-
-  (another option - claim about valid values - that can_encode_as and encode both hold (for some code)
-   for v iff v is valid) (probably best option of all)
-  "abi_value_valid v = \<exists> code . can_encode_as v code"
-  "abi_value_valid v = \<exists> code . encode v = Ok code"
-
----------
-
-  "can_encode_as v code \<Longrightarrow> decode code = Ok v"
-
-  "decode code = Ok v \<Longrightarrow> can_encode_as v code"
-
-*)
-lemma encode_tuple_heads_headslength [rule_format]:
-  "\<forall> a aa b . encode'_tuple_heads l a = Ok (aa, b) \<longrightarrow>
-      list_all abi_value_valid l \<longrightarrow>
-      length aa = heads_length l"
-proof(induction l)
+lemma encode_tuple_heads_headslength:
+  "encode'_tuple_heads l tp = Ok (hds, tls) \<Longrightarrow>
+      list_all abi_value_valid l \<Longrightarrow>
+      length hds = heads_length l"
+proof(induction l arbitrary: tp hds tls)
   case Nil
   then show ?case 
-    apply(clarify)
-    apply(case_tac a; auto)
-    done
+    by(cases tp; auto)
 next
-  case (Cons a l)
-  then show ?case
-    apply(clarsimp)
-    apply(case_tac aa; auto)
-    apply(simp split:if_split_asm sum.splits)
-     apply(clarsimp)
-     apply(drule_tac x = list in spec) apply(drule_tac x = aa in spec) apply(clarsimp)
-     apply(drule_tac encode_static_size) apply(simp) apply(simp)
-
-    apply(case_tac x1) apply(clarsimp) 
-    apply(drule_tac x = list in spec) apply(clarsimp)
-    apply(simp add:word_rsplit_def)
-    apply(simp add: bin_rsplit_len)
-    done
+  case (Cons lh lt)
+  then obtain offset bs tpt where Tp : "tp = (offset, bs) # tpt" by(cases tp; auto)
+  
+  then show ?case 
+  proof(cases "abi_type_isstatic (abi_get_type lh)")
+    case True
+    then show ?thesis using Cons Tp encode_static_size[of lh]
+      by(auto split:sum.split_asm)
+  next
+    case False
+    then show ?thesis using Cons Tp
+      by(auto simp add: word_rsplit_def bin_rsplit_len split:sum.split_asm)
+  qed
 qed
-
-(* TODO: are our dyn cases constraining
-   head/head_types/tails enough? *)
-(* here is our full description *)
-(*
-lemma abi_encode_succeed_gen_new :
-  "(\<forall>  code pre post . encode v = Ok code \<longrightarrow>
-          (can_encode_as v (pre @ code @ post) (int (length pre)))) \<and>
-   (
-    (
-     (\<forall> t n code pre post .
-          abi_type_isdynamic t \<longrightarrow>
-          encode (Vfarray t n vs) = Ok code \<longrightarrow>
-          (\<exists> heads tails . 
-             is_head_and_tail vs (replicate n t) tail
-          (can_encode_as_list_dyn vs (pre @ code @ post) (int (length pre)) (int (length (pre @ code))))) \<and>
-     (\<forall> ts t code pre post .
-           t \<in> set ts \<longrightarrow>
-           abi_type_isdynamic t \<longrightarrow>
-           encode (Vtuple ts vs) = Ok code \<longrightarrow>
-          (can_encode_as_list_dyn vs (pre @ code @ post) (int (length pre)) (int (length (pre @ code))))) \<and>
-     (\<forall> t code pre post .
-          encode (Varray t vs) = Ok code \<longrightarrow>
-          (can_encode_as_list_dyn vs (pre @ code @ post) (int (length pre)) (int (length (pre @ code)))))))
-     "
-*)
 
 lemma map2_map_fst' :
   "\<And> f l' . 
@@ -719,780 +643,640 @@ proof(induction l)
   then show ?case by auto
 next
   case (Cons a l)
-  then show ?case 
-    apply(auto)
-    apply(case_tac l') apply(auto)
-    done
+  then show ?case by (cases l'; auto)
 qed
 
-lemma abi_encode_succeed [rule_format] :
-  "(\<forall>  code pre post . encode v = Ok code \<longrightarrow>
-          (can_encode_as v (pre @ code @ post) (int (length pre))))"
+(* some convenience lemmas about is_head_and_tail *)
+lemma is_head_and_tail_vs_elem :
+"is_head_and_tail xs ys ts tails \<Longrightarrow>
+ x \<in> set xs \<Longrightarrow>
+ abi_type_isdynamic (abi_get_type x) \<Longrightarrow>
+   (\<exists> offset . (offset, x) \<in> set tails \<and>
+            (Vsint 256 offset \<in> set ys))"
+proof(induction rule:is_head_and_tail.induct)
+  case iht_nil
+  then show ?case by auto
+next
+  case (iht_static xs ys ts tails x v)
+  then show ?case by auto
+next
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case by auto
+qed
 
-(* \<and>
-   (
-    (
-     (\<forall>  (a :: (int * 8 word list) list) n code (pre :: 8 word list) (post :: 8 word list) .
-          encode'_tuple_heads l a [] = Ok code \<longrightarrow>
-       is_head_and_tail l (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr) l a)
-        (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) l)
-        (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip l a))) \<longrightarrow>
-        ((
-             can_encode_as (Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tuint (256::nat)) l)
-                                   (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vuint (256::nat) ptr) l a)) (pre @ code @ post) (int (length pre))
-        )
-        \<and>
-        (\<forall> aa ab b . (aa, ab, b) \<in> set (zip l a) \<longrightarrow> can_encode_as aa (pre @ code @ post) (ab + int (length pre))))
-        )))"
-*)
-proof(induction v )
-case (Vuint n i)
-  then show ?case 
-    apply(clarify)
-    apply(rule_tac Estatic)
-     apply(auto simp add:encode_def split:if_split_asm)
-    done
+
+lemma is_head_and_tail_vs_elem_static :
+"is_head_and_tail xs ys ts tails \<Longrightarrow>
+ x \<in> set xs \<Longrightarrow>
+ abi_type_isstatic (abi_get_type x) \<Longrightarrow>
+   (x \<in> set ys )"
+proof(induction rule:is_head_and_tail.induct)
+  case iht_nil
+  then show ?case by auto
 next
-  case (Vsint n i)
-  then show ?case
-    apply(clarify)
-    apply(rule_tac Estatic)
-     apply(auto simp add:encode_def split:if_split_asm)
-    done
+  case (iht_static xs ys ts tails x v)
+  then show ?case by auto
 next
-  case (Vaddr x)
-  then show ?case
-    apply(clarify)
-    apply(rule_tac Estatic)
-     apply(auto simp add:encode_def split:if_split_asm)
-    done
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case by auto
+qed
+
+lemma is_head_and_tail_tails_elem :
+assumes Hht : "is_head_and_tail xs ys ts tails"
+assumes Hin : "(offset, x) \<in> set tails"
+shows "abi_type_isdynamic (abi_get_type x) \<and>
+       Vsint 256 offset \<in> set ys \<and>
+       x \<in> set xs " using Hht Hin
+by(induction rule:is_head_and_tail.induct; auto)
+
+lemma is_head_and_tail_heads_elem :
+  "is_head_and_tail vs heads head_types tails \<Longrightarrow>
+   h \<in> set heads \<Longrightarrow>
+   abi_type_isstatic (abi_get_type h)"
+proof(induction rule:is_head_and_tail.induct)
+  case iht_nil
+  then show ?case by auto
 next
-  case (Vbool b)
-  then show ?case
-    apply(clarify)
-    apply(rule_tac Estatic)
-     apply(auto simp add:encode_def split:if_split_asm)
-    done
+  case (iht_static xs ys ts tails x v)
+  then show ?case by auto
 next
-  case (Vfixed m n r)
-  then show ?case
-    apply(clarify)
-    apply(rule_tac Estatic)
-     apply(auto simp add:encode_def split:if_split_asm)
-    done
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case by auto
+qed
+
+lemma is_head_and_tail_head_types_elem :
+  "is_head_and_tail vs heads head_types tails \<Longrightarrow>
+   ht \<in> set head_types \<Longrightarrow>
+   abi_type_isstatic (ht)"
+proof(induction rule:is_head_and_tail.induct)
+  case iht_nil
+  then show ?case by auto
 next
-  case (Vufixed m n r)
-  then show ?case 
-    apply(clarify)
-    apply(rule_tac Estatic)
-     apply(auto simp add:encode_def split:if_split_asm)
-    done
+  case (iht_static xs ys ts tails x v)
+  then show ?case by auto
 next
-  case (Vfbytes n bs)
-  then show ?case 
-    apply(clarify)
-    apply(rule_tac Estatic)
-     apply(auto simp add:encode_def split:if_split_asm)
-    done
-next
-  case (Vfunction i j)
-  then show ?case
-    apply(clarify)
-    (* function case currently unimplimented - this is a bug. *)
-    sorry
-next
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case by auto
+qed
+
+lemma is_head_and_tail_heads_elem' :
+  "is_head_and_tail vs heads head_types tails \<Longrightarrow>
+   x \<in> set heads \<Longrightarrow>
+   x \<notin> set vs \<Longrightarrow>
+   (\<exists> offset x' . (offset, x') \<in> set tails \<and>
+      abi_type_isdynamic (abi_get_type x') \<and>
+      x = Vsint 256 offset)"
+by(induction rule:is_head_and_tail.induct; auto)
+
+
+
+lemma abi_encode_succeed :
+  "encode v = Ok code \<Longrightarrow>
+   can_encode_as v (pre @ code @ post) (int (length pre))"
+proof(induction v arbitrary: code pre post;
+     (unfold encode_def; auto split:if_split_asm intro:Estatic; fail)?)
+
+  (* TODO: see if we can reduce the amount of copy-paste in these goals *)
   case (Vfarray t n l)
   then show ?case
   proof(cases "abi_type_isstatic t")
     case True
-    then show ?thesis using Vfarray
-      apply(clarsimp)
-      apply(rule_tac Estatic)
-        apply(simp)
-       apply(simp add:encode_def split:if_split_asm)
-      apply(simp add:encode_def split:if_split_asm)
-      done
+    then show ?thesis using Vfarray by(auto simp add:encode_def split:if_split_asm intro:Estatic)
   next
     case False
-    then show ?thesis using Vfarray
-      apply(clarsimp)
-(*      apply(thin_tac "\<forall>t n code.
-          encode (Vfarray t n l) = Ok code \<longrightarrow>
-          (\<forall>pre post v'. v' \<in> set l \<longrightarrow> encode v' = Ok code \<longrightarrow> can_encode_as v' (pre @ code @ post) (int (length pre))) ") *)
-      apply(simp add:encode_def)
-      apply(case_tac " abi_type_valid t \<and> farray_value_valid_aux t n l \<and> list_all abi_value_valid_aux l"; clarsimp)
-      apply(case_tac " encode'_tuple_tails l 0 (heads_length l) "; clarsimp)
-      apply(case_tac "encode'_tuple_heads l a"; clarsimp)
 
-(*headlen len_total bvs vbvs hds tls *)
-      apply(frule_tac 
-vbvs = "(List.zip l a)"
-and
-hds= "List.map (\<lambda> (v, (ptr, enc)) .
-                        (if (abi_type_isstatic (abi_get_type v)) then v
-                            else (Vsint 256 ptr))) (List.zip l a)"
-and
-tls = " List.map (\<lambda> (v, (ptr, enc)) . (ptr, v))
-                    (List.filter (abi_type_isdynamic o abi_get_type o fst) (List.zip l a)) 
- "
-in
-encode_tuple_tails_correct)
-         apply(simp)
-      apply(simp) apply(simp)
-      apply(rule_tac vs = l in Efarray_dyn)
-        apply(simp)
-         apply(simp)
-        apply(simp)
-       apply(simp)
+    then have V : "abi_type_valid t"  "farray_value_valid_aux t n l"
+                  "list_all abi_value_valid_aux l"
+      using Vfarray unfolding encode_def
+      by(auto split:if_split_asm)
 
-       apply(cut_tac
-v = "(Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) l)
-          (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint (256::nat) ptr) l a))"
-and
- pre = "pre" and code = "aa" and post = "b@post" in Estatic)
-         apply(clarsimp)
-         apply(simp add:list_ex_iff)
-         apply(clarsimp) apply(fastforce)
+    then obtain bvs where Bvs : "encode'_tuple_tails l 0 (heads_length l) = Inl bvs"
+      using Vfarray False unfolding encode_def
+      by(auto split:sum.split_asm)
 
-        apply(clarsimp)
+    then obtain heads tails where Hhts : "encode'_tuple_heads l bvs = Inl (heads, tails)"
+      using Vfarray V False unfolding encode_def
+      by(auto split:sum.split_asm)
 
-      apply(simp add:tuple_value_valid_aux_def farray_value_valid_aux_def) apply(clarsimp)
-         apply(rule_tac conjI)
-         apply(simp add:list_all_iff)
-         apply(rule_tac conjI)
+    obtain iht_h where Iht_h : "iht_h = 
+      (map2 (\<lambda>v (ptr, enc). 
+          if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) l bvs)" by auto
 
-      apply(subgoal_tac
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) l =
- map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip l a)")
-           apply(clarsimp)
-          apply(rule_tac map2_map_fst') apply(simp add:encode_tuple_tails_len)
+    obtain iht_typ where Iht_typ : "iht_typ =
+      (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) 
+                   then abi_get_type v else Tsint 256) l)" by auto
 
-         apply(simp add:list_all_iff) apply(clarsimp)
-         apply(rule_tac conjI) apply(clarsimp)
-          apply(drule_tac set_zip_leftD) apply(clarsimp)
-apply(frule_tac set_zip_leftD) apply(clarsimp)
-         apply(drule_tac x = ab in bspec) apply(clarsimp)
-(*apply(drule_tac set_zip_rightD)*)
-         apply(frule_tac v = ab and offset = ac and enc = ba in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(simp) apply(simp)
+    obtain iht_tl where Iht_tl : "iht_tl = 
+      (map (\<lambda>(v, ptr, enc). (ptr, v))
+                  (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip l bvs)))" by auto
 
-        apply(rule_tac encode_tuple_heads_correct1; simp)
-         apply(simp add:list_all_iff) apply(simp add:farray_value_valid_aux_def)
-         apply(rule_tac conjI) apply(clarsimp) 
-          apply(auto) (*TODO: something saner here *)
-           apply(simp add:list_all_iff)
+    have Iht :
+      "is_head_and_tail l iht_h iht_typ iht_tl"
+      using False Vfarray V Bvs 
+            encode'_tuple_tails_correct[OF Bvs refl refl refl]
+            unfolding encode_def Iht_h Iht_typ Iht_tl
+            by(auto simp add:encode_def)
 
-          apply(simp add:tuple_value_valid_aux_def) 
-      apply(subgoal_tac
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) l =
- map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip l a)")
-           apply(clarsimp)
-          apply(rule_tac map2_map_fst') apply(simp add:encode_tuple_tails_len)
+    have Valid_Aux : "abi_value_valid_aux (Vtuple iht_typ iht_h)"
+      unfolding abi_value_valid_aux.simps
+    proof(rule conjI)
+      show "tuple_value_valid_aux iht_typ iht_h"
+        using V map2_map_fst'[OF encode'_tuple_tails_len[OF Bvs],
+                              of "(\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then 
+                                       abi_get_type v else Tsint 256)"]
+        unfolding Iht_typ Iht_h farray_value_valid_aux_def tuple_value_valid_aux_def
+        by(auto)
+    next
+      show "list_all abi_value_valid_aux iht_h" 
+        unfolding farray_value_valid_aux_def tuple_value_valid_aux_def
+                  list_all_iff Ball_def
+      proof(rule allI; rule impI)
+        fix x
+        assume Hx : "x \<in> set iht_h"
+  
+        have Xstatic : "abi_type_isstatic (abi_get_type x)"
+          using is_head_and_tail_heads_elem[OF Iht Hx] by auto
+  
+        have Xbad : "\<And> ptr enc . \<not> (x, ptr, enc) \<in> set (zip l bvs)"
+        proof
+          fix ptr enc
+          assume Xcontr : "(x, ptr, enc) \<in> set (zip l bvs)"
+  
+          show False using set_zip_leftD[OF Xcontr]
+            using V False Xstatic Hx
+            unfolding Iht_h set_map farray_value_valid_aux_def list_all_iff
+            by(auto)
+        qed
+  
+        then obtain x' ptr enc where InSet : "(x', ptr, enc) \<in> set (zip l bvs)" 
+          and Xptr : "x = Vsint 256 ptr"
+          using V False Xstatic Hx
+          unfolding Iht_h set_map farray_value_valid_aux_def list_all_iff
+          by(auto split: if_split_asm)
+  
+  
+        hence X't1 : "abi_get_type x' = t"
+          using V Bvs False Xstatic Hx set_zip_leftD[OF InSet]
+          unfolding Iht_h farray_value_valid_aux_def list_all_iff
+          by(auto )
+  
+        hence X't2 : "abi_type_isdynamic (abi_get_type x')"
+          using V False unfolding Iht_h farray_value_valid_aux_def list_all_iff by(auto)
+  
+        hence Ptr_valid : "sint_value_valid 256 ptr"
+          using encode'_tuple_tails_correct_overflow[OF Bvs InSet X't2] by auto  
+  
+        show "abi_value_valid_aux x"
+          using encode'_tuple_tails_correct_overflow[OF Bvs InSet X't2] Xptr by(auto)
+      qed
+    qed
 
-         apply(drule_tac set_zip_leftD) apply(simp)
-        apply(frule_tac set_zip_leftD)
-(* apply(drule_tac set_zip_rightD) *)
-         apply(frule_tac v = ab and offset = ac and enc = ba in encode'_tuple_tails_correct_overflow)  apply(clarsimp) apply(simp) apply(simp)
+    have Valid : "abi_value_valid (Vtuple iht_typ iht_h)"
+          unfolding abi_value_valid.simps
+    proof(rule conjI)
+      show "abi_type_valid (abi_get_type (Vtuple iht_typ iht_h))"
+        unfolding Iht_typ Iht_h
+        using V
+        by(auto simp add: farray_value_valid_aux_def tuple_value_valid_aux_def list_all_iff)
+    next
+      show "abi_value_valid_aux (Vtuple iht_typ iht_h)" using Valid_Aux by auto
+    qed
 
-       apply(simp add:list_ex_iff) apply(clarsimp) apply(fastforce)
+    have Static :"abi_type_isstatic (abi_get_type (Vtuple iht_typ iht_h))" unfolding Iht_typ
+      by(auto simp add:list_ex_iff)
 
-      apply(frule_tac heads_length = "length aa"
-              and ac = "ac" and ab = "ab" in encode_tuple_heads_correct2)
-              apply(auto)
-           defer (* this should be another easy lemma *)
-           apply(simp add:farray_value_valid_aux_def) apply(clarsimp)
-           apply(simp add:list_all_iff)
+    have Code_ht : "code = heads @ tails" using Bvs Hhts Vfarray.prems False
+      by(auto simp add:encode_def split:if_split_asm sum.split_asm)
 
-          apply(simp add:tuple_value_valid_aux_def farray_value_valid_aux_def)
-          apply(clarsimp) 
+    show ?thesis
+    proof(rule Efarray_dyn[OF _ _ Iht])
+      show "abi_value_valid (Vfarray t n l)" using V by auto
+    next
+      show "abi_type_isdynamic t" using False by auto
+    next
+      show "can_encode_as (Vtuple iht_typ iht_h) (pre @ code @ post) (int (length pre))"
+        unfolding Code_ht append_assoc
+      proof(rule Estatic[OF Static Valid])
+        show "encode_static (Vtuple iht_typ iht_h) = Ok heads"
+          using encode'_tuple_heads_correct1[OF Iht Iht_h Iht_typ Iht_tl Valid _ Hhts] Static Vfarray
+          by(auto)
+      qed
+    next
+      fix offset v
+      assume Hv : "(offset, v) \<in> set iht_tl"
+      have Hvl : "v \<in> set l" using is_head_and_tail_tails_elem[OF Iht Hv] by auto
+      have Hv_dyn : "abi_type_isdynamic (abi_get_type v)"
+        using is_head_and_tail_tails_elem[OF Iht Hv] by auto
 
-      apply(subgoal_tac
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) l =
- map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip l a)")
-           apply(clarsimp) 
-          apply(rule_tac map2_map_fst') apply(simp add:encode_tuple_tails_len)
+      obtain ab_code pre' post' where
+        Abc1 :"encode' v = Ok ab_code" and Abc2 : "tails = pre' @ ab_code @ post'"
+              and Abc3 : "offset = heads_length l + int (length pre')"
+        using encode'_tuple_heads_correct2[OF Iht Iht_h Iht_typ Iht_tl Bvs Valid Hhts Hv Hv_dyn]
+        by auto
 
-         apply(simp add:list_all_iff) apply(clarsimp)
-          apply(simp add:tuple_value_valid_aux_def farray_value_valid_aux_def)
+      have Vt_valid : "abi_type_valid (abi_get_type v)" using V Hvl
+        unfolding list_all_iff farray_value_valid_aux_def
+        by(auto)
 
-         apply(rule_tac conjI) apply(clarsimp)
-          apply(frule_tac x = ad in set_zip_leftD)
-          apply(drule_tac x = ad in bspec) apply(clarsimp)
-      apply(simp) apply(clarsimp)
-         apply(frule_tac v = ad and offset = ae and enc = bb in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(clarsimp)
-      apply(simp)
-      apply(simp add:list_all_iff)
+      have Vvalid : "abi_value_valid_aux v" using V Hvl
+        unfolding list_all_iff farray_value_valid_aux_def
+        by(auto)
 
-      apply(cut_tac
-f =  "(\<lambda>x::abi_value \<times> int \<times> 8 word list. case x of (v::abi_value, ptr::int, enc::8 word list) \<Rightarrow> (ptr, v))"
-and x = "(ab, ac, ba)" in Set.imageI) apply(simp) apply(simp)
-        apply(force)
+      have Abc1' : "encode v = Ok ab_code" using Hv_dyn Abc1 Vvalid Vt_valid
+        by(auto simp add:encode_def)
 
-       apply(atomize)
+      have Lvalid' : "list_all abi_value_valid l" using V
+        unfolding list_all_iff farray_value_valid_aux_def
+        by(auto)
 
-       apply(simp add:list_all_iff)
-       apply(drule_tac x = ab in spec)  apply(frule_tac set_zip_leftD) apply(simp)
-       apply(rotate_tac -1)
-       apply(drule_tac x = ab_code in spec)
-       apply(simp split:if_split_asm)
-        apply(rotate_tac -1)
-        apply(drule_tac x = "pre @ aa @ prea" in spec)
-      apply(rotate_tac -1)
-        apply(drule_tac x = "posta @ post" in spec) apply(clarsimp) 
-      apply(subgoal_tac
-"int (length pre) + (int (length aa) + int (length prea)) =
-(int (length aa) + int (length prea) + int (length pre))")
-         apply(clarsimp)
-      apply(simp)
-
-       apply(simp add:farray_value_valid_aux_def) apply(clarsimp)
-      apply(simp add: list_all_iff)
-
-      apply(drule_tac encode_tuple_heads_headslength) apply(clarsimp)
-       apply(simp add:farray_value_valid_aux_def)
-       apply(simp add:list_all_iff)
-
-      apply(simp)
-      done
-      
+      show "can_encode_as v (pre @ code @ post) (offset + int (length pre))"
+        using
+        Vfarray.IH[OF Hvl Abc1', of "pre @ heads @ pre'" "post'@post"] 
+        encode_tuple_heads_headslength[OF Hhts]
+        Code_ht Abc2 Abc3 Lvalid'
+        by(auto simp add:add.assoc add.commute)
+    qed
   qed
 next
-  case (Vtuple ts vs)
-  then show ?case 
+  case (Vtuple ts l)
+  then show ?case
   proof(cases "abi_type_isstatic (Ttuple ts)")
     case True
-    then show ?thesis
-      apply(clarsimp)
-      apply(rule_tac Estatic)
-        apply(simp)
-       apply(simp add:list_all_iff encode_def split:if_splits sum.splits prod.splits)
-      apply(simp add:list_all_iff encode_def split:if_splits sum.splits prod.splits)
-      done
+    then show ?thesis 
+      using Vtuple
+      by(auto simp add:encode_def split:if_split_asm intro:Estatic)
   next
     case False
-    then show ?thesis using Vtuple
-      apply(clarsimp)
-      apply(simp add:encode_def split:if_split_asm sum.split_asm prod.split_asm)
-      apply(frule_tac encode_tuple_tails_correct) apply(simp) apply(simp) apply(simp)
-apply(simp add:list_ex_iff) apply(clarsimp)
-      apply(rule_tac t = x in Etuple_dyn)
-           apply(simp) apply(clarsimp) apply(simp) apply(simp)
 
-       apply(drule_tac encode_tuple_heads_correct1) apply(simp) apply(simp)
+    then have V : "list_all abi_type_valid ts"  "tuple_value_valid_aux ts l"
+                  "list_all abi_value_valid_aux l"
+      using Vtuple unfolding encode_def
+      by(auto split:if_split_asm)
 
-      apply(subgoal_tac
-" (\<lambda>a::abi_value \<times> int \<times> 8 word list. abi_type_isdynamic (abi_get_type (fst a))) =
-(abi_type_isdynamic \<circ> abi_get_type \<circ> fst)")
-            apply(simp) apply(fastforce)
+    then obtain bvs where Bvs : "encode'_tuple_tails l 0 (heads_length l) = Inl bvs"
+      using Vtuple False unfolding encode_def
+      by(auto split:sum.split_asm)
 
-          apply(simp add:tuple_value_valid_aux_def)
-          apply(rule_tac conjI)
-           apply(simp add:list_all_iff) apply(clarsimp)
-      apply(case_tac "xa \<in> abi_get_type ` (set vs \<inter> {v::abi_value. \<not> abi_type_isdynamic (abi_get_type v)})"; clarsimp)
+    then obtain heads tails where Hhts : "encode'_tuple_heads l bvs = Inl (heads, tails)"
+      using Vtuple V False unfolding encode_def
+      by(auto split:sum.split_asm)
 
-          apply(rule_tac conjI) apply(clarsimp) 
-      apply(subgoal_tac
-" map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs =
- map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)")
-            apply(simp)
-            apply(clarsimp) apply(rule_tac map2_map_fst')  apply(simp add:encode_tuple_tails_len)
+    obtain iht_h where Iht_h : "iht_h = 
+      (map2 (\<lambda>v (ptr, enc). 
+          if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) l bvs)" by auto
 
-          apply(simp add: list_all_iff) apply(clarsimp) apply(rule_tac conjI)
-           apply(drule_tac set_zip_leftD) apply(clarsimp)
-apply(frule_tac set_zip_leftD) apply(clarsimp)
-         apply(drule_tac x = xa in bspec) apply(clarsimp)
-          apply(frule_tac set_zip_rightD)
-          apply(frule_tac v = a and offset = aa and enc = b in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(simp) apply(simp)
+    obtain iht_typ where Iht_typ : "iht_typ =
+      (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) 
+                   then abi_get_type v else Tsint 256) l)" by auto
 
-         apply(simp) apply(simp add:list_ex_iff) apply(clarsimp) apply(fastforce)
+    obtain iht_tl where Iht_tl : "iht_tl = 
+      (map (\<lambda>(v, ptr, enc). (ptr, v))
+                  (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip l bvs)))" by auto
 
-        apply(assumption)
+    have Iht :
+      "is_head_and_tail l iht_h iht_typ iht_tl"
+      using False Vtuple V Bvs 
+            encode'_tuple_tails_correct[OF Bvs refl refl refl]
+            unfolding encode_def Iht_h Iht_typ Iht_tl
+            by(auto simp add:encode_def)
 
-       apply(simp split:sum.split_asm)
-       apply(rule_tac Estatic) apply(simp)
-         apply(simp add:list_ex_iff) apply(clarsimp) apply(fastforce)
+    have Valid_Aux : "abi_value_valid_aux (Vtuple iht_typ iht_h)"
+      unfolding abi_value_valid_aux.simps
+    proof(rule conjI)
+      show "tuple_value_valid_aux iht_typ iht_h"
+        using V map2_map_fst'[OF encode'_tuple_tails_len[OF Bvs],
+                              of "(\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then 
+                                       abi_get_type v else Tsint 256)"]
+        unfolding Iht_typ Iht_h farray_value_valid_aux_def tuple_value_valid_aux_def
+        by(auto)
+    next
+      show "list_all abi_value_valid_aux iht_h" 
+        unfolding farray_value_valid_aux_def tuple_value_valid_aux_def
+                  list_all_iff Ball_def
+      proof(rule allI; rule impI)
+        fix x
+        assume Hx : "x \<in> set iht_h"
+  
+        have Xstatic : "abi_type_isstatic (abi_get_type x)"
+          using is_head_and_tail_heads_elem[OF Iht Hx] by auto
 
-        apply(simp add:tuple_value_valid_aux_def)
-        apply(simp add:list_all_iff) apply(clarsimp)
-        apply(rule_tac conjI) apply(clarsimp)
-         apply(case_tac "x \<in> abi_get_type ` (set vs \<inter> {v::abi_value. \<not> abi_type_isdynamic (abi_get_type v)})"; clarsimp)
 
-        apply(rule_tac conjI)
-      apply(subgoal_tac
-" map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs =
- map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)")
-            apply(simp)
-          apply(clarsimp) apply(rule_tac map2_map_fst')  apply(simp add:encode_tuple_tails_len)
+        show "abi_value_valid_aux x"
+        proof(cases "x \<in> set l")
+          assume True' : "x \<in> set l"
+          thus ?thesis using V unfolding list_all_iff by(auto)
+        next
+          assume False' : "x \<notin> set l"
 
-        apply(clarsimp)
-        apply(rule_tac conjI)
-         apply(clarsimp)
-         apply(drule_tac set_zip_leftD) apply(clarsimp)
-        apply(frule_tac set_zip_leftD)
-        apply(frule_tac set_zip_rightD) apply(clarsimp)
-        apply(simp add:encode'_tuple_tails_correct_overflow)
+          obtain x' offset where
+            X'_in : "(offset, x') \<in> set iht_tl" and
+            X'_dyn : "abi_type_isdynamic (abi_get_type x')" and
+            X_offset : "x = Vsint 256 offset"
+            using is_head_and_tail_heads_elem'[OF Iht Hx False'] by auto
 
-       apply(simp)
-
-      apply(atomize)
-      apply(frule_tac heads_length = "length x1b" and ac = "offset" and ab = "v"
-in encode_tuple_heads_correct2)
-              apply(simp)
-             apply(simp)
-      apply(subgoal_tac
-"(\<lambda>a::abi_value \<times> int \<times> 8 word list. abi_type_isdynamic (abi_get_type (fst a)))
-=
-(abi_type_isdynamic \<circ> abi_get_type \<circ> fst)")
-             apply(simp)
-            apply(fastforce)
-           apply(drule_tac encode_tuple_heads_headslength)
-            apply(simp add:list_all_iff)
-            apply(clarsimp)
-            apply(simp add:tuple_value_valid_aux_def)
-
-            apply(subgoal_tac "\<exists> vxa . (xa, vxa) \<in> set (zip vs ts)")
-             apply(clarsimp)
-
-            apply(clarsimp)
-            apply(rule_tac xs = vs and ys = ts in in_set_impl_in_set_zip1) apply(simp)
-             apply(simp) apply(rule_tac x = y in exI) apply(clarsimp)
-
-           apply(clarsimp)
-      apply(simp)
-        apply(rule_tac conjI)
-         apply(clarsimp)
-           apply(simp add:list_all_iff)
-           apply(clarsimp)
-           apply(safe_step) apply(clarsimp)
-
-      apply(simp add:tuple_value_valid_aux_def)
-            apply(subgoal_tac "\<exists> vxb . (xb, vxb) \<in> set (zip vs ts)")
-             apply(clarsimp)
-            apply(clarsimp)
-            apply(rule_tac xs = vs and ys = ts in in_set_impl_in_set_zip1) apply(simp)
-             apply(simp) apply(rule_tac x = y in exI) apply(clarsimp)
-
-      apply(simp add:tuple_value_valid_aux_def)
-           apply(fastforce)
-
-          apply(rule_tac conjI)
-           apply(simp add:tuple_value_valid_aux_def)
-           apply(subgoal_tac 
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs =
- map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)")
-            apply(clarsimp)
-           apply(rule_tac map2_map_fst') apply(simp add: encode_tuple_tails_len)
-           apply(simp add:list_all_iff)
-          apply(clarsimp)
-          apply(rule_tac conjI)
-      apply(drule_tac x = ab and y ="(ac, ba)" in set_zip_leftD) 
-           apply(rotate_tac 1) apply(drule_tac x = ab in bspec) apply(clarsimp) apply(simp)
-
-          apply(frule_tac set_zip_rightD) apply(clarsimp)
-          apply(simp add:encode'_tuple_tails_correct_overflow)
-
-         apply(simp)
-        apply(simp)
-
-       apply(simp)
-       apply(fastforce)
-
-      apply(clarify)
-      apply(drule_tac x = v in spec)
-      apply(clarsimp)
-      apply(frule_tac set_zip_leftD) apply(clarsimp)
-      apply(drule_tac x = ab_code in spec)
-      apply(simp split:if_split_asm)
-       apply(drule_tac x = "pre @ x1b @ prea" in spec)
-       apply(drule_tac x = "posta @ post" in spec)
-       apply(clarsimp)
-      apply(subgoal_tac
-"(int (length pre) + (int (length x1b) + int (length prea)))
-=
-(int (length x1b) + int (length prea) + int (length pre))"
-)
-        apply(clarsimp)
-       apply(arith)
-
-      apply(simp add:tuple_value_valid_aux_def)
-            apply(subgoal_tac "\<exists> va . (a, va) \<in> set (zip vs ts)")
-      apply(clarsimp)
-       apply(simp add: list_all_iff)
-
-      apply(clarsimp)
-            apply(rule_tac xs = vs and ys = ts in in_set_impl_in_set_zip1) apply(simp)
-       apply(simp) apply(rule_tac x = y in exI) apply(clarsimp)
-      done
+          obtain enc where Conc' : "(x', offset, enc) \<in> set (zip l bvs)"
+            using X'_in unfolding Iht_tl by(auto)
+  
+          show "abi_value_valid_aux x"
+            using encode'_tuple_tails_correct_overflow[OF Bvs Conc' X'_dyn] X_offset by(auto)
+      qed
+    qed
   qed
+    have Valid : "abi_value_valid (Vtuple iht_typ iht_h)"
+          unfolding abi_value_valid.simps
+    proof(rule conjI)
+      show "abi_type_valid (abi_get_type (Vtuple iht_typ iht_h))"
+        unfolding Iht_typ Iht_h
+        using V
+        by(auto simp add: farray_value_valid_aux_def tuple_value_valid_aux_def list_all_iff)
+    next
+      show "abi_value_valid_aux (Vtuple iht_typ iht_h)" using Valid_Aux by auto
+    qed
+
+    have Static :"abi_type_isstatic (abi_get_type (Vtuple iht_typ iht_h))" unfolding Iht_typ
+      by(auto simp add:list_ex_iff)
+
+    have Code_ht : "code = heads @ tails" using Bvs Hhts Vtuple.prems False
+      by(auto simp add:encode_def split:if_split_asm sum.split_asm)
+
+    obtain t where T_in : "t \<in> set ts" and T_dyn : "abi_type_isdynamic t"
+      using False unfolding abi_type_isstatic.simps abi_type_isdynamic.simps list_ex_iff
+      by auto
+
+    show ?thesis
+    proof(rule Etuple_dyn[OF _ T_in T_dyn Iht])
+      show "abi_value_valid (Vtuple ts l)" using V by auto
+    next
+      show "can_encode_as (Vtuple iht_typ iht_h) (pre @ code @ post) (int (length pre))"
+        unfolding Code_ht append_assoc
+      proof(rule Estatic[OF Static Valid])
+        show "encode_static (Vtuple iht_typ iht_h) = Ok heads"
+          using encode'_tuple_heads_correct1[OF Iht Iht_h Iht_typ Iht_tl Valid _ Hhts] Static Vtuple
+          by(auto)
+      qed
+    next
+      fix offset v
+      assume Hv : "(offset, v) \<in> set iht_tl"
+      have Hvl : "v \<in> set l" using is_head_and_tail_tails_elem[OF Iht Hv] by auto
+      have Hv_dyn : "abi_type_isdynamic (abi_get_type v)"
+        using is_head_and_tail_tails_elem[OF Iht Hv] by auto
+
+      obtain ab_code pre' post' where
+        Abc1 :"encode' v = Ok ab_code" and Abc2 : "tails = pre' @ ab_code @ post'"
+              and Abc3 : "offset = heads_length l + int (length pre')"
+        using encode'_tuple_heads_correct2[OF Iht Iht_h Iht_typ Iht_tl Bvs Valid Hhts Hv Hv_dyn]
+        by auto
+
+      have Vt_valid : "abi_type_valid (abi_get_type v)" using V Hvl
+        unfolding list_all_iff tuple_value_valid_aux_def
+        by(auto)
+
+      have Vvalid : "abi_value_valid_aux v" using V Hvl
+        unfolding list_all_iff tuple_value_valid_aux_def
+        by(auto)
+
+      have Abc1' : "encode v = Ok ab_code" using Hv_dyn Abc1 Vvalid Vt_valid
+        by(auto simp add:encode_def)
+
+      have Lvalid' : "list_all abi_value_valid l" using V
+        unfolding list_all_iff tuple_value_valid_aux_def
+        by(auto)
+
+      show "can_encode_as v (pre @ code @ post) (offset + int (length pre))"
+        using
+        Vtuple.IH[OF Hvl Abc1', of "pre @ heads @ pre'" "post'@post"] 
+        encode_tuple_heads_headslength[OF Hhts]
+        Code_ht Abc2 Abc3 Lvalid'
+        by(auto simp add:add.assoc add.commute)
+    qed
+  qed
+
 next
   case (Vbytes bs)
-  then show ?case
-    apply(clarify)
-    apply(cut_tac  l = bs and pre = pre and count = "word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list"
-and code = "drop 32 code"
-and post = post in Ebytes)
-       apply(simp add:bytes_value_valid_def encode_def) apply(simp split:if_splits)
+  have V : "abi_value_valid (Vbytes bs)" using Vbytes unfolding encode_def
+    by(auto split:if_split_asm)
 
-      apply(simp add:encode_def) apply(simp add:bytes_value_valid_def)
-    apply(simp split:if_splits)
-    apply(simp split:prod.splits)
-    apply(subgoal_tac
-"length (word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list) = 32")
-       apply(clarsimp)
-      apply(simp add: word_rsplit_def)
-       apply(simp add:bin_rsplit_len)
-     apply(simp add:encode_def) apply(simp add:bytes_value_valid_def)
-      apply(simp split:if_splits)
-
-      apply(simp add: word_rsplit_def)
-     apply(simp add:bin_rsplit_len)
-
-     apply(cut_tac
-v = "(Vuint (256::nat) (int (length bs)))"
-and pre = pre and code = "word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list" and post = "(drop 32 code) @ post" in Estatic)
-        apply(simp) apply(simp add:bytes_value_valid_def)
-
-    apply(simp add:encode_def)
-    apply(simp add:bytes_value_valid_def split:if_splits prod.splits)
-    apply(clarsimp)
-
-    apply(subgoal_tac
-"length (word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list) = 32")
-     apply(clarsimp)
-      apply(simp add: word_rsplit_def)
-     apply(simp add:bin_rsplit_len)
-
-    apply(simp add: encode_def  split:if_splits)
-    apply(clarsimp)
-        apply(subgoal_tac
-"length (word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list) = 32")
-      apply(simp add: encode_def bytes_value_valid_def split:if_splits)
-      apply(simp add: word_rsplit_def)
-     apply(simp add:bin_rsplit_len)
-    done
-
+  have Hcode : "code = encode_int (length bs) @ pad_bytes bs" using Vbytes unfolding encode_def
+    by(auto split:if_split_asm)
+  show ?case unfolding Hcode append_assoc
+  proof(rule Ebytes)
+    show "abi_value_valid (Vbytes bs)" using Vbytes unfolding encode_def
+      by(auto split:if_split_asm)
+  next
+    show "pad_bytes bs = pad_bytes bs" by auto
+  next
+    show "length (encode_int (int (length bs))) = 32"
+      by(auto simp add: word_rsplit_def bin_rsplit_len)
+  next
+    show "can_encode_as (Vuint 256 (int (length bs)))
+     (pre @ encode_int (int (length bs)) @ pad_bytes bs @ post) (int (length pre))"
+    proof(rule Estatic)
+      show "abi_type_isstatic (abi_get_type (Vuint 256 (int (length bs))))" by auto
+    next
+      show "abi_value_valid (Vuint 256 (int (length bs)))" using V
+        by(auto simp add:bytes_value_valid_def)
+    next
+      show "encode_static (Vuint 256 (int (length bs))) = Ok (encode_int (int (length bs)))"
+        by auto
+    qed
+  qed
 next
   case (Vstring s)
-  then show ?case
-    apply(clarsimp)
-    apply(rule_tac l = "string_to_bytes s" in Estring)
+  have V : "abi_value_valid (Vstring s)" using Vstring unfolding encode_def
+    by(auto split:if_split_asm)
 
-      apply(simp add:encode_def string_value_valid_def split:if_splits)
+  have Hcode : "code = encode_int (length (string_to_bytes s)) @ 
+                       pad_bytes (string_to_bytes s)"
+    using Vstring unfolding encode_def
+    by(auto simp add:string_value_valid_def Let_def split:if_split_asm)
 
-     apply(simp)
-
-(*
-(* new *)
-    apply(cut_tac  l = "string_to_bytes s" and pre = pre and count = "word_rsplit (word_of_int (int (length (string_to_bytes s))))"
-and code = "drop 32 code"
-and post = post in Ebytes)
-       apply(simp add:string_value_valid_def bytes_value_valid_def encode_def) apply(simp split:if_splits)
-       apply(simp add:bytes_value_valid_def encode_def) apply(simp split:if_splits)
-
-    apply(simp split:prod.splits)
-    apply(subgoal_tac
-"length (word_rsplit (word_of_int (int (length s)) :: 256 word) :: 8 word list) = 32")
-       apply(clarsimp)
-      apply(simp add: word_rsplit_def)
-       apply(simp add:bin_rsplit_len)
-     apply(simp add:encode_def) apply(simp add:bytes_value_valid_def)
-      apply(simp split:if_splits)
-
-      apply(simp add: word_rsplit_def)
-     apply(simp add:bin_rsplit_len)
-
-     apply(cut_tac
-v = "(Vuint (256::nat) (int (length bs)))"
-and pre = pre and code = "word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list" and post = "(drop 32 code) @ post" in Estatic)
-        apply(simp) apply(simp add:bytes_value_valid_def)
-
-    apply(simp add:encode_def)
-    apply(simp add:bytes_value_valid_def split:if_splits prod.splits)
-    apply(clarsimp)
-
-    apply(subgoal_tac
-"length (word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list) = 32")
-     apply(clarsimp)
-      apply(simp add: word_rsplit_def)
-     apply(simp add:bin_rsplit_len)
-
-    apply(simp add: encode_def  split:if_splits)
-    apply(clarsimp)
-        apply(subgoal_tac
-"length (word_rsplit (word_of_int (int (length bs)) :: 256 word) :: 8 word list) = 32")
-      apply(simp add: encode_def bytes_value_valid_def split:if_splits)
-      apply(simp add: word_rsplit_def)
-     apply(simp add:bin_rsplit_len)
-(* end new *)
-*)
-      (* copy-pasted proof from Vbytes case, should fix *)
-    apply(cut_tac  l = "string_to_bytes s" and pre = pre and count = "word_rsplit (word_of_int (int (length (string_to_bytes s))))"
-and code = "drop 32 code"
-and post = post in Ebytes)
-(*
-    apply(cut_tac  l = "string_to_bytes s" and pre = pre and count = "word_rsplit (word_of_int (int (length (string_to_bytes s))))"
-and code = "drop 32 code"
-and post = post in Ebytes)
-*)
-       apply(simp add:string_value_valid_def bytes_value_valid_def encode_def) apply(simp split:if_splits)
-
-      apply(simp add:encode_def) apply(simp add:string_value_valid_def)
-    apply(simp split:if_splits)
-      apply(simp split:prod.splits)
-    apply(clarsimp)
-        apply(case_tac x2; clarsimp)
-    apply(subgoal_tac
-"length (word_rsplit (word_of_int (int (length (string_to_bytes s))) :: 256 word) :: 8 word list) = 32")
-        apply(simp)
-     apply(clarsimp)
-      apply(simp add: word_rsplit_def)
-       apply(simp add:bin_rsplit_len)
-
-      apply(subgoal_tac
-"length (word_rsplit (word_of_int (int (length (string_to_bytes s))) :: 256 word) :: 8 word list) = 32")
-        apply(simp)
-     apply(clarsimp)
-      apply(simp add: word_rsplit_def)
-      apply(simp add:bin_rsplit_len)
-
-
-     apply(cut_tac
-v = "(Vuint (256::nat) (int (length (string_to_bytes s))))"
-and pre = pre and code = "word_rsplit (word_of_int (int (length (string_to_bytes s))) :: 256 word)" and post = "(drop 32 code) @ post" in Estatic)
-        apply(simp) apply(simp add:string_value_valid_def encode_def split:if_splits)
-
-      apply(simp add: word_rsplit_def)
-     apply(simp add:bin_rsplit_len)
-
-    apply(simp add:encode_def string_value_valid_def split:if_splits prod.splits)
-    apply(simp add:Let_def)
-        apply(simp add:encode_def string_value_valid_def split:if_splits prod.splits)
-    apply(subgoal_tac
-"length (word_rsplit (word_of_int (int (length (string_to_bytes s))) :: 256 word) :: 8 word list) = 32")
-        apply(simp)
-     apply(clarsimp)
-      apply(simp add: word_rsplit_def)
-      apply(simp add:bin_rsplit_len)
-
-     apply(cut_tac
-v = "(Vuint (256::nat) (int (length (string_to_bytes s))))"
-and pre = pre and code = "word_rsplit (word_of_int (int (length (string_to_bytes s))) :: 256 word)" and post = "(drop 32 code) @ post" in Estatic)
-        apply(simp) apply(simp add:string_value_valid_def encode_def split:if_splits)
-
-    apply(simp add:encode_def)
-     apply(simp add:string_value_valid_def bytes_value_valid_def Let_def split:if_splits prod.splits)
-
-
-        apply(simp add:encode_def)
-    apply(simp add:string_value_valid_def bytes_value_valid_def  split:if_splits prod.splits )
-    apply(simp only:Let_def) apply(clarify)
-
-    apply(subgoal_tac
-"length (word_rsplit (word_of_int (int (length (s))) :: 256 word) :: 8 word list) = 32")
-     apply(simp add: word_rsplit_def)
-
-    apply(simp add:uint_value_valid_def)
-     apply(simp add: word_rsplit_def)
-      apply(simp add:bin_rsplit_len)
-
-    done
+  show ?case
+  proof(rule Estring[OF V refl])
+    show "can_encode_as (Vbytes (string_to_bytes s)) (pre @ code @ post) (int (length pre))"
+      unfolding Hcode append_assoc
+    proof(rule Ebytes)
+      show "abi_value_valid (Vbytes (string_to_bytes s))" using V
+        by(auto simp add: string_value_valid_def bytes_value_valid_def)
+    next
+      show "pad_bytes (string_to_bytes s) = pad_bytes (string_to_bytes s)" by auto
+    next
+      show "length (encode_int (int (length (string_to_bytes s)))) = 32" using V
+        by(auto simp add: word_rsplit_def bin_rsplit_len)
+    next
+      show "can_encode_as (Vuint 256 (int (length (string_to_bytes s))))
+                          (pre @ encode_int (int (length (string_to_bytes s))) @ 
+                           pad_bytes (string_to_bytes s) @ post)
+                          (int (length pre))"
+      proof(rule Estatic)
+        show "abi_type_isstatic (abi_get_type (Vuint 256 (int (length (string_to_bytes s)))))"
+          by auto
+      next
+        show "abi_value_valid (Vuint 256 (int (length (string_to_bytes s))))" using V
+          by (auto simp add:string_value_valid_def)
+      next
+        show "encode_static (Vuint 256 (int (length (string_to_bytes s)))) = 
+              Ok (encode_int (int (length (string_to_bytes s))))" by auto
+      qed
+    qed
+  qed
 next
-  case (Varray t vs)
-  then show ?case
-    apply(clarsimp)
-    apply(simp add:encode_def split:if_splits)
-    apply(simp split:sum.split_asm prod.splits)
-    apply(clarsimp)
-    apply(frule_tac encode_tuple_tails_correct) apply(simp) apply(simp) apply(simp)
+  case (Varray t l)
+  then have V : "abi_type_valid t"  "array_value_valid_aux t l"
+                "list_all abi_value_valid_aux l"
+  using Varray unfolding encode_def
+  by(auto split:if_split_asm)
+  
+  then obtain bvs where Bvs : "encode'_tuple_tails l 0 (heads_length l) = Inl bvs"
+    using Varray unfolding encode_def
+    by(auto split:sum.split_asm)
+  
+  then obtain heads tails where Hhts : "encode'_tuple_heads l bvs = Inl (heads, tails)"
+    using Varray V unfolding encode_def
+    by(auto split:sum.split_asm)
+  
+  obtain iht_h where Iht_h : "iht_h = 
+    (map2 (\<lambda>v (ptr, enc). 
+        if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) l bvs)" by auto
+
+  obtain iht_typ where Iht_typ : "iht_typ =
+    (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) 
+                 then abi_get_type v else Tsint 256) l)" by auto
+
+  obtain iht_tl where Iht_tl : "iht_tl = 
+    (map (\<lambda>(v, ptr, enc). (ptr, v))
+                (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip l bvs)))" by auto
+
+  have Iht :
+    "is_head_and_tail l iht_h iht_typ iht_tl"
+    using Varray V Bvs 
+          encode'_tuple_tails_correct[OF Bvs refl refl refl]
+          unfolding encode_def Iht_h Iht_typ Iht_tl
+          by(auto simp add:encode_def)
+
+  have Valid_Aux : "abi_value_valid_aux (Vtuple iht_typ iht_h)"
+    unfolding abi_value_valid_aux.simps
+  proof(rule conjI)
+    show "tuple_value_valid_aux iht_typ iht_h"
+      using V map2_map_fst'[OF encode'_tuple_tails_len[OF Bvs],
+                            of "(\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then 
+                                     abi_get_type v else Tsint 256)"]
+      unfolding Iht_typ Iht_h farray_value_valid_aux_def tuple_value_valid_aux_def
+      by(auto)
+  next
+    show "list_all abi_value_valid_aux iht_h" 
+      unfolding farray_value_valid_aux_def tuple_value_valid_aux_def
+                list_all_iff Ball_def
+    proof(rule allI; rule impI)
+      fix x
+      assume Hx : "x \<in> set iht_h"
+
+      show "abi_value_valid_aux x"
+      proof(cases "x \<in> set l")
+        assume True' : "x \<in> set l"
+        thus ?thesis using V unfolding list_all_iff by(auto)
+      next
+        assume False' : "x \<notin> set l"
+
+        obtain x' offset where
+          X'_in : "(offset, x') \<in> set iht_tl" and
+          X'_dyn : "abi_type_isdynamic (abi_get_type x')" and
+          X_offset : "x = Vsint 256 offset"
+          using is_head_and_tail_heads_elem'[OF Iht Hx False'] by auto
+
+        obtain enc where Conc' : "(x', offset, enc) \<in> set (zip l bvs)"
+          using X'_in unfolding Iht_tl by(auto)
+
+        show "abi_value_valid_aux x"
+          using encode'_tuple_tails_correct_overflow[OF Bvs Conc' X'_dyn] X_offset by(auto)
+      qed
+    qed
+  qed
+
+  have Valid : "abi_value_valid (Vtuple iht_typ iht_h)"
+        unfolding abi_value_valid.simps
+  proof(rule conjI)
+    show "abi_type_valid (abi_get_type (Vtuple iht_typ iht_h))"
+      unfolding Iht_typ Iht_h
+      using V
+      by(auto simp add: array_value_valid_aux_def tuple_value_valid_aux_def list_all_iff)
+  next
+    show "abi_value_valid_aux (Vtuple iht_typ iht_h)" using Valid_Aux by auto
+  qed
+
+  have Static :"abi_type_isstatic (abi_get_type (Vtuple iht_typ iht_h))" unfolding Iht_typ
+    by(auto simp add:list_ex_iff)
+
+  have Code_ht : "code = encode_int (int (length l)) @ heads @ tails"
+    using Bvs Hhts Varray.prems
+    by(auto simp add:encode_def split:if_split_asm sum.split_asm)
+
+  have EncLen : "int (length (encode_int (int (length l)))) = 32"
+    by(auto simp: word_rsplit_def bin_rsplit_len)
 
 
-    apply(rule_tac
-t = t
-and vs = vs
-and heads = " (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint (256::nat) ptr) vs x1)"
-and head_types = "(map (\<lambda>v::abi_value. if abi_type_isstatic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs)"
-and tails = "(map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs x1)))"
-and full_code = "(pre @ word_rsplit (word_of_int (int (length vs))) @ x1b @ x2 @ post)"
-and start = "int (length (pre))"
-in
-Earray)
-
-        apply(simp) apply(simp)
-        apply(rule_tac Estatic; simp)
-        apply(simp add:uint_value_valid_def array_value_valid_aux_def)
-
-       apply(drule_tac encode_tuple_heads_correct1; simp)
-
-         apply(simp add:array_value_valid_aux_def tuple_value_valid_aux_def)
-         apply(rule_tac conjI) apply(clarsimp)
-    apply(simp add:list_all_iff)
-
-       apply(rule_tac conjI) apply(clarsimp)
-      apply(subgoal_tac
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs  =
- map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)")
-           apply(clarsimp)
-          apply(rule_tac map2_map_fst') apply(simp add:encode_tuple_tails_len)
-
-                 apply(simp add:list_all_iff) apply(clarsimp)
-         apply(rule_tac conjI) apply(clarsimp)
-          apply(drule_tac set_zip_leftD) apply(clarsimp)
-apply(frule_tac set_zip_leftD) apply(clarsimp)
-         apply(drule_tac x = a in bspec) apply(clarsimp)
-apply(frule_tac set_zip_rightD)
-         apply(frule_tac v = a and offset = aa and enc = b in encode'_tuple_tails_correct_overflow) apply(clarsimp) apply(simp)
-
-        apply(clarsimp)
-         apply(simp add:list_ex_iff) apply(clarsimp)
-        apply(case_tac "x \<in> abi_get_type ` (set vs \<inter> {v::abi_value. \<not> abi_type_isdynamic (abi_get_type v)})") apply(clarsimp)
-        apply(clarsimp)
-
-       apply(cut_tac
-v = "(Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs)
-          (map2 (\<lambda>(v::abi_value) (ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint (256::nat) ptr) vs x1))"
-and
- pre = "pre @ word_rsplit (word_of_int (int (length vs)))" and code = "x1b" and post = "x2@post" in Estatic)
-    apply(clarsimp)
-          apply(simp add:list_all_iff list_ex_iff)
-          apply(clarsimp)
-        apply(case_tac "x \<in> abi_get_type ` (set vs \<inter> {v::abi_value. \<not> abi_type_isdynamic (abi_get_type v)})") apply(clarsimp)
-        apply(clarsimp)
-
-    apply(clarsimp) apply(simp add:list_all_iff)
-
-         apply(rule_tac conjI) apply(clarsimp) 
-          apply(case_tac " x \<in> abi_get_type ` (set vs \<inter> {v::abi_value. \<not> abi_type_isdynamic (abi_get_type v)})") 
-    apply(clarsimp)
-         apply(simp add:array_value_valid_aux_def) apply(clarsimp)
-         apply(simp add:list_all_iff)
-
-    apply(case_tac
-"x \<in> abi_get_type ` (set vs \<inter> {v::abi_value. \<not> abi_type_isdynamic (abi_get_type v)})"
-; clarsimp)
-
-       apply(rule_tac conjI)   
-    apply(simp add:tuple_value_valid_aux_def)
-      apply(subgoal_tac
-"map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs  =
- map (\<lambda> (v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)")
-         apply(clarsimp)
-    apply(rule_tac map2_map_fst')
- apply(simp add:encode_tuple_tails_len)
-
-       apply(clarsimp)
-    apply(rule_tac conjI) apply(clarsimp)
-
-       apply(drule_tac set_zip_leftD) apply(clarsimp)
-
-      apply(frule_tac set_zip_leftD) 
-      apply(frule_tac set_zip_rightD) apply(clarsimp)
-      apply(frule_tac v = a and  offset = aa and enc = b in  encode'_tuple_tails_correct_overflow)
-       apply(simp) apply(simp add:array_value_valid_aux_def)  apply(clarsimp) apply(simp add:list_all_iff)
+  show ?case
+  proof(rule Earray[OF _ Iht])
+    show "abi_value_valid (Varray t l)" using V by auto
+  next
+    show "can_encode_as (Vuint 256 (int (length l)))
+            (pre @ code @ post) (int (length pre))" using V
+      unfolding Code_ht append_assoc array_value_valid_aux_def
+      by(auto intro: Estatic)
+  next
+    have Conc' : "encode_static (Vtuple iht_typ iht_h) = Ok heads"
+      using encode'_tuple_heads_correct1[OF Iht Iht_h Iht_typ Iht_tl Valid _ Hhts] Static Varray
+      by(auto)
 
 
-    apply(subgoal_tac
-" (int (length pre) + (32::int))
-=
- (int (length (pre @ word_rsplit (word_of_int (int (length vs)) :: 256 word) :: 8 word list)))
-")
-    apply(rotate_tac -1)
-    apply(cut_tac
-P =
-"(\<lambda> target . 
-can_encode_as
-        (Vtuple (map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs)
-          (map2 (\<lambda>(x::abi_value) y::int \<times> 8 word list. case y of (ptr::int, enc::8 word list) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type x) then x else Vsint (256::nat) ptr) vs x1))
-        ((pre @ word_rsplit (word_of_int (int (length vs)))) @ x1b @ x2 @ post) (target))"
-and
-t = "(int (length pre) + (32::int))" and s = "int (length (pre @ word_rsplit (word_of_int (int (length vs)) :: 256 word) :: 8 word list))"  in subst
-)
-        apply(simp) 
-  (*  try0 *)
-      (* this is unbelievably confusing *)
-       apply(assumption) apply(simp)
+    show "can_encode_as (Vtuple iht_typ iht_h) (pre @ code @ post) (int (length pre) + 32)"
+      using Estatic[OF Static Valid Conc', of "pre@encode_int (int (length l))"  ]
+            EncLen
+      unfolding Code_ht append_assoc
+      by(auto simp add: add.assoc add.commute)
+  next
+    fix offset v
+    assume Hv : "(offset, v) \<in> set iht_tl"
+    have Hvl : "v \<in> set l" using is_head_and_tail_tails_elem[OF Iht Hv] by auto
+    have Hv_dyn : "abi_type_isdynamic (abi_get_type v)"
+      using is_head_and_tail_tails_elem[OF Iht Hv] by auto
 
-     apply(clarsimp)
-      apply(simp add: word_rsplit_def)
-       apply(simp add:bin_rsplit_len)
+    obtain ab_code pre' post' where
+      Abc1 :"encode' v = Ok ab_code" and Abc2 : "tails = pre' @ ab_code @ post'"
+            and Abc3 : "offset = heads_length l + int (length pre')"
+      using encode'_tuple_heads_correct2[OF Iht Iht_h Iht_typ Iht_tl Bvs Valid Hhts Hv Hv_dyn]
+      by auto
 
-(* tail *)
-    apply(simp add:array_value_valid_aux_def)
-(*
-    apply(drule_tac x = v in spec) apply(clarsimp)
-    apply(frule_tac set_zip_leftD) apply(simp)
-    apply(drule_tac x = b in spec)
-*)
+    have Vt_valid : "abi_type_valid (abi_get_type v)" using V Hvl
+      unfolding list_all_iff array_value_valid_aux_def
+      by(auto)
+
+    have Vvalid : "abi_value_valid_aux v" using V Hvl
+      unfolding list_all_iff
+      by(auto)
+
+    have Abc1' : "encode v = Ok ab_code" using Hv_dyn Abc1 Vvalid Vt_valid
+      by(auto simp add:encode_def)
+
+    have Lvalid' : "list_all abi_value_valid l" using V
+      unfolding list_all_iff array_value_valid_aux_def
+      by(auto)
+
+    have Rearrange : 
+      "(int (length pre) + (32 + (heads_length l + int (length pre')))) =
+       (heads_length l + int (length pre') + int (length pre) + 32)" by arith
     
-    apply(frule_tac
-      heads_length = "length x1b"
-      and bvs = "x1"
-and ac = offset
-and ab = v
-and heads_code = "x1b" and tails_code = "x2" in
- encode_tuple_heads_correct2)
-            apply(simp)
-           apply(simp) apply(simp)
-         apply(simp)
-         apply(frule_tac encode_tuple_heads_headslength) 
-    apply(simp add:list_all_iff)
-         apply(simp) apply(simp)
-        apply(simp add:list_all_iff)
-        apply(rule_tac conjI)
-         apply(simp add:tuple_value_valid_aux_def)
-    apply(subgoal_tac
-" map (abi_get_type \<circ> (\<lambda>(v::abi_value, ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint (256::nat) ptr)) (zip vs x1) =
-       map (\<lambda>(v, _). if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) (zip vs x1)
-") 
-    apply(rule_tac t = 
-" map (abi_get_type \<circ> (\<lambda>(v::abi_value, ptr::int, enc::8 word list). if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint (256::nat) ptr)) (zip vs x1)"
-and s =
-" map2 (\<lambda>(v::abi_value) _::int \<times> 8 word list. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs x1"
-and P =
-"(\<lambda> lhs . lhs = map (\<lambda>v::abi_value. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint (256::nat)) vs)"
-in subst) apply(simp)
-          apply(simp)
-    apply(rule_tac sym)
-          apply(rule_tac map2_map_fst')
-          apply(simp add:encode_tuple_tails_len)
-         apply(simp)
 
-         apply(clarsimp)
-        apply(clarsimp)
-        apply(rule_tac conjI)
-    apply(rotate_tac -1)
-         apply(drule_tac set_zip_leftD) apply(simp add:list_all_iff)
-    apply(rotate_tac -1)
-        apply(frule_tac set_zip_rightD)
-        apply(simp add: encode'_tuple_tails_correct_overflow) apply(simp)
-      apply(clarsimp)
-     apply(simp add:List.image_set) apply(clarsimp)
-
-    apply(clarsimp)
-    apply(atomize)
-    apply(drule_tac x = a in spec)
-    apply(frule_tac set_zip_leftD; clarsimp)
-    apply(drule_tac x = ab_code in spec)
-    apply(simp split:if_split_asm)
-     apply(drule_tac x = "pre @ word_rsplit (word_of_int (int (length vs))) @ x1b @ prea" in spec)
-     apply(drule_tac x = "posta @ post" in spec) apply(clarsimp)
-
-    apply(subgoal_tac 
-"(int (length pre) + (int (length (word_rsplit (word_of_int (int (length vs))))) + (int (length x1b) + int (length prea)))) =
-int (length x1b) + int (length prea) + int (length pre) + (32::int)")
-    apply(cut_tac 
-P = "(\<lambda> i .  can_encode_as a (pre @ word_rsplit (word_of_int (int (length vs))) @ x1b @ prea @ ab_code @ posta @ post) i)"
-and s = "(int (length pre) + (int (length (word_rsplit (word_of_int (int (length vs))))) + (int (length x1b) + int (length prea))))"
-and t = "int (length x1b) + int (length prea) + int (length pre) + (32::int)"
-in HOL.subst) apply(simp) apply(assumption)
-    apply(assumption)
-     apply(clarsimp)
-      apply(simp add: word_rsplit_def)
-     apply(simp add:bin_rsplit_len)
-
-    apply(drule_tac set_zip_leftD; clarsimp)
-    apply(simp add:list_all_iff)
-    done
+    show "can_encode_as v (pre @ code @ post) (offset + int (length pre) + 32)"
+      using
+      Varray.IH[OF Hvl Abc1', of "pre @ encode_int (int (length l)) @ heads @ pre'" "post'@post"] 
+      encode_tuple_heads_headslength[OF Hhts]
+      Code_ht Abc2 Abc3 Lvalid' EncLen
+      by(auto simp add:Rearrange)
+  qed
 qed
 
+(* begin masking out rest of file *)
+(*
 lemma encode_tuple_heads_fail [rule_format]:
   "\<forall> bss err.
     encode'_tuple_heads vs bss = Err err \<longrightarrow>
