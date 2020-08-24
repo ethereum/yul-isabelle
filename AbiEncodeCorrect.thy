@@ -119,12 +119,6 @@ lemma abi_encode_succeed_validv :
   using abi_encode_succeed_valid[OF H]
   by auto
 
-lemma all_imp_E :
-  "(\<And> x . P x \<Longrightarrow> Q x) \<Longrightarrow>
-   (\<forall> x . (P x \<longrightarrow> Q x))"
-  apply(blast)
-  done
-
 (* encode'_tuple_tails and encode'_tuple_heads return a list
    as long as the list of values given as input *)
 lemma encode'_tuple_tails_len :
@@ -275,12 +269,6 @@ next
       qed
     qed
   qed
-qed
-
-lemma funext :
-  "
-      (\<forall> a . f a = g a) \<Longrightarrow> (\<lambda> a . f a) = (\<lambda> a . g a)"
-proof(auto)
 qed
 
 (* Encoding correctness of static tuples
@@ -748,7 +736,7 @@ by(induction rule:is_head_and_tail.induct; auto)
  * main theorem 1:
  * if encoder succeeds, result is a valid encoding w/r/t spec
  *)
-lemma abi_encode_succeed :
+theorem abi_encode_succeed :
   "encode v = Ok code \<Longrightarrow>
    can_encode_as v (pre @ code @ post) (int (length pre))"
 proof(induction v arbitrary: code pre post;
@@ -2887,31 +2875,19 @@ next
       qed 
     qed
   }
-next
 qed
-(* begin masking out rest of file *)
 
-(*
-lemma abi_dynamic_size_bound_correct [rule_format]:
-"(\<forall> bound code . encode v = Ok code \<longrightarrow>
-    abi_dynamic_size_bound v = bound \<longrightarrow>           
-            abi_value_valid v \<longrightarrow>
-            length code \<le> bound)"
-  apply(cut_tac v = v in abi_dynamic_size_bound_correct')
-  apply(clarify) apply(rotate_tac 1)
-  apply(drule_tac mythin)
-  apply(simp)
-  done
-(*
-lemma abi_dynamic_size_dyn_32 [rule_format] :
-"abi_type_isdynamic (abi_get_type v) \<Longrightarrow> 32 \<le> abi_dynamic_size_bound v"
-  apply(case_tac v; simp add:list_sum_def)
-    apply(subgoal_tac "list_nonneg (map abi_dynamic_size_bound x93)")
-  apply(drule_tac list_nonneg_sum) apply(simp add:list_sum_def)
-  apply(simp del:abi_dynamic_size_bound.simps add:list_nonneg_def list_all_iff)
-  done
-*)
-lemma abi_dynamic_size_bound_headslength [rule_format]:
+
+lemma abi_dynamic_size_bound_correct:
+"encode v = Ok code \<Longrightarrow>
+ abi_dynamic_size_bound v = bound \<Longrightarrow>
+ abi_value_valid v \<Longrightarrow>
+ length code \<le> bound"
+  using abi_dynamic_size_bound_correct'(1)
+  by auto 
+
+(* relating size bound to heads-length calculation *)
+lemma abi_dynamic_size_bound_headslength :
 "heads_length vs \<le> 32 * int (length vs) + foldl (+) (0::int) (map abi_dynamic_size_bound vs)"
 proof(induction vs)
   case Nil
@@ -2919,745 +2895,1036 @@ proof(induction vs)
 next
   case (Cons a vs)
   then show ?case
-    apply(simp del:abi_dynamic_size_bound.simps add:Let_def list_sum_def)
-    apply(case_tac "abi_type_isdynamic (abi_get_type a)")
-     apply(simp del:abi_dynamic_size_bound.simps add:Let_def list_sum_def)
-     apply(cut_tac i = 0 and 
-x = "(abi_dynamic_size_bound a)"
-and
-xs = "(map abi_dynamic_size_bound vs)" in foldl_plus)
-    apply(rotate_tac -1)
-    apply(drule_tac sym)
-     apply(simp del:abi_dynamic_size_bound.simps add:Let_def list_sum_def)
-    apply(subgoal_tac "0 \<le> abi_dynamic_size_bound a")
-    apply(simp del:abi_dynamic_size_bound.simps add:Let_def list_sum_def)
-    apply(rule_tac abi_dynamic_size_bound_nonneg)
-     apply(simp del:abi_dynamic_size_bound.simps add:Let_def list_sum_def)
-     apply(cut_tac i = 0 and 
-x = "(abi_dynamic_size_bound a)"
-and
-xs = "(map abi_dynamic_size_bound vs)" in foldl_plus)
-     apply(rotate_tac -1) apply(drule_tac sym)
-     apply(simp del:abi_dynamic_size_bound.simps add:Let_def list_sum_def)
-     apply(cut_tac v = a in abi_dynamic_size_bound_static) apply(simp)
-     apply(simp del:abi_dynamic_size_bound.simps add:Let_def list_sum_def)
-    done
+  proof(cases "abi_type_isdynamic (abi_get_type a)")
+    case False
+    then show ?thesis using Cons
+            abi_dynamic_size_bound_nonneg[of a]
+            sym[OF foldl_plus[of "(abi_dynamic_size_bound a)" 0]]
+            abi_dynamic_size_bound_static[of a] False
+      by(auto simp del:abi_dynamic_size_bound.simps)
+  next
+    case True
+    then show ?thesis using Cons
+          abi_dynamic_size_bound_nonneg[of a]
+          sym[OF foldl_plus[of "(abi_dynamic_size_bound a)" 0]]
+          True
+      by(auto)
+  qed
 qed
 
-lemma encode_tuple_tails_overflow_fail' [rule_format] :
-"
-     (\<forall> err headlen   .
-     encode'_tuple_tails (vs) 0 (headlen) = Err err \<longrightarrow>
-     list_all abi_value_valid vs \<longrightarrow>
-     (\<forall> v . v \<in> set vs \<longrightarrow> abi_type_isdynamic (abi_get_type v) \<longrightarrow> (\<exists> code . encode' v = Ok code)) \<longrightarrow>
-     heads_length vs \<le> headlen \<longrightarrow>
-     \<not> sint_value_valid 256 (int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs)))
-     "
-proof(induction vs)
+(* helper lemma for proving list_nonneg *)
+lemma list_nonneg_map :
+  "(\<And> x . 0 \<le> f x) \<Longrightarrow>
+   list_nonneg (map f l)"
+  unfolding list_nonneg_def list_all_iff
+proof
+  fix elem
+  assume Hf : "(\<And>x. 0 \<le> f x)"
+  assume Helem : "elem \<in> set (map f l)"
+
+  show "0 \<le> elem" using Hf Helem by auto
+qed
+
+(* if encode'_tuple_tails fails, but all values are encodable individually,
+   this must be because the given values are too long to be serialized *)
+lemma encode'_tuple_tails_overflow_fail'  :
+"encode'_tuple_tails (vs) 0 (headlen) = Err err \<Longrightarrow>
+ list_all abi_value_valid vs \<Longrightarrow>
+ (\<And> v . v \<in> set vs \<Longrightarrow> abi_type_isdynamic (abi_get_type v) \<Longrightarrow> (\<exists> code . encode' v = Ok code)) \<Longrightarrow>
+ heads_length vs \<le> headlen \<Longrightarrow>
+ \<not> sint_value_valid 256 (int (length vs) * (32::int) + 
+    list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs))"
+proof(induction vs arbitrary: err headlen)
   case Nil
   then show ?case by auto
 next
   case (Cons a vs)
   then show ?case
+  proof(cases "abi_type_isstatic (abi_get_type a)")
+    case True
 
-    apply(clarify)
-    apply(simp only:encode'_tuple_tails.simps)
-    apply(case_tac " abi_type_isstatic (abi_get_type a)") 
-    apply(simp del:encode'.simps abi_dynamic_size_bound.simps split:sum.split_asm prod.splits if_splits)
-           
-     apply(rotate_tac -2)
-     apply(drule_tac x = err in spec) apply(drule_tac x = headlen in spec)
-    apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-     apply(simp only:sint_value_valid_def)
-     apply(subgoal_tac "heads_length vs \<le> headlen") apply(simp only:) apply(clarify)
-      apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-      apply(cut_tac l = "(abi_dynamic_size_bound a # map abi_dynamic_size_bound vs)" in list_nonneg_sum)
-       apply(simp only:list_nonneg_def)
-       apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-    apply(rule_tac conjI)
-        apply(rule_tac abi_dynamic_size_bound_nonneg)
-       apply(simp add:list_all_iff del: encode'.simps abi_dynamic_size_bound.simps)
-       apply(clarify)
-        apply(rule_tac abi_dynamic_size_bound_nonneg)
+    obtain vterr where Vterr : "encode'_tuple_tails vs 0 headlen = Inr vterr"
+      using Cons True
+      by(cases "encode'_tuple_tails vs 0 headlen"; auto)
 
-(*      apply(subgoal_tac " (0::int) \<le> int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs)")
-*)
-    apply(subgoal_tac
-"- (57896044618658097711785492504343953926634992332820282019728792003956564819968::int)
-       \<le> int (length vs) * (32::int) + list_sum (map abi_dynamic_size_bound vs) + (headlen - heads_length vs)")
-       apply(clarify)
+    have Valid' : "list_all abi_value_valid vs" using Cons
+      by (auto simp add:list_all_iff)
 
-       apply(simp add:list_sum_def  del: encode'.simps abi_dynamic_size_bound.simps)
-       apply(cut_tac x = "(abi_dynamic_size_bound a)" and i = 0 and xs = "map abi_dynamic_size_bound vs"
-in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
-       apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-       apply(cut_tac v = a in abi_dynamic_size_bound_nonneg)
-    apply(simp)
+    have Encodable' :
+      "(\<And>v. v \<in> set vs \<Longrightarrow> abi_type_isdynamic (abi_get_type v) \<Longrightarrow> \<exists>code. encode' v = Ok code)"
+      using Cons by auto
 
-      apply(cut_tac l = "map abi_dynamic_size_bound vs" in list_nonneg_sum)
-       apply(simp only:list_nonneg_def)
-       apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-       apply(simp add:list_all_iff del: encode'.simps abi_dynamic_size_bound.simps)
-       apply(clarify)
-       apply(rule_tac abi_dynamic_size_bound_nonneg)
-      apply(clarsimp)
+    have Len' : "heads_length vs \<le> headlen" 
+      using Cons True abi_static_size_nonneg[of "(abi_get_type a)"]
+      by(auto simp add:Let_def)
 
-     apply(cut_tac v = "abi_get_type a" in abi_static_size_nonneg)
-     apply(arith)
+    have Vs_nonneg : "list_nonneg (map abi_dynamic_size_bound vs)"
+      using list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vs] 
+      unfolding id_def by assumption
 
-    apply(simp del:encode'.simps abi_dynamic_size_bound.simps split:sum.split_asm prod.splits if_splits)
-      apply(clarify)
-    apply(simp del:abi_dynamic_size_bound.simps split:sum.split_asm prod.splits if_splits)
+    hence Vs_nonneg' : "0 \<le> list_sum (map abi_dynamic_size_bound vs)"
+      using list_nonneg_sum[OF Vs_nonneg] by auto
 
+    then show ?thesis using True Cons.IH[OF Vterr Valid' Encodable' Len'] Cons.prems
+      sym[OF foldl_plus[of "abi_dynamic_size_bound a" 0]]
+      abi_dynamic_size_bound_nonneg[of a]
+      abi_dynamic_size_bound_static[OF True]
+      heads_length_nonneg[of vs]
+      by(auto simp del:abi_dynamic_size_bound.simps
+            simp add:Let_def list_sum_def sint_value_valid_def)
+  next
+    case False
+    have Ain : "a \<in> set (a#vs)" by auto
 
-       apply(simp add: list_sum_def del: encode'.simps abi_dynamic_size_bound.simps)
-       apply(cut_tac x = "(abi_dynamic_size_bound a)" and i = 0 and xs = "map abi_dynamic_size_bound vs"
-in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
-       apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-      apply(cut_tac v = a in abi_dynamic_size_bound_nonneg)
-    apply(simp  del: encode'.simps abi_dynamic_size_bound.simps
- add:sint_value_valid_def) apply(clarify)
-(*
-      apply(subgoal_tac "0 \<le> headlen")
-*)
-    apply(subgoal_tac " - (57896044618658097711785492504343953926634992332820282019728792003956564819968::int) \<le> headlen")
-       apply(clarify)
-    apply(subgoal_tac "0 \<le> foldl (+) (0::int) (map abi_dynamic_size_bound vs)")
-        apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
+    obtain aenc where Aenc : "encode' a = Ok aenc"
+      using Cons.prems(3)[OF Ain] False
+      by (cases "encode' a"; 
+          auto simp del: abi_dynamic_size_bound.simps encode'.simps)
 
-        apply(subgoal_tac "heads_length vs \<le> 32 * int (length vs) + foldl (+) (0::int) (map abi_dynamic_size_bound vs)") 
-         apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-    apply(rule_tac "abi_dynamic_size_bound_headslength")
-      apply(cut_tac l = "map abi_dynamic_size_bound vs" in list_nonneg_sum)
-       apply(simp only:list_nonneg_def)
-       apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-       apply(simp add:list_all_iff del: encode'.simps abi_dynamic_size_bound.simps)
-       apply(clarify)
-       apply(rule_tac abi_dynamic_size_bound_nonneg)
-      apply(clarsimp) apply(simp add:list_sum_def)
+    have Vs_nonneg : "list_nonneg (map abi_dynamic_size_bound vs)"
+      using list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vs] 
+      unfolding id_def by assumption
 
-    apply(cut_tac l = vs in heads_length_nonneg)
-      apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
+    hence Vs_nonneg' : "0 \<le> list_sum (map abi_dynamic_size_bound vs)"
+      using list_nonneg_sum[OF Vs_nonneg] by auto
 
-        apply(clarify)
-        apply(drule_tac x = err in spec) apply(drule_tac x = "headlen + length (x1)" in spec)
-        apply(clarify)
-        apply(subgoal_tac "heads_length vs \<le>  headlen + int (length x1)")
-       apply(simp add: list_sum_def del: encode'.simps abi_dynamic_size_bound.simps)
-       apply(cut_tac x = "(abi_dynamic_size_bound a)" and i = 0 and xs = "map abi_dynamic_size_bound vs"
-in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
-       apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-      apply(cut_tac v = a in abi_dynamic_size_bound_nonneg)
-    apply(simp  del: encode'.simps abi_dynamic_size_bound.simps
- add:sint_value_valid_def) apply(clarify)
-    apply(subgoal_tac "0 \<le> foldl (+) (0::int) (map abi_dynamic_size_bound vs)")
-          apply(simp del: encode'.simps abi_dynamic_size_bound.simps)
-          apply(subgoal_tac "length x1 \<le> abi_dynamic_size_bound a")
-           apply(arith)
+    have Aenc' : "encode a = Ok aenc"
+      using Cons.prems Aenc False by(auto simp add:encode_def)
 
-    apply(cut_tac v = a and code = x1
-and bound = "nat (abi_dynamic_size_bound a)" in abi_dynamic_size_bound_correct)
-          apply(simp del: encode'.simps abi_dynamic_size_bound.simps add: encode_def abi_dynamic_size_bound_correct)
-         apply(simp)
-        apply(simp add:list_all_iff)
-    apply(simp)
+    have Avalid : "abi_value_valid a"
+      using Cons.prems by(auto simp add:encode_def)
 
-    apply(cut_tac l = "map abi_dynamic_size_bound vs" in list_nonneg_sum)
-          apply(simp del: encode'.simps abi_dynamic_size_bound.simps add: list_sum_def list_nonneg_def list_all_iff encode_def abi_dynamic_size_bound_correct)
-       apply(clarify)
-       apply(rule_tac abi_dynamic_size_bound_nonneg)
-      apply(simp add:list_sum_def)
-     apply(simp)
+    have Abound : "abi_dynamic_size_bound a = int (nat (abi_dynamic_size_bound a))"
+      using abi_dynamic_size_bound_nonneg[of a] by auto
 
-    apply(clarify)
-    apply(drule_tac x = a in spec)
-    apply(clarsimp)
-    done
-
+    show ?thesis
+    proof(cases "encode'_tuple_tails vs 0 (headlen + int (length aenc))")
+      case (Inr vserr)
+      show ?thesis using Cons.prems Cons.IH[OF Inr] False Aenc Inr
+                         sym[OF foldl_plus[of "(abi_dynamic_size_bound a)" 0]]
+                         abi_dynamic_size_bound_nonneg[of a] Vs_nonneg'
+                         heads_length_nonneg[of vs]
+                         abi_dynamic_size_bound_correct[OF Aenc' Abound Avalid]
+        by(auto simp add:list_sum_def sint_value_valid_def
+                   simp del: abi_dynamic_size_bound.simps encode'.simps) 
+    next
+      case (Inl vs_tailenc)
+      show ?thesis
+      proof(cases "sint_value_valid 256 headlen")
+        assume True' : "sint_value_valid 256 headlen"
+        then show ?thesis using Cons.prems Aenc False Inl
+          by(auto simp del: abi_dynamic_size_bound.simps)
+      next
+        assume False' : "\<not> sint_value_valid 256 headlen"
+        then show ?thesis using False Cons.prems Aenc Inl
+                                sym[OF foldl_plus[of "(abi_dynamic_size_bound a)" 0]]
+                               abi_dynamic_size_bound_nonneg[of a] Vs_nonneg'
+                               heads_length_nonneg[of vs]
+                               abi_dynamic_size_bound_headslength[of vs]
+          by(auto simp add:list_sum_def sint_value_valid_def
+                   simp del: abi_dynamic_size_bound.simps encode'.simps)
+      qed
+    qed
+  qed
 qed
 
-lemma
-those_err_exists [rule_format]:
-    "\<forall> err . those_err l = Err err \<longrightarrow>
+(*
+lemma list_bisect :
+  "
+   l = take len l @ drop len l"
+
+lemma list_trisect :
+  "l = 
+*)
+lemma those_err_exists :
+    "those_err l = Err err \<Longrightarrow>
     (\<exists> x err' . x \<in> set l \<and> x = Err err')"
-proof(induction l)
+proof(induction l arbitrary: err)
   case Nil
   then show ?case by auto
 next
   case (Cons a l)
   then show ?case
-    apply(clarsimp)
-    apply(case_tac a; clarsimp)
-     apply(simp split:sum.splits)
-     apply(clarify)
-     apply(fastforce)
+  proof(cases a)
+    case (Inr aerr)
+    then show ?thesis by(auto)
+  next
+    case (Inl a')
+    hence Err' : "those_err l = Err err" using Cons
+      by(cases "those_err l"; auto)
 
-    apply(rule_tac x = a in exI) apply(simp)
-    done
+    then show ?thesis using Cons.prems Cons.IH[OF Err'] by auto
+  qed
 qed
 
-value "2 ^ 64:: int"
+lemma list_trisect :
+  "take a l @
+   drop a (take (a + b) l) @
+   drop (a + b) l = l"
+proof-
+  have "drop a (take (a + b) l) @
+        drop (b + a) l = drop a l"
 
-lemma encode_correct_converse [rule_format] :
-  "\<forall> code start . 
-      can_encode_as v code start \<longrightarrow>
-      sint_value_valid 256 (abi_dynamic_size_bound v)  \<longrightarrow>
-  (\<exists> code' . encode v = Ok code')"
-proof(induction v)
+    using drop_take[of a "a + b" l]
+          sym[OF drop_drop[of b a l]]
+    by(auto simp del:drop_drop)
+
+  hence C' : "drop a (take (a + b) l) @
+              drop (a + b) l = drop a l"
+    unfolding add.commute[of b a]
+    by assumption
+
+  show "take a l @ drop a (take (a + b) l) @ drop (a + b) l = l"
+    unfolding C'
+    by auto
+qed
+
+lemma can_encode_as_start_nonneg :
+  "can_encode_as v full_code offset \<Longrightarrow> 0 \<le> offset"
+proof(induction rule:can_encode_as.induct; auto)
+qed
+
+(* 
+  main theroem 2:
+  if can_encode_as predicate holds, and our bound for the value's size
+  is small enough to be representable as an s256,
+  then encoder will return an encoding for it.
+*)
+theorem encode_correct_converse :
+  "can_encode_as v code start \<Longrightarrow>
+   sint_value_valid 256 (abi_dynamic_size_bound v) \<Longrightarrow>
+    (\<exists> code' . encode v = Ok code')"
+proof(induction v arbitrary: code start)
 case (Vuint x1 x2)
   then show ?case 
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def)
-    done
+    by(cases rule: can_encode_as.cases; auto simp add:encode_def)
 next
   case (Vsint x1 x2)
   then show ?case
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def)
-    done
+    by(cases rule: can_encode_as.cases; auto simp add:encode_def)
 next
   case (Vaddr x)
   then show ?case 
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def)
-    done
+    by(cases rule: can_encode_as.cases; auto simp add:encode_def)
 next
   case (Vbool x)
   then show ?case
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def)
-    done
+    by(cases rule: can_encode_as.cases; auto simp add:encode_def)
 next
   case (Vfixed x1 x2 x3a)
   then show ?case
-
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def)
-    done
+    by(cases rule: can_encode_as.cases; auto simp add:encode_def)
 next
   case (Vufixed x1 x2 x3a)
   then show ?case
-
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def)
-    done
+    by(cases rule: can_encode_as.cases; auto simp add:encode_def)
 next
   case (Vfbytes x1 x2)
   then show ?case 
-
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def)
-    done
+    by(cases rule: can_encode_as.cases; auto simp add:encode_def)
 next
   case (Vfunction x1 x2)
-  then show ?case sorry
-next
-  case (Vfarray x1 x2 x3a)
-  then show ?case
-    apply(atomize)
-    apply(clarify)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def)
-    apply(simp add: farray_value_valid_aux_def) apply(clarsimp)
-    apply(simp split:sum.splits)
-    apply(rule_tac conjI)
-     apply(clarsimp)
-     apply(frule_tac encode_tuple_heads_fail)
-    apply(simp add:encode_tuple_tails_len)
-     apply(clarsimp)
-     apply(frule_tac x = v in is_head_and_tail_vs_elem) apply(simp)
-
-      apply(subgoal_tac "abi_type_isdynamic (abi_get_type v)")
-       apply(clarsimp)
-      defer
-
-      apply(subgoal_tac "abi_type_isdynamic (abi_get_type v)")
-       apply(clarsimp)
-    
-
-    apply(drule_tac x = v in spec)
-      apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))")
-       apply(clarsimp)
-    apply(case_tac
-"sint_value_valid (256::nat)
-        (case v of Vfarray (t::abi_type) (n::nat) (l::abi_value list) \<Rightarrow> int (n * (32::nat)) + list_sum (map abi_dynamic_size_bound l)
-         | Vtuple (ts::abi_type list) (vs::abi_value list) \<Rightarrow> int (length vs * (32::nat)) + list_sum (map abi_dynamic_size_bound vs) | Vbytes (bs::8 word list) \<Rightarrow> int ((32::nat) + length bs + (32::nat))
-         | Vstring (s::char list) \<Rightarrow> int ((32::nat) + length s + (32::nat)) | Varray (t::abi_type) (l::abi_value list) \<Rightarrow> int ((32::nat) + length l * (32::nat)) + list_sum (map abi_dynamic_size_bound l))")        apply(clarsimp)
-
-    apply(case_tac "abi_type_valid (abi_get_type v) \<and> abi_value_valid_aux v") apply(clarsimp)
-    apply(clarsimp)
-        apply(clarsimp)
-
-        apply(cut_tac v = "Vfarray x1 x2 x3a" in abi_dynamic_size_bound_nonneg)
-        apply(simp)
-
-        apply(cut_tac x = "abi_dynamic_size_bound v" and l = "(map abi_dynamic_size_bound x3a)" in elem_lt_list_sum)
-          apply(clarsimp)
-         apply(simp add:list_nonneg_def)
-
-         apply(simp add:list_all_iff) apply(clarsimp)
-         apply(cut_tac v = xa in abi_dynamic_size_bound_nonneg)
-         apply(clarsimp)
-
-        apply(simp)
-        apply(simp add:sint_value_valid_def)
-    apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
-    apply(simp)
-
-       apply(atomize)
-    apply(drule_tac x = offset in spec) apply(rotate_tac -1) apply(drule_tac x= v in spec)
-        apply(clarsimp)
-       apply(fastforce)
-
-      apply(simp add:list_all_iff)
-
-   apply(clarsimp)
-     apply(frule_tac encode_tuple_tails_overflow_fail') apply(simp add:list_all_iff)
-
-       apply(atomize)
-         apply(clarsimp)
-
-(* at this point, the intuition is that the offset can't encode as a s256 *)
-       apply(frule_tac x = v in is_head_and_tail_vs_elem) apply(simp) apply(simp) apply(clarify)
-       apply(drule_tac x = offset in spec) apply(rotate_tac -1)
-       apply(drule_tac x = v in spec) apply(clarsimp)
-    apply(drule_tac x = v in spec) apply(clarsimp)
-
-
-    apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))")
-     apply(clarsimp)
-
-(* need to talk about how length of full encoding works out implies length of sub encoding
-also does *)
-
-    apply(subgoal_tac " sint_value_valid (256::nat)
-        (case v of Vfarray (t::abi_type) (n::nat) (l::abi_value list) \<Rightarrow> int (n * (32::nat)) + list_sum (map abi_dynamic_size_bound l) | Vtuple (ts::abi_type list) (vs::abi_value list) \<Rightarrow> int (length vs * (32::nat)) + list_sum (map abi_dynamic_size_bound vs)
-         | Vbytes (bs::8 word list) \<Rightarrow> int ((32::nat) + length bs + (32::nat)) | Vstring (s::char list) \<Rightarrow> int ((32::nat) + length s + (32::nat))
-         | Varray (t::abi_type) (l::abi_value list) \<Rightarrow> int ((32::nat) + length l * (32::nat)) + list_sum (map abi_dynamic_size_bound l))")
-      apply(clarsimp)
-
-    apply(case_tac "abi_type_valid (abi_get_type v) \<and> abi_value_valid_aux v") apply(clarsimp)
-         apply(clarsimp)
-
-        apply(cut_tac x = "abi_dynamic_size_bound v" and l = "(map abi_dynamic_size_bound x3a)" in elem_lt_list_sum)
-       apply(clarsimp) apply(simp add:list_nonneg_def)
-    apply(simp add:list_all_iff) apply(clarsimp)
-      apply(rotate_tac 1)
-
-         apply(cut_tac v = xa in abi_dynamic_size_bound_nonneg)
-         apply(clarsimp)
-         apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
-         apply(clarsimp)
-        apply(simp add:sint_value_valid_def)
-
-       apply(rule_tac x = full_code in exI) apply(fastforce)
-      apply(simp)
-     apply(simp add:uint_value_valid_def)
-
-    apply(simp add:list_all_iff)
-
-    done
-next
-  case (Vtuple x1 x2)
-  then show ?case
-
-    apply(clarify)
-    apply(atomize)
-       apply(drule_tac can_encode_as.cases; auto simp add:encode_def simp del:abi_dynamic_size_bound.simps)
-    apply(simp add: tuple_value_valid_aux_def del:abi_dynamic_size_bound.simps) apply(clarify)
-     apply(simp del:abi_dynamic_size_bound.simps split:sum.splits)
-     apply(clarify)
-     apply(simp del:abi_dynamic_size_bound.simps split:sum.splits)
-
-     apply(frule_tac those_err_exists)
-    apply(clarify)
-     apply(simp del:abi_dynamic_size_bound.simps split:sum.splits)
-     apply(subgoal_tac "\<exists> xe \<in> set x2 . encode_static xe = Err err'")
-      apply(clarify)
-     apply(simp del:abi_dynamic_size_bound.simps split:sum.splits)
-
-      apply(frule_tac x = xa in is_head_and_tail_vs_elem_static) apply(simp)
-       apply(simp add:list_ex_iff)
-    apply(drule_tac v = "(Vtuple head_types heads)" and vd = xa in 
-can_encode_as_tuple_split)
-        apply(simp)
-       apply(simp)
-      apply(clarify)
-      apply(drule_tac x = xa in spec) apply(clarify)
-    apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as xa code))")
-         apply(simp del:abi_dynamic_size_bound.simps split:sum.splits)
-       apply(subgoal_tac "sint_value_valid (256::nat) (abi_dynamic_size_bound xa)")
-    apply(clarify)
-        apply(simp del:abi_dynamic_size_bound.simps split:sum.splits if_splits)
-
-    apply(subgoal_tac " abi_type_isstatic (abi_get_type xa)")
-        apply(simp del:abi_dynamic_size_bound.simps split:sum.splits if_splits)
-    apply(simp add:list_ex_iff)
-
-        apply(cut_tac x = "abi_dynamic_size_bound xa" and l = "(map abi_dynamic_size_bound x2)" in elem_lt_list_sum)
-       apply(clarsimp) apply(simp add:list_nonneg_def)
-        apply(simp del:abi_dynamic_size_bound.simps add:list_all_iff) apply(clarify)
-        apply(rule_tac abi_dynamic_size_bound_nonneg)
-       apply(cut_tac v = xa in abi_dynamic_size_bound_nonneg)
-
-       apply(simp del:abi_dynamic_size_bound.simps add:sint_value_valid_def list_sum_def)
-       apply(clarify)
-    apply(clarsimp)
-    apply(rule_tac conjI) apply(clarsimp)
-
-    apply(simp add:list_all_iff list_ex_iff)
-
-       apply(clarsimp)
-
-    apply(simp add:list_all_iff list_ex_iff)
-      apply(rule_tac x = coded in exI) apply(fastforce)
-
-     apply(clarify)
-     apply(fastforce)
-
-
-    apply(simp add:tuple_value_valid_aux_def list_ex_iff del:abi_dynamic_size_bound.simps)
-    apply(clarify)
-    apply(simp del:abi_dynamic_size_bound.simps)
-    apply(simp add:Set.image_iff del:abi_dynamic_size_bound.simps)
-    apply(clarify)
-
-      apply(frule_tac x = xa in is_head_and_tail_vs_elem)
-      apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
-      apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
-
-    apply(clarify)
-    apply(atomize)
-
-    apply(simp del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits)
-    apply(rule_tac conjI)
-    apply(clarify)
-
-     apply(frule_tac encode_tuple_heads_fail)
-      apply(simp add:encode_tuple_tails_len)
-     apply(clarify)
-
-     apply(drule_tac x = v in spec) apply(clarify)
-     apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code)) ")
-    apply(simp del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits)
-      apply(clarify)
-
-      apply(subgoal_tac "sint_value_valid (256::nat) (abi_dynamic_size_bound v)")
-    apply(clarify)
-
-       apply(simp del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-        apply(cut_tac x = "abi_dynamic_size_bound v" and l = "(map abi_dynamic_size_bound x2)" in elem_lt_list_sum)
-       apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-       apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-        apply(simp only:list_all_iff)
-        apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-        apply(clarify)
-    apply(rule_tac abi_dynamic_size_bound_nonneg)
-        apply(simp only:list_all_iff)
-        apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-
-      apply(simp add: sint_value_valid_def list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-(* new *)
-       apply(subgoal_tac "- (57896044618658097711785492504343953926634992332820282019728792003956564819968::int) \<le> abi_dynamic_size_bound v")
-        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-    apply(case_tac "abi_type_isstatic (Ttuple (map abi_get_type x2))")
-         apply(simp only:abi_dynamic_size_bound.simps)
-        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-    apply(cut_tac l = x2 in abi_dynamic_size_bound_static_list)
-        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-           apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-          apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-         apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-        apply(clarify)
-         apply(simp only:abi_dynamic_size_bound.simps)
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-    apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-
-
-(*
-    apply(subgoal_tac "map abi_dynamic_size_bound x2 = map (abi_static_size \<circ> abi_get_type) x2")
-        apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-        apply(rule_tac map_ext)
-        apply(clarify)
-        apply(simp)
-        apply(clarsimp)
-        apply(simp add:list_all_iff list_ex_iff)
-        apply(simp add:list_all_iff list_ex_iff)
-        apply(simp add:list_all_iff list_ex_iff)
-*)
-     apply(case_tac "abi_type_isdynamic (abi_get_type v)")
-(*    apply(simp del:  abi_dynamic_size_bound.simps split:sum.splits) *)
-
-      apply(frule_tac x = v in is_head_and_tail_vs_elem)
-    apply(simp)
-    apply(simp)
-      apply(clarify)
-    apply(drule_tac x = offseta in spec) apply(drule_tac x = v in spec)
-      apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
-      apply(rule_tac x = full_code in exI)
-    apply(fastforce)
-
-      apply(frule_tac x = v in is_head_and_tail_vs_elem_static)
-    apply(simp)
-      apply(simp)
-     apply(drule_tac vd = v in can_encode_as_tuple_split)
-apply(simp)
-      apply(simp)
-     apply(clarify)
-
-
-    apply(clarify)
-
-    apply(frule_tac encode_tuple_tails_overflow_fail')
-    apply(simp add:list_all_iff)
-
-      apply(frule_tac x = v in is_head_and_tail_vs_elem)
-        apply(simp)
-       apply(simp) apply(clarify)
-    apply(drule_tac x = offseta in spec) apply(rotate_tac -1) apply(drule_tac x = v in spec)
-      apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
-
-      apply(drule_tac x = v in spec)
-      apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
-
-      apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))")
-       apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
-       apply(subgoal_tac "sint_value_valid (256::nat) (abi_dynamic_size_bound v)")
-        apply(clarify)
-       apply(simp del: abi_dynamic_size_bound.simps encode'.simps split:if_splits)
-
-        apply(cut_tac x = "abi_dynamic_size_bound v" and l = "(map abi_dynamic_size_bound x2)" in elem_lt_list_sum)
-       apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-       apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-        apply(simp only:list_all_iff)
-        apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-        apply(clarify)
-    apply(rule_tac abi_dynamic_size_bound_nonneg)
-        apply(simp only:list_all_iff)
-        apply(simp add: list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-
-       apply(simp add: sint_value_valid_def list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-
-(* new *)
-       apply(subgoal_tac "- (57896044618658097711785492504343953926634992332820282019728792003956564819968::int) \<le> abi_dynamic_size_bound v")
-        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-    apply(case_tac "abi_type_isstatic (Ttuple (map abi_get_type x2))")
-         apply(simp only:abi_dynamic_size_bound.simps)
-        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-    apply(cut_tac l = x2 in abi_dynamic_size_bound_static_list)
-        apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-           apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-          apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-         apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-        apply(clarify)
-         apply(simp only:abi_dynamic_size_bound.simps)
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-        apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
-    apply(arith)
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-
-apply(simp add: abi_dynamic_size_bound_nonneg list_nonneg_def list_all_iff list_ex_iff del: abi_dynamic_size_bound.simps encode'.simps split:sum.splits if_splits)
-(* end new *)
-
-      apply(rule_tac x = full_code in exI)
-    apply(fastforce)
-     apply(clarsimp)
-    apply(simp add:list_sum_def sint_value_valid_def del:abi_dynamic_size_bound.simps)
-    apply(clarify)
-
-    apply(simp)
-    apply(case_tac "list_ex abi_type_isdynamic (map abi_get_type x2)")
-     apply(simp add:list_sum_def)
-
-        apply(simp add:list_all_iff list_ex_iff)
-    done
-next
-  case (Vbytes x)
   then show ?case 
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def)
-    done
+    by(cases rule: can_encode_as.cases; auto simp add:encode_def)
 next
-  case (Vstring x)
-  then show ?case
-apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def string_value_valid_def)
-    apply(drule_tac can_encode_as.cases; auto simp add:encode_def string_value_valid_def)
-    done
+  case (Vfarray t n vs)
+  show ?case using Vfarray.prems Vfarray.IH
+  proof(cases rule: can_encode_as.cases)
+    case (Estatic pre post code')
+    then show ?thesis 
+      by(auto simp add:encode_def)
+  next
+    case (Efarray_dyn heads head_types tails)
+    then show ?thesis
+    proof(cases vs)
+      case Nil
+      then show ?thesis using Efarray_dyn by(auto simp add:encode_def)
+    next
+      case (Cons v vt)
+      have Dyn : "abi_type_isdynamic t"
+        using Efarray_dyn
+        by(auto simp add:farray_value_valid_aux_def)
+
+      hence V_dyn : "abi_type_isdynamic (abi_get_type v)"
+        using Efarray_dyn Cons
+        by(auto simp add:farray_value_valid_aux_def)
+
+      have V_valid : "abi_value_valid v"
+        using Cons Efarray_dyn
+        by(auto simp add:farray_value_valid_aux_def)
+
+      obtain n' where N' : "n = Suc n'"
+        using Efarray_dyn Cons
+        by(auto simp add:farray_value_valid_aux_def)
+
+      have Bound_unfold :
+        "abi_dynamic_size_bound (Vfarray t n vs) =
+          int (n * 32) + list_sum (map abi_dynamic_size_bound vs)" using Dyn
+        by auto
+
+      have Vt_nonneg : "0 \<le> list_sum (map abi_dynamic_size_bound vt)"
+        using 
+        list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+        unfolding id_def
+        by(assumption)
+
+      have Encode_lemma :
+        "\<And> x . x \<in> set vs \<Longrightarrow>
+               \<exists> code . encode x = Ok code"
+      proof-
+        fix x
+        assume Hx : "x \<in> set vs"
+
+        hence X_dyn : "abi_type_isdynamic (abi_get_type x)"
+          using Vfarray Efarray_dyn Dyn
+          by(auto simp add:farray_value_valid_aux_def list_all_iff)
+
+        obtain ofs where Ofs : "(ofs, x) \<in> set tails"
+                   and Ofs_in_heads : "Vsint 256 ofs \<in> set heads"
+          using  Cons is_head_and_tail_vs_elem[OF Efarray_dyn(3) Hx X_dyn] by auto
+
+
+        have X_bound_leq : "abi_dynamic_size_bound x \<le> list_sum (map abi_dynamic_size_bound vs)"
+          using elem_lt_list_sum Hx X_dyn
+                list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of _ vs]
+          unfolding id_def by(auto simp del:abi_dynamic_size_bound.simps)
+
+        hence X_size : "sint_value_valid 256 (abi_dynamic_size_bound x)"
+          using Vfarray.prems Cons Dyn X_dyn Bound_unfold
+                sym[OF foldl_plus[of "(abi_dynamic_size_bound v)" 0]]
+                abi_dynamic_size_bound_nonneg[of v]
+                abi_dynamic_size_bound_nonneg[of x]
+                Vt_nonneg
+          by(auto simp add:list_sum_def sint_value_valid_def
+                simp del: abi_dynamic_size_bound.simps)
+  
+        then obtain x_code where X_code :
+          "encode x = Ok x_code" using 
+            Vfarray.IH[OF Hx Efarray_dyn(5)[OF Ofs]]
+          by auto
+
+        thus "\<exists>code. encode x = Ok code" by auto
+      qed
+
+      obtain v_code where V_code :
+        "encode v = Ok v_code" using Encode_lemma Cons by auto
+
+      hence V_code' : "encode' v = Ok v_code" using V_valid
+        by(auto simp add:encode_def)
+
+      obtain n' where Nnz : "n = Suc n'" and N'_vt : "n' = length vt" 
+        using Vfarray Efarray_dyn Cons
+        by(cases n; auto simp add: farray_value_valid_aux_def)
+
+      show ?thesis
+      proof(cases "encode'_tuple_tails vt 0 (32 + heads_length vt + int (length v_code))")
+        case (Inr err)
+
+        have Toobig :
+          "\<not> sint_value_valid 256 (int (length vt) * 32 + 
+                list_sum (map abi_dynamic_size_bound vt) + 
+                ((32 + heads_length vt + int (length v_code)) - heads_length vt))"
+        proof(rule encode'_tuple_tails_overflow_fail'[OF Inr])
+          show "list_all abi_value_valid vt" using Cons Efarray_dyn 
+            by(auto simp add: farray_value_valid_aux_def list_all_iff)
+        next
+          fix v'
+          assume Hv' : "v' \<in> set vt"
+          assume Hv'_dyn : "abi_type_isdynamic (abi_get_type v')"
+
+          have Hv'' : "v' \<in> set vs" using Cons Hv' by auto
+
+          have V'_valid : "abi_value_valid v'"
+            using Cons Efarray_dyn Hv'
+            by(auto simp add:farray_value_valid_aux_def list_all_iff)
+
+          show "\<exists>code. encode' v' = Ok code"
+            using Encode_lemma[OF Hv''] V'_valid
+            by(auto simp add:encode_def)
+        next
+          show "heads_length vt \<le> 32 + heads_length vt + int (length v_code)"
+            by auto
+        qed
+
+        have V_bound : "abi_dynamic_size_bound v = int (nat (abi_dynamic_size_bound v))"
+          using abi_dynamic_size_bound_nonneg[of v] by auto
+
+        have False using Vfarray(3) Bound_unfold Dyn Nnz N'_vt Toobig
+          list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+          abi_dynamic_size_bound_headslength[of vt]
+          heads_length_nonneg[of vt] Cons 
+          abi_dynamic_size_bound_nonneg[of v]
+          abi_dynamic_size_bound_correct[OF V_code V_bound V_valid]
+          sym[OF foldl_plus[of "(abi_dynamic_size_bound v)" 0]]
+          unfolding id_def 
+          by(auto simp add: sint_value_valid_def list_sum_def
+                     simp del:abi_dynamic_size_bound.simps)
+
+        thus ?thesis by auto
+
+      next
+        case (Inl vt_code)
+
+        show ?thesis 
+        proof(cases "encode'_tuple_heads vt vt_code")
+          fix err
+          assume Inr' : "encode'_tuple_heads vt vt_code = Err err"
+          have Lens : "length vt = length vt_code"
+            using encode'_tuple_tails_len[OF Inl] by auto
+
+          obtain vbad err' where Vbad_in : "vbad \<in> set vt" and Vbad_bad :  "encode' vbad = Err err'"
+            using encode'_tuple_heads_fail[OF Inr' Lens] by auto
+
+          have Vbad_valid : "abi_value_valid vbad"
+            using Cons Efarray_dyn Vbad_in
+            by(auto simp add:farray_value_valid_aux_def list_all_iff)
+
+          have Vbad_in' : "vbad \<in> set vs" using Cons Vbad_in by auto
+
+          obtain vbad_enc where "encode vbad = Ok vbad_enc"
+            using Encode_lemma[OF Vbad_in'] by auto
+
+          hence Vbad_enc' : "encode' vbad = Ok vbad_enc"
+            using Vbad_valid by(auto simp add:encode_def)
+
+          have False using Vbad_bad Vbad_enc' by auto
+
+          thus "\<exists>code'. encode (Vfarray t n vs) = Ok code'" by auto
+        next
+          fix vt_headenc
+          assume Inl' : "encode'_tuple_heads vt vt_code = Ok vt_headenc"
+          obtain vth vtt where Vt_ht : "vt_headenc = (vth, vtt)"
+            by(cases vt_headenc;  auto)
+
+          have Vt_smallenough : "sint_value_valid 256 (32 + heads_length vt)"
+            using Vfarray(3) Bound_unfold V_dyn
+                  list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+                  abi_dynamic_size_bound_headslength[of vt]
+                  heads_length_nonneg[of vt] Cons Nnz N'_vt
+                  abi_dynamic_size_bound_nonneg[of v]
+                  sym[OF foldl_plus[of "(abi_dynamic_size_bound v)" 0]]
+            unfolding id_def 
+            by(auto simp add: sint_value_valid_def list_sum_def
+                       simp del:abi_dynamic_size_bound.simps)
+
+          then show ?thesis using Inl Cons Efarray_dyn V_dyn V_code' Inl' Vt_ht
+            by(auto simp add:encode_def)
+        qed
+      qed
+    qed
+  qed
 next
-  case (Varray x1 x2)
-  then show ?case 
-    apply(clarify)
-    apply(atomize)
-       apply(drule_tac can_encode_as.cases; auto simp add:encode_def simp del:abi_dynamic_size_bound.simps)
-    apply(simp add: array_value_valid_aux_def del:abi_dynamic_size_bound.simps) apply(clarify)
-    apply(simp del:abi_dynamic_size_bound.simps split:sum.splits)
-    apply(rule_tac conjI)
-     apply(clarify)
-     apply(frule_tac encode_tuple_heads_fail)
-      apply(simp add:encode_tuple_tails_len del:abi_dynamic_size_bound.simps)
-    apply(clarify)
+  case (Vtuple ts vs)
+  show ?case using Vtuple.prems Vtuple.IH
+  proof(cases rule: can_encode_as.cases)
+    case (Estatic pre post code')
+    then show ?thesis 
+      by(auto simp add:encode_def)
+  next
+    case (Etuple_dyn t heads head_types tails)
+    then obtain th tt where Ts : "ts = th # tt"
+      by(cases ts; auto)
+    then obtain vh vt where Vs : "vs = vh # vt" using Etuple_dyn
+      by(cases vs; auto simp add:tuple_value_valid_aux_def)
 
-      apply(case_tac "abi_type_isdynamic (abi_get_type v)")
+    have Bound_unfold :
+      "abi_dynamic_size_bound (Vtuple ts vs) =
+       (length vs * 32) + list_sum (map abi_dynamic_size_bound vs)"
+      using Etuple_dyn
+      by(auto simp add:list_ex_iff)
 
-      apply(frule_tac x = v in is_head_and_tail_vs_elem)
-      apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
-      apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
+    have Encode_lemma :
+    "\<And> x . x \<in> set vs \<Longrightarrow>
+           \<exists> code . encode x = Ok code"
+    proof-
+      fix x
+      assume Hx : "x \<in> set vs"
 
-      apply(clarify)
+      have Bound_nn : "list_nonneg (map abi_dynamic_size_bound vs)"
+        unfolding list_nonneg_def
+        using abi_dynamic_size_bound_nonneg
+        by(auto simp add:list_all_iff simp del:abi_dynamic_size_bound.simps)
 
-      apply(drule_tac x = v in spec) 
-      apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
+      have X_bound : "(abi_dynamic_size_bound x) \<le> abi_dynamic_size_bound (Vtuple ts vs)"
+        using Hx  Etuple_dyn 
+              elem_lt_list_sum[OF _ Bound_nn, of "abi_dynamic_size_bound x"]
+        by(auto simp add:list_ex_iff list_sum_def)
 
-      apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code)) ")
-         apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
+      hence X_bound_valid : "sint_value_valid 256 (abi_dynamic_size_bound x)"
+        using Vtuple.prems abi_dynamic_size_bound_nonneg[of x]
+        by(auto simp add:sint_value_valid_def)
 
-    apply(subgoal_tac "sint_value_valid (256::nat) (abi_dynamic_size_bound v)")
-        apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
-        apply(clarify)
-        apply(case_tac "abi_type_valid (abi_get_type v) \<and> abi_value_valid_aux v")
-         apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
-        apply(simp del: abi_dynamic_size_bound.simps encode'.simps)
+      show "\<exists>code. encode x = Ok code"
+      proof(cases "abi_type_isdynamic (abi_get_type x)")
+        case False
+        have X_in_heads : "x \<in> set heads"
+          using is_head_and_tail_vs_elem_static[OF Etuple_dyn(4) Hx] False
+          by auto
 
-       apply(simp add:sint_value_valid_def del: abi_dynamic_size_bound.simps encode'.simps)
-       apply(clarify)
-        apply(cut_tac x = "abi_dynamic_size_bound v" and l = "(map abi_dynamic_size_bound x2)" in elem_lt_list_sum)
+        obtain x_full_code x_offset where X_can_encode : "can_encode_as x x_full_code x_offset"
+          using can_encode_as_tuple_split[OF Etuple_dyn(5) refl X_in_heads] by auto
 
-    apply(simp)
+        show ?thesis using Etuple_dyn Vtuple.IH[OF Hx X_can_encode X_bound_valid] by auto
+      next
+        case True
+        obtain ofs where X_in_tails : "(ofs, x) \<in> set tails" 
+                   and Ofs_heads : "Vsint 256 ofs \<in> set heads"
+          using is_head_and_tail_vs_elem[OF Etuple_dyn(4) Hx True] by auto
 
-    apply(case_tac "sint_value_valid (256::nat)
-        (case v of Vfarray (t::abi_type) (n::nat) (l::abi_value list) \<Rightarrow> int (n * (32::nat)) + list_sum (map abi_dynamic_size_bound l)
-         | Vtuple (ts::abi_type list) (vs::abi_value list) \<Rightarrow> int (length vs * (32::nat)) + list_sum (map abi_dynamic_size_bound vs)
-         | Vbytes (bs::8 word list) \<Rightarrow> int ((32::nat) + length bs + (32::nat)) | Vstring (s::char list) \<Rightarrow> int ((32::nat) + length s + (32::nat))
-         | Varray (t::abi_type) (l::abi_value list) \<Rightarrow> int ((32::nat) + length l * (32::nat)) + list_sum (map abi_dynamic_size_bound l))")
-    apply(clarsimp)
-         apply(simp add:list_nonneg_def)
+        have X_can_encode : "can_encode_as x code (ofs + start)"
+          using Etuple_dyn(6)[OF X_in_tails]
+          by auto
 
-         apply(simp add:list_all_iff) apply(clarsimp)
-         apply(cut_tac v = xa in abi_dynamic_size_bound_nonneg)
-         apply(clarsimp)
+        show ?thesis using Vtuple.IH[OF Hx X_can_encode X_bound_valid] by auto
+      qed
+    qed
 
-         apply(simp add:list_nonneg_def)
+    show ?thesis
+    proof(cases "abi_type_isdynamic th")
+      case False
+      have Vt_dyn : "list_ex abi_type_isdynamic tt"
+        using Etuple_dyn Ts Vs False
+        by(auto simp add:tuple_value_valid_aux_def list_ex_iff)
 
-         apply(simp add:list_all_iff) apply(clarsimp)
-         apply(cut_tac v = xa in abi_dynamic_size_bound_nonneg)
-         apply(clarsimp)
+      have Vh_bound : "abi_dynamic_size_bound vh = int (nat (abi_dynamic_size_bound vh))"
+        using abi_dynamic_size_bound_nonneg[of vh] by auto
+  
+      have Vh_valid : "abi_value_valid vh"
+        using Etuple_dyn Vs
+        by(auto simp add:tuple_value_valid_aux_def list_all_iff list_ex_iff)
+  
+      have False_vh : "abi_type_isstatic (abi_get_type vh)"
+        using Etuple_dyn Vs Ts False
+        by(auto simp add:tuple_value_valid_aux_def list_all_iff list_ex_iff)
 
+      obtain vh_code where Vh_code : "encode vh = Ok vh_code"
+        using Encode_lemma[of vh] Ts Vs 
+        by(auto simp del:encode'.simps simp add:encode_def split:if_splits)
 
-        apply(simp)
-    apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
-    apply(simp)
+      hence Vh_code' : "encode_static vh = Ok vh_code"
+        using False_vh 
+        by(auto simp add:encode_def split:if_splits)
+        
+      show ?thesis
+      proof(cases "encode'_tuple_tails vt 0 (abi_static_size (abi_get_type vh) + heads_length vt) ")
+        case (Inr err)
+        have Toobig :
+          "\<not> sint_value_valid 256 (int (length vt) * 32 + 
+                list_sum (map abi_dynamic_size_bound vt) + 
+                (abi_static_size (abi_get_type vh) + heads_length vt - heads_length vt))"
+        proof(rule encode'_tuple_tails_overflow_fail'[OF Inr])
+          show "list_all abi_value_valid vt" using Cons Etuple_dyn Ts Vs
+            by(auto simp add: tuple_value_valid_aux_def list_all_iff)
+        next
+          fix v'
+          assume Hv' : "v' \<in> set vt"
+          assume Hv'_dyn : "abi_type_isdynamic (abi_get_type v')"
 
-    apply(rule_tac x = full_code in exI)
-    apply(fastforce)
+          have Hv'' : "v' \<in> set vs" using Ts Vs Hv' by auto
 
-     apply(simp del: abi_dynamic_size_bound.simps)
-     apply(drule_tac x = v in spec)
-     apply(simp del: abi_dynamic_size_bound.simps)
-    apply(atomize)
-      apply(frule_tac x = v in is_head_and_tail_vs_elem_static)
-       apply(simp) apply(simp)
-     apply(drule_tac v = "(Vtuple head_types heads)" and vd =  v in can_encode_as_tuple_split)
-       apply(simp) apply(simp)
-     apply(clarify)
-(*
-    apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))")
-     apply(simp del: abi_dynamic_size_bound.simps)
-      apply(clarify)
-  *)  
-(*
-    apply(drule_tac x = v in spec)
-      apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))")
-       apply(clarsimp)
-    apply(case_tac
-"uint_value_valid (256::nat)
-        (case v of Vfarray (t::abi_type) (n::nat) (l::abi_value list) \<Rightarrow> int (n * (32::nat)) + list_sum (map abi_dynamic_size_bound l)
-         | Vtuple (ts::abi_type list) (vs::abi_value list) \<Rightarrow> int (length vs * (32::nat)) + list_sum (map abi_dynamic_size_bound vs) | Vbytes (bs::8 word list) \<Rightarrow> int ((32::nat) + length bs + (32::nat))
-         | Vstring (s::char list) \<Rightarrow> int ((32::nat) + length s + (32::nat)) | Varray (t::abi_type) (l::abi_value list) \<Rightarrow> int ((32::nat) + length l * (32::nat)) + list_sum (map abi_dynamic_size_bound l))")        apply(clarsimp)
+          have V'_valid : "abi_value_valid v'"
+            using Cons Etuple_dyn Hv''
+            by(auto simp add:tuple_value_valid_aux_def list_all_iff list_ex_iff)
 
-    apply(case_tac "abi_type_valid (abi_get_type v) \<and> abi_value_valid_aux v") apply(clarsimp)
-    apply(clarsimp)
-        apply(clarsimp)
-*)
-        apply(cut_tac v = "Varray x1 x2" in abi_dynamic_size_bound_nonneg)
-        apply(simp)
+          show "\<exists>code. encode' v' = Ok code"
+            using Encode_lemma[OF Hv''] V'_valid
+            by(auto simp add:encode_def)
+        next
+          show "heads_length vt \<le> abi_static_size (abi_get_type vh) + heads_length vt"
+            using abi_static_size_nonneg[of "abi_get_type vh"]
+            by auto
+        qed
 
-        apply(cut_tac x = "abi_dynamic_size_bound v" and l = "(map abi_dynamic_size_bound x2)" in elem_lt_list_sum)
-          apply(clarsimp)
-         apply(simp add:list_nonneg_def)
+        have False using Vtuple(3)  Toobig Ts Vs Bound_unfold
+          list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+          abi_dynamic_size_bound_headslength[of vt]
+          heads_length_nonneg[of vt] Cons
+          abi_dynamic_size_bound_nonneg[of vh]
+          abi_static_size_nonneg[of "abi_get_type vh"]
+          abi_dynamic_size_bound_correct[OF Vh_code Vh_bound Vh_valid]
+          abi_dynamic_size_bound_static[OF False_vh]
+          sym[OF foldl_plus[of "(abi_dynamic_size_bound vh)" 0]]
+          unfolding id_def 
+          by(auto simp add: sint_value_valid_def list_sum_def
+                     simp del:abi_dynamic_size_bound.simps)
 
-         apply(simp add:list_all_iff) apply(clarsimp)
-         apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
-         apply(clarsimp)
-         apply(clarsimp)
+        thus ?thesis by auto      
+      next
+        case (Inl vt_code)
+        show ?thesis 
+        proof(cases "encode'_tuple_heads vt vt_code")
+          fix err
+          assume Inr' : "encode'_tuple_heads vt vt_code = Err err"
+          have Lens : "length vt = length vt_code"
+            using encode'_tuple_tails_len[OF Inl] by auto
 
-    apply(subgoal_tac "sint_value_valid (256::nat) (abi_static_size (abi_get_type v))")
-      apply(clarsimp)
-      apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))") apply(clarsimp)
-       apply(simp split:if_splits)
-      apply(rule_tac x = coded in exI) apply(fastforce)
+          obtain vbad err' where Vbad_in : "vbad \<in> set vt" and Vbad_bad :  "encode' vbad = Err err'"
+            using encode'_tuple_heads_fail[OF Inr' Lens] by auto
 
-     apply(simp add:sint_value_valid_def)
-     apply(cut_tac v = "abi_get_type v" in abi_static_size_nonneg) apply(arith)
+          have Vbad_valid : "abi_value_valid vbad"
+            using Etuple_dyn Vbad_in Vs
+            by(auto simp add:tuple_value_valid_aux_def list_all_iff list_ex_iff)
 
-    apply(clarify)
-    apply(frule_tac "encode_tuple_tails_overflow_fail'")
-       apply(simp del: abi_dynamic_size_bound.simps add:list_all_iff)
-      apply(atomize)
-    
-(* at this point, the intuition is that the offset can't encode as a s256 *)
-       apply(frule_tac x = v in is_head_and_tail_vs_elem) apply(simp) apply(simp) apply(clarify)
-       apply(drule_tac x = offset in spec) apply(rotate_tac 1)
-       apply(drule_tac x = v in spec) apply(simp del: abi_dynamic_size_bound.simps)
-    apply(drule_tac x = v in spec) apply(simp del: abi_dynamic_size_bound.simps)
+          have Vbad_in' : "vbad \<in> set vs" using Cons Vbad_in Vs by auto
 
+          obtain vbad_enc where "encode vbad = Ok vbad_enc"
+            using Encode_lemma[OF Vbad_in'] by auto
 
-    apply(subgoal_tac "(\<exists>code::8 word list. Ex (can_encode_as v code))")
-apply(simp del: abi_dynamic_size_bound.simps)
+          hence Vbad_enc' : "encode' vbad = Ok vbad_enc"
+            using Vbad_valid by(auto simp add:encode_def)
 
-(* need to talk about how length of full encoding works out implies length of sub encoding
-also does *)
+          have False using Vbad_bad Vbad_enc' by auto
 
-    apply(subgoal_tac " sint_value_valid (256::nat)
-(abi_dynamic_size_bound v)")
-      apply(clarify)
-apply(simp del: abi_dynamic_size_bound.simps split:if_splits)
+          thus "\<exists>code'. encode (Vtuple ts vs) = Ok code'" by auto
+        next
+          fix vt_headenc
+          assume Inl' : "encode'_tuple_heads vt vt_code = Ok vt_headenc"
+          obtain vth vtt where Vt_ht : "vt_headenc = (vth, vtt)"
+            by(cases vt_headenc;  auto)
 
+          have Vt_smallenough : "sint_value_valid 256 (32 + heads_length vt)"
+            using Vtuple(3) Bound_unfold False Vs
+                  list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+                  abi_dynamic_size_bound_headslength[of vt]
+                  heads_length_nonneg[of vt] Cons 
+                  abi_dynamic_size_bound_nonneg[of vh]
+                  abi_static_size_nonneg[of "abi_get_type vh"]
+                  abi_dynamic_size_bound_static[OF False_vh]
+                  sym[OF foldl_plus[of "(abi_dynamic_size_bound vh)" 0]]
+            unfolding id_def 
+            by(auto simp add: sint_value_valid_def list_sum_def
+                    simp del:abi_dynamic_size_bound.simps)
 
-        apply(cut_tac x = "abi_dynamic_size_bound v" and l = "(map abi_dynamic_size_bound x2)" in elem_lt_list_sum)
-       apply(clarsimp) apply(simp add:list_nonneg_def)
-    apply(simp add:list_all_iff) apply(clarsimp)
-      apply(rotate_tac 1)
+          then show ?thesis using Inl Inl' Etuple_dyn False_vh Vt_dyn Vs Ts Vh_code' Vt_ht
+            by(auto simp add:encode_def)
+        qed
+      qed
+    next
+      case True
+      have Vh_bound : "abi_dynamic_size_bound vh = int (nat (abi_dynamic_size_bound vh))"
+        using abi_dynamic_size_bound_nonneg[of vh] by auto
+  
+      have Vh_valid : "abi_value_valid vh"
+        using Etuple_dyn Vs
+        by(auto simp add:tuple_value_valid_aux_def list_all_iff list_ex_iff)
+  
+      have True_vh : "abi_type_isdynamic (abi_get_type vh)"
+        using Etuple_dyn Vs Ts True
+        by(auto simp add:tuple_value_valid_aux_def list_all_iff list_ex_iff)
 
-         apply(cut_tac v = x in abi_dynamic_size_bound_nonneg)
-         apply(clarsimp)
-         apply(cut_tac v = v in abi_dynamic_size_bound_nonneg)
-         apply(clarsimp)
-        apply(simp add:sint_value_valid_def)
+      obtain vh_code where Vh_code : "encode vh = Ok vh_code"
+        using Encode_lemma[of vh] Ts Vs 
+        by(auto simp del:encode'.simps simp add:encode_def split:if_splits)
 
-       apply(rule_tac x = full_code in exI) apply(fastforce)
-      apply(simp)
-     apply(simp add:sint_value_valid_def)
+      hence Vh_code' : "encode' vh = Ok vh_code"
+        using True_vh 
+        by(auto simp add:encode_def split:if_splits)
+      have Vt_valid : "list_all abi_value_valid vt"
+        using Etuple_dyn Vs by(auto simp add:tuple_value_valid_aux_def list_all_iff)
 
-    apply(subgoal_tac "list_nonneg (map abi_dynamic_size_bound x2)")
-     apply(drule_tac list_nonneg_sum)
-apply(simp)
+      show ?thesis
+      proof(cases "encode'_tuple_tails vt 0 (32 + heads_length vt + int (length vh_code))")
+        case (Inr err)
+        have Toobig :
+          "\<not> sint_value_valid 256 (int (length vt) * 32 + 
+                list_sum (map abi_dynamic_size_bound vt) + 
+                (32 + heads_length vt + int (length vh_code) - heads_length vt))"
+        proof(rule encode'_tuple_tails_overflow_fail'[OF Inr])
+          show "list_all abi_value_valid vt" using Cons Etuple_dyn Ts Vs
+            by(auto simp add: tuple_value_valid_aux_def list_all_iff)
+        next
+          fix v'
+          assume Hv' : "v' \<in> set vt"
+          assume Hv'_dyn : "abi_type_isdynamic (abi_get_type v')"
 
-apply(simp add:list_nonneg_def)
+          have Hv'' : "v' \<in> set vs" using Ts Vs Hv' by auto
 
-    apply(simp only:list_all_iff)
-    apply(simp del: abi_dynamic_size_bound.simps )
-    apply(clarify)
-    apply(rule_tac abi_dynamic_size_bound_nonneg)
-    done
+          have V'_valid : "abi_value_valid v'"
+            using Cons Etuple_dyn Hv''
+            by(auto simp add:tuple_value_valid_aux_def list_all_iff list_ex_iff)
+
+          show "\<exists>code. encode' v' = Ok code"
+            using Encode_lemma[OF Hv''] V'_valid
+            by(auto simp add:encode_def)
+        next
+          show "heads_length vt \<le> 32 + heads_length vt + int (length vh_code)"
+            using abi_static_size_nonneg[of "abi_get_type vh"]
+            by auto
+        qed
+
+        have False using Vtuple(3)  Toobig Ts Vs Bound_unfold
+          list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+          abi_dynamic_size_bound_headslength[of vt]
+          heads_length_nonneg[of vt] Cons
+          abi_dynamic_size_bound_nonneg[of vh]
+          abi_static_size_nonneg[of "abi_get_type vh"]
+          abi_dynamic_size_bound_correct[OF Vh_code Vh_bound Vh_valid]
+          sym[OF foldl_plus[of "(abi_dynamic_size_bound vh)" 0]]
+          unfolding id_def 
+          by(auto simp add: sint_value_valid_def list_sum_def
+                     simp del:abi_dynamic_size_bound.simps)
+
+        thus ?thesis by auto      
+      next
+        case (Inl vt_code)
+        show ?thesis 
+        proof(cases "encode'_tuple_heads vt vt_code")
+          fix err
+          assume Inr' : "encode'_tuple_heads vt vt_code = Err err"
+          have Lens : "length vt = length vt_code"
+            using encode'_tuple_tails_len[OF Inl] by auto
+
+          obtain vbad err' where Vbad_in : "vbad \<in> set vt" and Vbad_bad :  "encode' vbad = Err err'"
+            using encode'_tuple_heads_fail[OF Inr' Lens] by auto
+
+          have Vbad_valid : "abi_value_valid vbad"
+            using Etuple_dyn Vbad_in Vs
+            by(auto simp add:tuple_value_valid_aux_def list_all_iff list_ex_iff)
+
+          have Vbad_in' : "vbad \<in> set vs" using Cons Vbad_in Vs by auto
+
+          obtain vbad_enc where "encode vbad = Ok vbad_enc"
+            using Encode_lemma[OF Vbad_in'] by auto
+
+          hence Vbad_enc' : "encode' vbad = Ok vbad_enc"
+            using Vbad_valid by(auto simp add:encode_def)
+
+          have False using Vbad_bad Vbad_enc' by auto
+
+          thus "\<exists>code'. encode (Vtuple ts vs) = Ok code'" by auto
+        next
+          fix vt_headenc
+          assume Inl' : "encode'_tuple_heads vt vt_code = Ok vt_headenc"
+          obtain vth vtt where Vt_ht : "vt_headenc = (vth, vtt)"
+            by(cases vt_headenc;  auto)
+
+          have Vt_smallenough : "sint_value_valid 256 (32 + heads_length vt)"
+            using Vtuple(3) Bound_unfold True Vs
+                  list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+                  abi_dynamic_size_bound_headslength[of vt]
+                  heads_length_nonneg[of vt] Cons 
+                  abi_dynamic_size_bound_nonneg[of vh]
+                  abi_static_size_nonneg[of "abi_get_type vh"]
+                  sym[OF foldl_plus[of "(abi_dynamic_size_bound vh)" 0]]
+            unfolding id_def 
+            by(auto simp add: sint_value_valid_def list_sum_def
+                    simp del:abi_dynamic_size_bound.simps)
+
+          then show ?thesis using Inl Inl' Etuple_dyn True  Vs Ts Vh_code' Vt_ht
+            by(auto simp add:encode_def tuple_value_valid_aux_def)
+        qed
+      qed
+    qed
+  qed
+next
+  case (Vbytes bs)
+  show ?case using Vbytes.prems(1)
+    by(cases rule: can_encode_as.cases; auto simp add:encode_def)
+next
+  case (Vstring s)
+  show ?case using Vstring.prems(1)
+  proof(cases rule: can_encode_as.cases)
+    case (Estatic pre' post' code')
+    hence False using Vstring by auto
+    thus ?thesis by auto
+  next
+    case (Estring l)
+    show ?thesis using Estring(3)
+    proof(cases rule:can_encode_as.cases)
+      case (Estatic pre' post' code')
+      hence False using Vstring by auto
+      thus ?thesis by auto
+    next
+      case (Ebytes pre post count code)
+      thus ?thesis using Vstring Estring
+        by(auto simp add:encode_def Let_def)
+    qed
+  qed
+next
+  case (Varray t vs)
+  show ?case using Varray.prems Varray.IH
+  proof(cases rule: can_encode_as.cases)
+    case (Estatic pre post code)
+    then show ?thesis by auto
+  next
+    case (Earray heads head_types tails)
+
+    have Bound_unfold :
+      "abi_dynamic_size_bound (Varray t vs) =
+       32 + (length vs * 32) + list_sum (map abi_dynamic_size_bound vs)"
+      using Earray
+      by(auto)
+
+    show ?thesis
+    proof(cases vs)
+      case Nil
+      then show ?thesis using Earray by(auto simp add:encode_def)
+    next
+      case (Cons v vt)
+
+      have V_valid : "abi_value_valid v"
+        using Cons Earray
+        by(auto simp add:array_value_valid_aux_def)
+
+      have Encode_lemma :
+      "\<And> x . x \<in> set vs \<Longrightarrow>
+             \<exists> code . encode x = Ok code"
+      proof-
+        fix x
+        assume Hx : "x \<in> set vs"
+  
+        have Bound_nn : "list_nonneg (map abi_dynamic_size_bound vs)"
+          unfolding list_nonneg_def
+          using abi_dynamic_size_bound_nonneg
+          by(auto simp add:list_all_iff simp del:abi_dynamic_size_bound.simps)
+  
+        have X_bound : "(abi_dynamic_size_bound x) \<le> abi_dynamic_size_bound (Varray t vs)"
+          using Hx  Etuple_dyn 
+                elem_lt_list_sum[OF _ Bound_nn, of "abi_dynamic_size_bound x"]
+          by(auto simp add:list_ex_iff list_sum_def)
+  
+        hence X_bound_valid : "sint_value_valid 256 (abi_dynamic_size_bound x)"
+          using Varray.prems abi_dynamic_size_bound_nonneg[of x]
+          by(auto simp add:sint_value_valid_def)
+  
+        show "\<exists>code. encode x = Ok code"
+        proof(cases "abi_type_isdynamic (abi_get_type x)")
+          case False
+          have X_in_heads : "x \<in> set heads"
+            using is_head_and_tail_vs_elem_static[OF Earray(2) Hx] False 
+            by auto
+  
+          obtain x_full_code x_offset where X_can_encode : "can_encode_as x x_full_code x_offset"
+            using can_encode_as_tuple_split[OF Earray(4) refl X_in_heads] by auto
+  
+          show ?thesis using Etuple_dyn Varray.IH[OF Hx X_can_encode X_bound_valid] by auto
+        next
+          case True
+          obtain ofs where X_in_tails : "(ofs, x) \<in> set tails" 
+                     and Ofs_heads : "Vsint 256 ofs \<in> set heads"
+            using is_head_and_tail_vs_elem[OF Earray(2) Hx True] by auto
+  
+          have X_can_encode : "can_encode_as x code (ofs + start + 32)"
+            using Earray(5)[OF X_in_tails]
+            by auto
+  
+          show ?thesis using Varray.IH[OF Hx X_can_encode X_bound_valid] by auto
+        qed
+      qed
+
+      show ?thesis
+      proof(cases "abi_type_isdynamic t")
+        case False
+        have V_static : "abi_type_isstatic (abi_get_type v)"
+          using Earray Cons False
+          by(auto simp add:array_value_valid_aux_def)
+
+        obtain v_code where V_code :
+          "encode v = Ok v_code" using Cons Encode_lemma[of v] by auto
+
+        hence V_code' : "encode_static v = Ok v_code" using V_valid V_static
+          by(auto simp add:encode_def)
+
+        show ?thesis using Cons V_static
+        proof(cases "encode'_tuple_tails vt 0
+                   (abi_static_size (abi_get_type v) + heads_length vt)")
+          case (Inr err)
+          have Toobig :
+            "\<not> sint_value_valid 256
+               (int (length vt) * 32 + list_sum (map abi_dynamic_size_bound vt) +
+               (abi_static_size (abi_get_type v) + heads_length vt - heads_length vt))"
+          proof(rule encode'_tuple_tails_overflow_fail'[OF Inr])
+            show "list_all abi_value_valid vt" using Cons Earray 
+              by(auto simp add: array_value_valid_aux_def list_all_iff)
+          next
+            fix v'
+            assume Hv' : "v' \<in> set vt"
+            assume Hv'_dyn : "abi_type_isdynamic (abi_get_type v')"
+
+            have Hv'_typ : "abi_get_type v' = t" using  Earray Hv' Hv'_dyn Cons
+              by(auto simp add:array_value_valid_aux_def list_all_iff)
+
+            have False using Earray Hv'_typ Hv'_dyn False
+              by(auto simp add:array_value_valid_aux_def list_all_iff)
+
+            thus "\<exists>code. encode' v' = Ok code" by auto
+          next
+            show "heads_length vt \<le> abi_static_size (abi_get_type v) + heads_length vt"
+              using heads_length_nonneg[of vt]
+                    abi_static_size_nonneg[of "abi_get_type v"] by auto
+          qed
+  
+          have False using Varray(3)  Toobig Cons Bound_unfold
+            list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+            abi_dynamic_size_bound_headslength[of vt]
+            heads_length_nonneg[of vt] Cons
+            abi_dynamic_size_bound_nonneg[of v]
+            abi_static_size_nonneg[of "abi_get_type v"]
+            abi_dynamic_size_bound_static[of v] V_static
+            sym[OF foldl_plus[of "(abi_dynamic_size_bound v)" 0]]
+            unfolding id_def 
+            by(auto simp add: sint_value_valid_def list_sum_def
+                       simp del:abi_dynamic_size_bound.simps)
+  
+          thus ?thesis by auto
+        next
+          case (Inl vt_code)
+          show ?thesis
+          proof(cases "encode'_tuple_heads vt vt_code")
+            fix err
+            assume Inr' : "encode'_tuple_heads vt vt_code = Err err"
+            have Lens : "length vt = length vt_code"
+              using encode'_tuple_tails_len[OF Inl] by auto
+  
+            obtain vbad err' where Vbad_in : "vbad \<in> set vt" and Vbad_bad :  "encode' vbad = Err err'"
+              using encode'_tuple_heads_fail[OF Inr' Lens] by auto
+  
+            have Vbad_valid : "abi_value_valid vbad"
+              using Cons Earray Vbad_in
+              by(auto simp add:array_value_valid_aux_def list_all_iff)
+  
+            have Vbad_in' : "vbad \<in> set vs" using Cons Vbad_in by auto
+  
+            obtain vbad_enc where "encode vbad = Ok vbad_enc"
+              using Encode_lemma[OF Vbad_in'] by auto
+  
+            hence Vbad_enc' : "encode' vbad = Ok vbad_enc"
+              using Vbad_valid by(auto simp add:encode_def)
+  
+            have False using Vbad_bad Vbad_enc' by auto
+  
+            thus "\<exists>code'. encode (Varray t vs) = Ok code'" by auto
+          next
+            fix vt_headenc
+            assume Inl' : "encode'_tuple_heads vt vt_code = Ok vt_headenc"
+            obtain vth vtt where Vt_ht : "vt_headenc = (vth, vtt)"
+            by(cases vt_headenc;  auto)
+
+            have Vt_smallenough : "sint_value_valid 256 (32 + heads_length vt)"
+              using Varray(3) Bound_unfold 
+                    list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+                    abi_dynamic_size_bound_headslength[of vt]
+                    heads_length_nonneg[of vt] Cons
+                    abi_dynamic_size_bound_nonneg[of v]
+                    sym[OF foldl_plus[of "(abi_dynamic_size_bound v)" 0]]
+              unfolding id_def 
+              by(auto simp add: sint_value_valid_def list_sum_def
+                         simp del:abi_dynamic_size_bound.simps)
+  
+            then show ?thesis using Inl Cons Earray V_static V_code' V_valid Inl' Vt_ht
+              by(auto simp add:encode_def)
+          qed
+        qed
+      next
+        case True
+
+        have V_dyn : "abi_type_isdynamic (abi_get_type v)"
+          using Earray Cons True
+          by(auto simp add:array_value_valid_aux_def)
+
+        obtain v_code where V_code :
+          "encode v = Ok v_code" using Cons Encode_lemma[of v] by auto
+
+        hence V_code' : "encode' v = Ok v_code" using V_valid True
+          by(auto simp add:encode_def)
+
+        show ?thesis using Cons True V_valid V_dyn 
+        proof(cases "encode'_tuple_tails vt 0 (32 + heads_length vt + int (length v_code))")
+          case (Inr err)
+
+          have Toobig :
+            "\<not> sint_value_valid 256 (int (length vt) * 32 + 
+                  list_sum (map abi_dynamic_size_bound vt) + 
+                  ((32 + heads_length vt + int (length v_code)) - heads_length vt))"
+          proof(rule encode'_tuple_tails_overflow_fail'[OF Inr])
+            show "list_all abi_value_valid vt" using Cons Earray
+              by(auto simp add: array_value_valid_aux_def list_all_iff)
+          next
+            fix v'
+            assume Hv' : "v' \<in> set vt"
+            assume Hv'_dyn : "abi_type_isdynamic (abi_get_type v')"
+  
+            have Hv'' : "v' \<in> set vs" using Cons Hv' by auto
+  
+            have V'_valid : "abi_value_valid v'"
+              using Cons Earray Hv'
+              by(auto simp add:array_value_valid_aux_def list_all_iff)
+  
+            show "\<exists>code. encode' v' = Ok code"
+              using Encode_lemma[OF Hv''] V'_valid
+              by(auto simp add:encode_def)
+          next
+            show "heads_length vt \<le> 32 + heads_length vt + int (length v_code)"
+              by auto
+          qed
+
+          have V_bound : "abi_dynamic_size_bound v = int (nat (abi_dynamic_size_bound v))"
+            using abi_dynamic_size_bound_nonneg[of v] by auto
+  
+          have False using Varray(3) Bound_unfold V_dyn Toobig
+            list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+            abi_dynamic_size_bound_headslength[of vt]
+            heads_length_nonneg[of vt] Cons
+            abi_dynamic_size_bound_nonneg[of v]
+            abi_dynamic_size_bound_correct[OF V_code V_bound V_valid]
+            sym[OF foldl_plus[of "(abi_dynamic_size_bound v)" 0]]
+            unfolding id_def 
+            by(auto simp add: sint_value_valid_def list_sum_def
+                       simp del:abi_dynamic_size_bound.simps)
+  
+          thus ?thesis by auto
+        next
+          case (Inl vt_code)
+
+          show ?thesis
+          proof(cases "encode'_tuple_heads vt vt_code")
+            fix err
+            assume Inr' : "encode'_tuple_heads vt vt_code = Err err"
+            have Lens : "length vt = length vt_code"
+              using encode'_tuple_tails_len[OF Inl] by auto
+  
+            obtain vbad err' where Vbad_in : "vbad \<in> set vt" and Vbad_bad :  "encode' vbad = Err err'"
+              using encode'_tuple_heads_fail[OF Inr' Lens] by auto
+  
+            have Vbad_valid : "abi_value_valid vbad"
+              using Cons Earray Vbad_in
+              by(auto simp add:array_value_valid_aux_def list_all_iff)
+  
+            have Vbad_in' : "vbad \<in> set vs" using Cons Vbad_in by auto
+  
+            obtain vbad_enc where "encode vbad = Ok vbad_enc"
+              using Encode_lemma[OF Vbad_in'] by auto
+  
+            hence Vbad_enc' : "encode' vbad = Ok vbad_enc"
+              using Vbad_valid by(auto simp add:encode_def)
+  
+            have False using Vbad_bad Vbad_enc' by auto
+  
+            thus "\<exists>code'. encode (Varray t vs) = Ok code'" by auto
+          next
+            fix vt_headenc
+            assume Inl' : "encode'_tuple_heads vt vt_code = Ok vt_headenc"
+            obtain vth vtt where Vt_ht : "vt_headenc = (vth, vtt)"
+            by(cases vt_headenc;  auto)
+
+            have Vt_smallenough : "sint_value_valid 256 (32 + heads_length vt)"
+              using Varray(3) Bound_unfold 
+                    list_nonneg_sum[OF list_nonneg_map[OF abi_dynamic_size_bound_nonneg, of id vt]]
+                    abi_dynamic_size_bound_headslength[of vt]
+                    heads_length_nonneg[of vt] Cons
+                    abi_dynamic_size_bound_nonneg[of v]
+                    sym[OF foldl_plus[of "(abi_dynamic_size_bound v)" 0]]
+              unfolding id_def 
+              by(auto simp add: sint_value_valid_def list_sum_def
+                         simp del:abi_dynamic_size_bound.simps)
+  
+            then show ?thesis using Inl Cons Earray V_dyn V_code' V_valid Inl' Vt_ht
+              by(auto simp add:encode_def)
+          qed
+        qed
+      qed
+    qed
+  qed
 qed
- 
 
-*)
 end
