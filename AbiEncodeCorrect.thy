@@ -3028,14 +3028,6 @@ next
   qed
 qed
 
-(*
-lemma list_bisect :
-  "
-   l = take len l @ drop len l"
-
-lemma list_trisect :
-  "l = 
-*)
 lemma those_err_exists :
     "those_err l = Err err \<Longrightarrow>
     (\<exists> x err' . x \<in> set l \<and> x = Err err')"
@@ -3055,28 +3047,6 @@ next
 
     then show ?thesis using Cons.prems Cons.IH[OF Err'] by auto
   qed
-qed
-
-lemma list_trisect :
-  "take a l @
-   drop a (take (a + b) l) @
-   drop (a + b) l = l"
-proof-
-  have "drop a (take (a + b) l) @
-        drop (b + a) l = drop a l"
-
-    using drop_take[of a "a + b" l]
-          sym[OF drop_drop[of b a l]]
-    by(auto simp del:drop_drop)
-
-  hence C' : "drop a (take (a + b) l) @
-              drop (a + b) l = drop a l"
-    unfolding add.commute[of b a]
-    by assumption
-
-  show "take a l @ drop a (take (a + b) l) @ drop (a + b) l = l"
-    unfolding C'
-    by auto
 qed
 
 lemma can_encode_as_start_nonneg :
