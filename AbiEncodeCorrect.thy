@@ -276,9 +276,12 @@ qed
 lemma encode'_tuple_heads_correct1 :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
-   xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) vs bvs) \<Longrightarrow>
-   ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint 256) vs) \<Longrightarrow>
-   tails = (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs bvs))) \<Longrightarrow>
+   xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> 
+          if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) vs bvs) \<Longrightarrow>
+   ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) 
+                  then abi_get_type v else Tsint 256) vs) \<Longrightarrow>
+   tails = (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) 
+                (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs bvs))) \<Longrightarrow>
    abi_value_valid (Vtuple ys xs) \<Longrightarrow>
    abi_type_isstatic (Ttuple ys) \<Longrightarrow>
    encode'_tuple_heads vs bvs = Ok (heads_code, tails_code) \<Longrightarrow>
@@ -326,9 +329,12 @@ qed
 lemma encode'_tuple_heads_correct2 [rule_format] :
   "
  is_head_and_tail vs xs ys tails \<Longrightarrow>
-   xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) vs bvs) \<Longrightarrow>
-   ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) then abi_get_type v else Tsint 256) vs) \<Longrightarrow>
-   tails = (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs bvs)))  \<Longrightarrow>
+   xs = (map2 (\<lambda>v a. case a of (ptr, enc) \<Rightarrow> 
+          if \<not> abi_type_isdynamic (abi_get_type v) then v else Vsint 256 ptr) vs bvs) \<Longrightarrow>
+   ys = (map (\<lambda>v. if \<not> abi_type_isdynamic (abi_get_type v) 
+                  then abi_get_type v else Tsint 256) vs) \<Longrightarrow>
+   tails = (map (\<lambda>(v::abi_value, ptr::int, enc::8 word list). (ptr, v)) 
+                (filter (abi_type_isdynamic \<circ> abi_get_type \<circ> fst) (zip vs bvs)))  \<Longrightarrow>
    encode'_tuple_tails vs (0::int) (heads_len) = Ok bvs \<Longrightarrow>
    abi_value_valid (Vtuple ys xs) \<Longrightarrow>
    encode'_tuple_heads vs bvs = Ok (heads_code, tails_code) \<Longrightarrow>
@@ -337,7 +343,8 @@ lemma encode'_tuple_heads_correct2 [rule_format] :
    (\<exists> ab_code pre post . encode' ab = Ok ab_code \<and> 
        tails_code = pre @ ab_code @ post \<and>
        ac = (heads_len) + int (length pre))"
-proof(induction arbitrary: bvs heads_len heads_code tails_code ac ab rule:AbiEncodeSpec.is_head_and_tail.induct)
+proof(induction arbitrary: bvs heads_len heads_code tails_code ac ab 
+      rule:AbiEncodeSpec.is_head_and_tail.induct)
   case iht_nil
   then show ?case by auto
 next
@@ -1305,7 +1312,8 @@ next
     then show ?thesis
     proof(cases "encode_static a")
       case (Inl bs)
-      then obtain err' where Herr' : "encode'_tuple_heads vs bst = Err err'" using False Cons.prems Bsh
+      then obtain err' where Herr' : "encode'_tuple_heads vs bst = Err err'"
+        using False Cons.prems Bsh
         by(auto split:sum.split_asm)
       then show ?thesis using Cons.prems Cons.IH[OF Herr'] Bsh 
         by(auto)
@@ -1651,7 +1659,8 @@ next
       using Cons True Aenc
       by (auto split:sum.split_asm)
 
-    obtain ts2 where Ts2 : "encode'_tuple_tails vs headlen' (len_total' + int (length aenc)) = Ok ts2"
+    obtain ts2 where Ts2 : "encode'_tuple_tails vs headlen' 
+                                    (len_total' + int (length aenc)) = Ok ts2"
       using Cons True Aenc
       by (auto split:sum.split_asm)
 
