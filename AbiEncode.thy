@@ -5,8 +5,6 @@ begin
    It is designed to produce "canonical" encodings; that is,
    it will produce outputs that match Solidity's output *)
 
-(* TODO: decide whether to add checks to these encoders,
-   or to do so outside *)
 fun encode_int :: "int \<Rightarrow> 8 word list" where
 "encode_int i =
   Word.word_rsplit (Word.word_of_int i :: 256 word)"

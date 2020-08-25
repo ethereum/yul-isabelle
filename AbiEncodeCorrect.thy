@@ -2,6 +2,9 @@ theory AbiEncodeCorrect imports AbiEncodeSpec AbiEncode HOL.Int
 
 begin
 
+(* Correctness theorems for ABI encoder
+   and associated lemmas *)
+
 (* Alternate induction principle for ABI values
    Removes the need for double-induction on the tree nodes
    and lists of children *)

@@ -2,243 +2,270 @@ theory AbiDecodeCorrect imports AbiEncodeSpec AbiDecode AbiEncodeCorrect
 
 begin
 
-declare [[show_types]]
+(* Correctness theorems for ABI decoder
+   and associated lemmas *)
 
-lemma uint_reconstruct_valid [rule_format]:
-" uint_value_valid x1 x2 \<Longrightarrow>
-(0::nat) < x1 \<Longrightarrow> x1 \<le> (256::nat) \<Longrightarrow> 
- (8::nat) dvd x1 \<Longrightarrow>
- uint_value_valid x1 (uint (word_rcat (take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word))"
+(* Helpers for decoding integers *)
 
-    apply(simp add:uint_value_valid_def) apply(clarify)
-    apply(subgoal_tac "(take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) = (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)")
-      apply(simp)
-     apply(simp add:word_rcat_rsplit)
-     apply(subgoal_tac "uint (word_of_int x2 :: 256 word) = x2") apply(simp) apply(rule_tac word_uint.Abs_inverse)
-apply(simp) apply(simp add:uints_num)
-      apply(subgoal_tac "(2 :: int)^x1 \<le> (2 :: int)^256") apply(simp)
-    apply(rule_tac power_increasing) apply(assumption) apply(simp)
-     apply(simp add:word_rsplit_def bin_rsplit_len word_rcat_def)
-  done
+lemma take_split32 :
+"(take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) = 
+              (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)"
+    by(auto simp add:word_rsplit_def bin_rsplit_len word_rcat_def)
+
+lemma uint_reconstruct_valid :
+assumes Hv : "uint_value_valid x1 x2"
+assumes Hgt : "(0::nat) < x1" 
+assumes Hlt : "x1 \<le> (256::nat)"
+shows "uint_value_valid x1 (uint (word_rcat (take (32::nat) 
+                      (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word))"
+proof-
+  have Hlt' : "(2 :: int)^x1 \<le> (2 :: int)^256" using Hlt 
+    by(rule power_increasing; auto)
+
+  have X2_uint : "x2 \<in> uints LENGTH(256)" using Hv Hlt'
+    by(auto simp add:uints_num uint_value_valid_def)
+
+  have Conc' : "uint (word_of_int x2 :: 256 word) = x2"
+    by(rule word_uint.Abs_inverse[OF X2_uint])
+
+  show ?thesis using Conc' take_split32 Hv
+    by(simp add:word_rcat_rsplit uint_value_valid_def)
+qed
 
 lemma uint_reconstruct  :
-" uint_value_valid x1 x2 \<Longrightarrow>
-(0::nat) < x1 \<Longrightarrow> x1 \<le> (256::nat) \<Longrightarrow> 
- (8::nat) dvd x1 \<Longrightarrow>
- uint_value_valid x1 (uint (word_rcat (take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word)) \<Longrightarrow>
- uint (word_rcat (take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word) = x2"
-     apply(simp add:uint_value_valid_def) apply(clarsimp)
+  assumes Hv : "uint_value_valid x1 x2"
+  assumes Hgt : "(0::nat) < x1" 
+  assumes Hlt : "x1 \<le> (256::nat)"
+  assumes Hv_dec : 
+    "uint_value_valid x1 (uint (word_rcat (take (32::nat) (word_rsplit
+                               (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word))"
+  shows "uint (word_rcat (take (32::nat) (word_rsplit 
+              (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word) = x2"
+proof-
+  have Hlt' : "(2 :: int)^x1 \<le> (2 :: int)^256" using Hlt 
+    by(rule power_increasing; auto)
 
-    apply(subgoal_tac "(take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) = (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)")
-      apply(simp)
-      apply(simp add:word_rcat_rsplit)
-      apply(rule_tac word_uint.Abs_inverse) apply(simp) apply(simp add:uints_num)
-      apply(subgoal_tac "(2 :: int)^x1 \<le> (2 :: int)^256") apply(simp)
-    apply(rule_tac power_increasing) apply(assumption) apply(simp)
-  apply(simp add:word_rsplit_def bin_rsplit_len word_rcat_def)
-  done
+  have X2_uint : "x2 \<in> uints LENGTH(256)" using Hv Hlt'
+    by(auto simp add:uints_num uint_value_valid_def)
+
+  have Conc' : "uint (word_of_int x2 :: 256 word) = x2"
+    by(rule word_uint.Abs_inverse[OF X2_uint])
 
 
-lemma sint_reconstruct_valid [rule_format] :
-" sint_value_valid x1 x2 \<Longrightarrow>
-(0::nat) < x1 \<Longrightarrow> x1 \<le> (256::nat) \<Longrightarrow> 
- (8::nat) dvd x1 \<Longrightarrow>
- sint_value_valid x1 (sint (word_rcat (take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word))"
-    apply(simp add:sint_value_valid_def) apply(clarify)
-    apply(subgoal_tac "(take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) = (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)")
-      apply(simp)
-     apply(simp add:word_rcat_rsplit)
-     apply(subgoal_tac "sint (word_of_int x2 :: 256 word) = x2") apply(simp) apply(rule_tac word_sint.Abs_inverse)
-apply(simp) apply(simp add:sints_num) 
-   apply(subgoal_tac "(2 :: int)^(x1 - 1) \<le> (2 :: int)^(256 - 1)") apply(simp)
-    apply(rule_tac power_increasing)  apply(simp) apply(simp)
-     apply(simp add:word_rsplit_def bin_rsplit_len word_rcat_def)
-  done
+  show ?thesis using Conc' take_split32 Hv
+    by(simp add:word_rcat_rsplit uint_value_valid_def)
+qed
 
-lemma sint_reconstruct[rule_format] :
-" sint_value_valid x1 x2 \<Longrightarrow>
-(0::nat) < x1 \<Longrightarrow> x1 \<le> (256::nat) \<Longrightarrow> 
- (8::nat) dvd x1 \<Longrightarrow>
- sint_value_valid x1 (sint (word_rcat (take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word)) \<Longrightarrow>
- sint (word_rcat (take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word) = x2"
-    apply(simp add:sint_value_valid_def) apply(clarify)
-    apply(subgoal_tac "(take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) = (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)")
-      apply(simp)
-     apply(simp add:word_rcat_rsplit)
-     apply(subgoal_tac "sint (word_of_int x2 :: 256 word) = x2") apply(simp) apply(rule_tac word_sint.Abs_inverse)
-apply(simp) apply(simp add:sints_num) 
-   apply(subgoal_tac "(2 :: int)^(x1 - 1) \<le> (2 :: int)^(256 - 1)") apply(simp)
-    apply(rule_tac power_increasing)  apply(simp) apply(simp)
-  apply(simp add:word_rsplit_def bin_rsplit_len word_rcat_def)
-  done
+lemma uint_reconstruct_full :
+  assumes Hv : "uint_value_valid x1 x2"
+  assumes Hgt : "(0::nat) < x1" 
+  assumes Hlt : "x1 \<le> (256::nat)"
+  shows "uint (word_rcat (take (32::nat) (word_rsplit 
+              (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word) = x2"
+  using uint_reconstruct[OF Hv Hgt Hlt 
+                         uint_reconstruct_valid[OF Hv Hgt Hlt]]
+  by auto
 
-lemma uint_valid_length :
-  "uint_value_valid x1 x2 \<Longrightarrow>
-   length (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list) = 32"
-  apply(simp add:uint_value_valid_def) apply(clarify)
-       apply(simp add:word_rsplit_def bin_rsplit_len word_rcat_def)
-  done
+lemma sint_reconstruct_valid :
+  assumes Hv  : "sint_value_valid x1 x2" 
+  assumes Hgt : "(0::nat) < x1"
+  assumes Hlt : "x1 \<le> (256::nat)"
+  shows "sint_value_valid x1 (sint (word_rcat (take (32::nat) (word_rsplit 
+                                   (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word))"
+proof-
+  have Hlt' : "(2 :: int)^(x1 - 1) \<le> (2 :: int)^(256 - 1)"
+  proof(rule power_increasing; (auto; fail)?)
+    show "x1 - 1 \<le> 256 - 1" using Hlt by auto
+  qed
 
-lemma sint_valid_length :
-  "sint_value_valid x1 x2 \<Longrightarrow>
-   length (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list) = 32"
-  apply(simp add:sint_value_valid_def) apply(clarify)
-       apply(simp add:word_rsplit_def bin_rsplit_len word_rcat_def)
-  done
+  have X2_sint : "x2 \<in> sints LENGTH(256)" using Hv Hlt'
+    by(auto simp add:sints_num sint_value_valid_def)
 
+  have Conc' : "sint (word_of_int x2 :: 256 word) = x2"
+    by(rule word_sint.Abs_inverse[OF X2_sint])
+
+  show ?thesis using Conc' take_split32 Hv
+    by(simp add:word_rcat_rsplit uint_value_valid_def)
+qed
+
+lemma sint_reconstruct :
+  assumes Hv  : "sint_value_valid x1 x2" 
+  assumes Hgt : "(0::nat) < x1"
+  assumes Hlt : "x1 \<le> (256::nat)"
+  assumes Hv_dec : "sint_value_valid x1 (sint (word_rcat (take (32::nat) (word_rsplit 
+                        (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word))"
+  shows "sint (word_rcat (take (32::nat) (word_rsplit 
+              (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word) = x2"
+proof-
+  have Hlt' : "(2 :: int)^(x1 - 1) \<le> (2 :: int)^(256 - 1)"
+  proof(rule power_increasing; (auto; fail)?)
+    show "x1 - 1 \<le> 256 - 1" using Hlt by auto
+  qed
+
+  have X2_sint : "x2 \<in> sints LENGTH(256)" using Hv Hlt'
+    by(auto simp add:sints_num sint_value_valid_def)
+
+  have Conc' : "sint (word_of_int x2 :: 256 word) = x2"
+    by(rule word_sint.Abs_inverse[OF X2_sint])
+
+  show ?thesis using Conc' take_split32 Hv
+    by(simp add:word_rcat_rsplit uint_value_valid_def)
+qed
+
+lemma sint_reconstruct_full :
+  assumes Hv : "sint_value_valid x1 x2"
+  assumes Hgt : "(0::nat) < x1" 
+  assumes Hlt : "x1 \<le> (256::nat)"
+  shows "sint (word_rcat (take (32::nat) (word_rsplit 
+              (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word) = x2"
+  using sint_reconstruct[OF Hv Hgt Hlt 
+                         sint_reconstruct_valid[OF Hv Hgt Hlt]]
+  by auto
+
+lemma int_length :
+  "length (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list) = 32"
+  by(auto simp add:word_rsplit_def bin_rsplit_len word_rcat_def)
+
+(* static encoder success implies static decoder success
+   with the same result *)
 lemma abi_encode_decode_static' :
-  "(\<forall> code prefix post . 
-   encode_static v = Ok code \<longrightarrow>
-   abi_value_valid v \<longrightarrow>
-   decode_static (abi_get_type v) (length prefix, (prefix @ code @ post)) = Ok v) \<and>
-   ((\<forall> v t n code prefix post.
-      v = (Vfarray t n vs) \<longrightarrow>
-          encode_static v = Ok code \<longrightarrow>
-          abi_value_valid v \<longrightarrow>
-          decode_static_tup (List.replicate n t) (length prefix, prefix @ code @ post) = Ok vs) \<and>
-     ( \<forall> v ts  code prefix post.
-          v = (Vtuple ts vs) \<longrightarrow>
-          encode_static v = Ok code \<longrightarrow>
-          abi_value_valid v \<longrightarrow>
-          decode_static_tup ts (length prefix, prefix @ code @ post) = Ok vs)
-   )"
-proof(induction rule:my_abi_value_induct)
-    (* Vuint *)
-  case (1 x1 x2)
-  then show ?case apply(clarsimp)
-    apply(simp add:Let_def)
-    apply(cut_tac ?x1.0 = x1 and ?x2.0 = x2 in uint_valid_length; simp)
-     apply(cut_tac ?x1.0 = x1 and ?x2.0 = x2 in uint_reconstruct; simp)
-     apply(cut_tac ?x1.0 = x1 and ?x2.0 = x2 in uint_reconstruct_valid; simp)
-    done
+  "encode_static v = Ok code \<Longrightarrow>
+   abi_value_valid v \<Longrightarrow>
+   decode_static (abi_get_type v) (length prefix, (prefix @ code @ post)) = Ok v" and
+   "v = (Vfarray t n vs) \<Longrightarrow>
+    encode_static v = Ok code \<Longrightarrow>
+    abi_value_valid v \<Longrightarrow>
+    decode_static_tup (List.replicate n t) (length prefix, prefix @ code @ post) = Ok vs" and
+    "v = (Vtuple ts vs) \<Longrightarrow>
+          encode_static v = Ok code \<Longrightarrow>
+          abi_value_valid v \<Longrightarrow>
+          decode_static_tup ts (length prefix, prefix @ code @ post) = Ok vs"
+proof(induction arbitrary: code prefix post and v t n ts code prefix post rule:my_abi_value_induct)
+  (* Vuint *)
+  case (1 n i)
+  then show ?case using int_length uint_reconstruct_full
+    by(auto simp add:Let_def)
 next
   (* Vsint *)
-  case (2 x1 x2)
-  then show ?case
-    apply(clarsimp)
-    apply(simp add:Let_def)
-        apply(cut_tac ?x1.0 = x1 and ?x2.0 = x2 in sint_valid_length; simp)
-     apply(cut_tac ?x1.0 = x1 and ?x2.0 = x2 in sint_reconstruct; simp)
-     apply(cut_tac ?x1.0 = x1 and ?x2.0 = x2 in sint_reconstruct_valid; simp)
-    done
+  case (2 n i)
+  then show ?case using int_length sint_reconstruct_full
+    by(auto simp add:Let_def)
 next
-    (* Vaddr *)
-  case (3 x)
-  then show ?case 
-    apply(clarsimp) apply(simp add:Let_def)
-    apply(simp add:addr_value_valid_def)
-        apply(cut_tac ?x1.0 = 160 and ?x2.0 = x in uint_valid_length; simp)
-     apply(cut_tac  ?x1.0 = 160 and ?x2.0 = x  in uint_reconstruct; simp)
-     apply(cut_tac  ?x1.0 = 160 and ?x2.0 = x  in uint_reconstruct_valid; simp)
-    done
+  (* Vaddr *)
+  case (3 i)
+  then show ?case using int_length uint_reconstruct_full
+    by(auto simp add:Let_def addr_value_valid_def)
 next
-    (* Vbool *)
-  case (4 x)
-  then show ?case 
-    apply(case_tac x) apply(clarsimp)
-     apply(simp add:Let_def bool_value_valid_def)
-apply(cut_tac ?x1.0 = 256 and ?x2.0 = 1 in uint_reconstruct_valid; simp add:uint_value_valid_def)
-     apply(cut_tac ?x1.0 = 256 and ?x2.0 = 1 in uint_reconstruct; simp add:uint_value_valid_def)
-    apply(simp add:word_rcat_def word_rsplit_def bin_rsplit_len)
-
-    apply(clarsimp)
-     apply(simp add:Let_def bool_value_valid_def)
-apply(cut_tac ?x1.0 = 256 and ?x2.0 = 0 in uint_reconstruct_valid; simp add:uint_value_valid_def)
-     apply(cut_tac ?x1.0 = 256 and ?x2.0 = 0 in uint_reconstruct; simp add:uint_value_valid_def)
-    apply(simp add:word_rcat_def word_rsplit_def bin_rsplit_len)
-    done
+  (* Vbool *)
+  case (4 b)
+  then show ?case using int_length uint_reconstruct_full[of 256 1] uint_reconstruct_full[of 256 0]
+    by(cases b; auto simp add: Let_def bool_value_valid_def
+                      uint_value_valid_def word_rcat_def word_rsplit_def bin_rsplit_len)
 next
   (* Vfixed *)
-  case (5 x1 x2 x3a)
-  then show ?case 
-        apply(clarsimp)
-    apply(simp add:Let_def)
-    apply(simp add:fixed_value_valid_def)
-     apply(simp add:fixed_value_valid_def split:option.splits prod.splits if_split_asm)
-    apply(clarsimp)
-    apply(cut_tac ?x1.0 = x1 and ?x2.0 = x2a in sint_valid_length; simp add:sint_value_valid_def)
-    apply(cut_tac ?x1.0 = x1 and ?x2.0 = x2a in sint_reconstruct_valid; simp add:sint_value_valid_def)
-     apply(cut_tac ?x1.0 = 256 and ?x2.0 = x2a in sint_reconstruct; simp add:sint_value_valid_def)
-           apply(subgoal_tac "(2 :: int)^(x1 - 1) \<le> (2 :: int)^(256 - 1)") apply(simp)
-       apply(rule_tac power_increasing)  apply(simp) apply(simp)
-       apply(subgoal_tac "(2 :: int)^(x1 - 1) \<le> (2 :: int)^(256 - 1)") apply(simp)
-     apply(rule_tac power_increasing)  apply(simp) apply(simp)
+  case (5 m n r)
+  then obtain num den' where Quot : "quotient_of (r * 10 ^ n) = (num, Suc den')"
+    by(cases "quotient_of (r * 10 ^ n)"; auto simp add:fixed_value_valid_def split:if_split_asm)
 
+  have Num_valid: "sint_value_valid m num" using 5 Quot
+    by(cases den'; auto simp add:Let_def fixed_value_valid_def sint_value_valid_def)
 
+  have Exp_nz : "10 ^ n \<noteq> (0 :: rat)" by(auto)
 
-    apply(rule_tac conjI)
+  have Num: "r * 10 ^ n = rat_of_int num"  using 5 Quot sint_reconstruct_full[OF Num_valid]
+      int_length[of num]
+    quotient_of_div[of "r * 10 ^ n" num "Suc den'"]
+    by(cases den'; 
+       auto simp add: Let_def fixed_value_valid_def sint_value_valid_def Rat.of_int_def)
 
-(* first part - if it's valid it works *)
-    apply(clarify)
-     apply(simp add: Rat.of_int_def)
-     apply(drule_tac quotient_of_div) apply(simp)
-    apply(drule_tac quotient_of_div) apply(simp)
-     apply(clarsimp)
-     apply(simp add:Rat.divide_rat_def)
-     apply(subgoal_tac "(x3a * ((10::rat) ^ x2 * (inverse (10 :: rat) ^ x2)) :: rat) = (rat_of_int x1a * inverse ((10::rat) ^ x2) :: rat)")
-      apply(cut_tac a = "(10::rat) ^ x2 :: rat" in Fields.division_ring_class.right_inverse) apply(simp)
-    apply(cut_tac s = "(10::rat) ^ x2 * inverse ((10::rat) ^ x2) :: rat" and t = "1 :: rat" and
-    P = "(\<lambda> r . x3a * (r :: rat) = rat_of_int x1a * inverse ((10::rat) ^ x2))" in subst)
-        apply(assumption)
-       apply(simp only: power_inverse)
-      apply(simp)
-     apply(simp only: power_inverse) 
-     apply(simp only: sym [OF semigroup_mult_class.mult.assoc])
+  have "rat_of_int num * inverse (10 ^ n) * 10 ^ n = r * 10 ^ n" using Num by(auto)
 
+  hence Num' : "rat_of_int num / 10 ^ n = r" unfolding divide_rat_def Exp_nz
+    by(auto)
 
-(* second part - it's valid *)
-
-    apply(clarsimp)
-     apply(drule_tac quotient_of_div) apply(simp)
-    apply(simp add:Rat.quotient_of_int)
-    done
+  show ?case using 5 Quot sint_reconstruct_full[OF Num_valid] int_length[of num]
+      quotient_of_div[of "r * 10 ^ n" num "Suc den'"] Num'
+    by(auto simp add: Let_def fixed_value_valid_def sint_value_valid_def Rat.of_int_def
+            split:prod.split_asm if_split_asm)
 next
   (* Vufixed *)
-  case (6 x1 x2 x3a)
-  then show ?case
+  case (6 m n r)
+  then obtain num den' where Quot : "quotient_of (r * 10 ^ n) = (num, Suc den')"
+    by(cases "quotient_of (r * 10 ^ n)"; auto simp add:ufixed_value_valid_def split:if_split_asm)
 
-        apply(clarsimp)
-    apply(simp add:Let_def)
-    apply(simp add:ufixed_value_valid_def)
-     apply(simp add:ufixed_value_valid_def split:option.splits prod.splits if_split_asm)
-    apply(clarsimp)
-    apply(cut_tac ?x1.0 = x1 and ?x2.0 = x2a in uint_valid_length; simp add:uint_value_valid_def)
-    apply(cut_tac ?x1.0 = x1 and ?x2.0 = x2a in uint_reconstruct_valid; simp add:uint_value_valid_def)
-     apply(cut_tac ?x1.0 = 256 and ?x2.0 = x2a in uint_reconstruct; simp add:uint_value_valid_def)
-           apply(subgoal_tac "(2 :: int)^(x1) \<le> (2 :: int)^(256)") apply(simp)
-       apply(rule_tac power_increasing)  apply(simp) apply(simp)
-       apply(subgoal_tac "(2 :: int)^(x1) \<le> (2 :: int)^(256)") apply(simp)
-     apply(rule_tac power_increasing)  apply(simp) apply(simp)
+  have Num_valid: "uint_value_valid m num" using 6 Quot
+    by(cases den'; auto simp add:Let_def ufixed_value_valid_def uint_value_valid_def)
 
+  have Exp_nz : "10 ^ n \<noteq> (0 :: rat)" by(auto)
 
+  have Num: "r * 10 ^ n = rat_of_int num"  using 6 Quot uint_reconstruct_full[OF Num_valid]
+      int_length[of num]
+    quotient_of_div[of "r * 10 ^ n" num "Suc den'"]
+    by(cases den'; 
+       auto simp add: Let_def ufixed_value_valid_def uint_value_valid_def Rat.of_int_def)
 
-    apply(rule_tac conjI)
+  have "rat_of_int num * inverse (10 ^ n) * 10 ^ n = r * 10 ^ n" using Num by(auto)
 
-(* first part - if it's valid it works *)
-    apply(clarify)
-     apply(simp add: Rat.of_int_def)
-     apply(drule_tac quotient_of_div) apply(simp)
-    apply(drule_tac quotient_of_div) apply(simp)
-     apply(clarsimp)
-     apply(simp add:Rat.divide_rat_def)
-     apply(subgoal_tac "(x3a * ((10::rat) ^ x2 * (inverse (10 :: rat) ^ x2)) :: rat) = (rat_of_int x1a * inverse ((10::rat) ^ x2) :: rat)")
-      apply(cut_tac a = "(10::rat) ^ x2 :: rat" in Fields.division_ring_class.right_inverse) apply(simp)
-    apply(cut_tac s = "(10::rat) ^ x2 * inverse ((10::rat) ^ x2) :: rat" and t = "1 :: rat" and
-    P = "(\<lambda> r . x3a * (r :: rat) = rat_of_int x1a * inverse ((10::rat) ^ x2))" in subst)
-        apply(assumption)
-       apply(simp only: power_inverse)
-      apply(simp)
-     apply(simp only: power_inverse) 
-     apply(simp only: sym [OF semigroup_mult_class.mult.assoc])
+  hence Num' : "rat_of_int num / 10 ^ n = r" unfolding divide_rat_def Exp_nz
+    by(auto)
 
-
-(* second part - it's valid *)
-
-    apply(clarsimp)
-     apply(drule_tac quotient_of_div) apply(simp)
-    apply(simp add:Rat.quotient_of_int)
-    done
+  show ?case using 6 Quot uint_reconstruct_full[OF Num_valid] int_length[of num]
+      quotient_of_div[of "r * 10 ^ n" num "Suc den'"] Num'
+    by(auto simp add: Let_def fixed_value_valid_def sint_value_valid_def Rat.of_int_def
+            split:prod.split_asm if_split_asm)
 next
+  (* Vfbytes *)
+  case (7 n bs)
+  have Unfold : "(case (length prefix, prefix @ code @ post) of
+                    (x, a) \<Rightarrow> (int x, a)) = (int (length prefix), prefix @ code @ post)"
+    by(auto)
+
+  obtain n_div n_mod where Divmod: "divmod_nat n 32 = (n_div, n_mod)"
+    by(cases "divmod_nat n 32"; auto)
+
+  show ?case (*unfolding Unfold using Divmod *)
+  proof(cases n_mod)
+    case 0
+    then show ?thesis unfolding Unfold using Divmod 7
+      by(auto simp add: Let_def fbytes_value_valid_def)
+  next
+    case (Suc nat)
+    obtain n_div' n_mod' where Divmod' : "divmod_nat (min (length bs) n) 32 = (n_div', n_mod')"
+      by (cases "divmod_nat (min (length bs) n) 32"; auto)
+    then show ?thesis unfolding Unfold  fbytes_value_valid_def Suc
+                      decode_static.simps Let_def using Divmod 7
+      apply(cases n_mod')
+       apply(simp add:Let_def fbytes_value_valid_def )
+
+  qed
+(*
+    apply(auto simp add: Let_def fbytes_value_valid_def)
+    sorry *)  
+next
+  case (8 i j)
+  then show ?case sorry
+next
+  case (9 t n l)
+  then show ?case sorry
+next
+  case (10 ts vs)
+  then show ?case sorry
+next
+  case (11 bs)
+  then show ?case sorry
+next
+  case (12 s)
+  then show ?case sorry
+next
+  case (13 t vs)
+then show ?case sorry
+next
+  case 14
+  then show ?thesis sorry
+next
+  case (15 t l)
+  then show ?thesis sorry
+qed
   (* Vfbytes *)
   case (7 x1 x2)
   then show ?case
@@ -331,120 +358,6 @@ lemma abi_encode_decode_static :
    decode_static (abi_get_type v) (length prefix, (prefix @ code @ post)) = Ok v"
   apply(cut_tac abi_encode_decode_static'; auto)
   done
-(*
-lemma abi_decode_encode_static' :
-  "(\<forall> code prefix post . 
-   encode_static v = Ok code \<longrightarrow>
-   abi_value_valid v \<longrightarrow>
-   decode_static (abi_get_type v) (length prefix, (prefix @ code @ post)) = Ok v) \<and>
-   ((\<forall> v t n code prefix post.
-      v = (Vfarray t n vs) \<longrightarrow>
-          encode_static v = Ok code \<longrightarrow>
-          abi_value_valid v \<longrightarrow>
-          decode_static_tup (List.replicate n t) (length prefix, prefix @ code @ post) = Ok vs) \<and>
-     ( \<forall> v ts  code prefix post.
-          v = (Vtuple ts vs) \<longrightarrow>
-          encode_static v = Ok code \<longrightarrow>
-          abi_value_valid v \<longrightarrow>
-          decode_static_tup ts (length prefix, prefix @ code @ post) = Ok vs)
-   )"
-*)
-(*
-lemma abi_decode_static_succeed :
-  "can_encode_as v full_code start \<Longrightarrow>
-   (abi_type_isstatic (abi_get_type v) \<longrightarrow>
-   decode_static (abi_get_type v) (start, full_code) = Ok v)"
-proof(induction rule:can_encode_as.induct)
-  case (Estatic v pre post code)
-  then show ?case
-    apply(clarsimp)
-    apply(drule_tac abi_encode_decode_static) apply(auto)
-    done
-next
-  case (Etuple_dyn ts vs t heads head_types tails start full_code)
-  then show ?case 
-next
-  case (Efarray_dyn t n vs heads head_types tails start full_code)
-  then show ?case sorry
-next
-  case (Earray t vs heads head_types tails start full_code)
-  then show ?case sorry
-next
-  case (Ebytes l pre post count code)
-  then show ?case sorry
-next
-  case (Estring full_code s l start)
-  then show ?case sorry
-qed
-*)
-
-(* this isn't true - offsets will be shifted *)
-(*
-lemma can_encode_as_cons_static [rule_format]:
-  "can_encode_as v code pre_len \<Longrightarrow>
-   (\<forall> x xs ys . v = Vtuple (abi_get_type x # xs) (x#ys) \<longrightarrow>
-      abi_type_isstatic (abi_get_type x) \<longrightarrow>
-      can_encode_as (Vtuple xs ys) code (pre_len + abi_static_size (abi_get_type x)))
-      "
-  apply(induction rule:can_encode_as.induct)
-       apply(simp_all)
-
-  (* static *)
-   apply(clarsimp)
-   apply(simp split:sum.splits)
-   apply(simp add:tuple_value_valid_aux_def)
-   apply(case_tac "encode_static x"; clarsimp)
-   apply(simp split:sum.splits) apply(clarsimp)
-   apply(cut_tac v = "(Vtuple (map abi_get_type ys) ys)" and code = "concat x1a" and pre = "pre @ a" and post = post in  Estatic)
-      apply(clarsimp)
-     apply(clarsimp) apply(simp add:tuple_value_valid_aux_def)
-    apply(simp)
-   apply(frule_tac encode_static_size) apply(simp) apply(simp)
-
-  (* dynamic *)
-  apply(clarsimp)
-  apply(case_tac " t = abi_get_type x"; clarsimp)
-  apply(rule_tac ?a1.0 = "x#ys" and ?a2.0 = heads and ?a3.0 = head_types and ?a4.0 = tails in is_head_and_tail.cases; simp)
-  apply(clarsimp)
-  apply(rule_tac heads = ysa and tails = tailsa and t = t  in Etuple_dyn; simp?)
-   apply(simp add:tuple_value_valid_aux_def)
-  apply(clarsimp)
-   apply(simp add:tuple_value_valid_aux_def)
-
-  apply(atomize)
-  apply(drule_tac x = offset in spec)
-   apply(case_tac "encode_static x"; clarsimp)
-   apply(simp split:sum.splits) apply(clarsimp)
-   apply(cut_tac v = "(Vtuple (map abi_get_type ys) ys)" and code = "concat x1a" and pre = "pre @ a" and post = post in  Estatic)
-      apply(clarsimp)
-     apply(clarsimp) apply(simp add:tuple_value_valid_aux_def)
-    apply(simp)
-   apply(frule_tac encode_static_size) apply(simp) apply(simp)
-*)
-(* need to make this valid inductively over offset/l *)
-(* need to stipulate that heads tuple encodes at beginning
-of the code we are passing in to decoder
-(as well as the fact that tails can all encode)
-*)
-(* need to generalize over prefix offsets *)
-
-(* count vs offset. count needs to be less than offset (idea is that it is bytes read so far. *)
-(* offset + count = length prefix?
-remember, offset is absolute but count is relative (size of head so far) *)
-(*
-lemma abi_decode_dyn_tuple_heads_succeed :
-"is_head_and_tail vs heads head_types tails \<Longrightarrow>
-(\<forall> heads' tails' count count' offset prefix post l bytes.
-decode'_dyn_tuple_heads (map abi_get_type vs) count (offset, (prefix @ l @ post)) = Ok (heads', tails', count', bytes) \<longrightarrow>
-offset + count = int (length prefix) \<longrightarrow>
-list_ex abi_type_isdynamic (map abi_get_type vs) \<longrightarrow>
-can_encode_as (Vtuple head_types heads) (l) (count) \<longrightarrow>
-(\<forall> (offset::int) v::abi_value.
-           (offset, v) \<in> set tails \<longrightarrow> can_encode_as v (prefix @ l @ post) (int (length (prefix)) + offset)) \<longrightarrow>
-somes heads' = heads \<and>
-map fst tails = (somes tails') \<and>
-count' = heads_length vs + count)"
-*)
 
 lemma is_head_and_tail_heads_elem :
   "is_head_and_tail vs heads head_types tails \<Longrightarrow>
