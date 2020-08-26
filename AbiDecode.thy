@@ -6,8 +6,7 @@ begin
    valid Solidity-ABI encoded data
    (not limited to canonical encodings) *)
 
-(* Functions for decoding basic data-types.
-   These functions assume a long enough input list is passed in. *)
+(* Functions for decoding basic data-types.*)
 fun decode_uint :: "8 word list \<Rightarrow> int" where
 "decode_uint l =
   (Word.uint (Word.word_rcat (take 32 l) :: 256 word))"
@@ -43,7 +42,7 @@ fun skip_padding :: "nat \<Rightarrow> nat" where
 "skip_padding n =
   (case divmod_nat n 32 of
     (_, 0) \<Rightarrow> n
-    | (_, rem) \<Rightarrow> n + 32 - rem)" (* was n + rem *)
+    | (_, rem) \<Rightarrow> n + 32 - rem)"
 
 (* Ensure padding is zeroes.
    This is necessary for static encoder and static
@@ -53,10 +52,19 @@ fun check_padding :: "nat \<Rightarrow> 8 word list \<Rightarrow> bool" where
   (let p = skip_padding n in
   ((p \<le> length l) \<and> (drop n (take p l) = replicate (p - n) (word_of_int 0))))" 
 
+
 (* Extract byte strings of known length *)
 fun decode_fbytes :: "nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list option" where
 "decode_fbytes n l =
   (if check_padding n l then Some (take n l)
+   else None)"
+
+
+fun decode_function_sel :: "8 word list \<Rightarrow> (int * int) option" where
+"decode_function_sel bs =
+  (if check_padding 24 bs then
+      Some (Word.uint (Word.word_rcat (take 20 bs) :: 160 word),
+            Word.uint (Word.word_rcat (take 4 (drop 20 bs)) :: 32 word))
    else None)"
 
 fun bytes_to_string :: "8 word list \<Rightarrow> char list" where
@@ -70,13 +78,11 @@ lemma abi_type_list_measure_replicate :
 proof(induction n)
   case 0
   then show ?case
-    apply(simp)
-    done
+    by(simp)
 next
   case (Suc n)
   then show ?case 
-    apply(simp)
-    done
+    by(simp)
 qed
 
 (* Construct decoder error messages *)
@@ -124,6 +130,14 @@ and decode_static_tup :: "abi_type list \<Rightarrow> (int * 8 word list) \<Righ
       Some res \<Rightarrow> (if fbytes_value_valid n res then Ok (Vfbytes n res)
                     else Err (decode_err ''Invalid fbytes'' (ix, l)))
       | None \<Rightarrow> Err (decode_err ''invalid fbytes padding'' (ix, l))))"
+
+| "decode_static (Tfunction) (ix, l) =
+    (let l' = drop (nat ix) l in
+      (case decode_function_sel l' of
+        Some (i, j) \<Rightarrow> (if function_value_valid i j then Ok (Vfunction i j)
+                        else Err (decode_err ''Invalid function'' (ix, l)))
+        | None \<Rightarrow> Err (decode_err ''invalid function padding'' (ix, l))))"
+    
 | "decode_static (Tfarray t n) (ix, l) =
   (case decode_static_tup (List.replicate n t) (ix, l) of
     Err s \<Rightarrow> Err s
@@ -281,6 +295,11 @@ where
 | "decode'_dyn_tuple_tails _ _ _ _ (ix, l) = Err (decode_err ''Should be dead code'' (ix, l))"
 
   by pat_completeness auto
+
+fun somes :: "'a option list \<Rightarrow> 'a list" where
+"somes [] = []"
+| "somes (None#t) = somes t"
+| "somes (Some h#t) = h # somes t"
 
 lemma abi_type_measure_nonzero :
   "abi_type_measure t > 0"
