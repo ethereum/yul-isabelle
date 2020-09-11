@@ -647,7 +647,8 @@ can_encode_as (Vtuple head_types heads) (pre1 @ pre2 @ l @ post)
     (offset, v) \<in> set tails \<Longrightarrow> 
     can_encode_as v (pre1 @ pre2 @ l @ post) (int (length pre1) + offset)) \<Longrightarrow>
 those (map2 ht_combine heads' 
-       (map (\<lambda> to . (case to of None \<Rightarrow> None | Some t \<Rightarrow> Some (t - int (length pre1)))) tails')) = Some heads \<and>
+       (map (\<lambda> to . (case to of None \<Rightarrow> None 
+                              | Some t \<Rightarrow> Some (t - int (length pre1)))) tails')) = Some heads \<and>
 map (\<lambda> x . fst x + int (length pre1)) tails = (somes tails') \<and>
 count' = heads_length vs + int (length pre2) \<and>
 ht_wellbehaved tails' (map abi_get_type vs) heads'"
@@ -688,7 +689,8 @@ next
             append_eq_append_conv[of "(pre1 @ pre2)" "pre'" "l @ post" "code' @ post'"]
       by(auto)
 
-    have Sz : "abi_static_size (abi_get_type x) \<le> int (length xenc) + int (length (concat ysenc)) + int (length post') "
+    have Sz : "abi_static_size (abi_get_type x) \<le> int (length xenc) + 
+                        int (length (concat ysenc)) + int (length post') "
       using Estatic Xenc Ysenc encode_static_size[OF Xenc Xvalid]
       by(auto)
 
@@ -828,7 +830,8 @@ next
 
     have Ysdec'' : "decode'_dyn_tuple_heads (map abi_get_type xs) 
                         (int (length (pre2 @ encode_int ptr)))
-                        (int (length pre1), pre1 @ (pre2 @ encode_int ptr)  @ concat ysenc @ post') = 
+                        (int (length pre1), pre1 @ (pre2 @ encode_int ptr)  @ 
+                                                      concat ysenc @ post') = 
                       Ok (ysd1, ysd2, ysd3, ysd4)"
       using Pre_eq Code Code_post_eq Ysdec'
       unfolding append_assoc Ysdec_tup
@@ -841,7 +844,8 @@ next
       using sint_reconstruct_full[OF  Ptr_valid]
       by auto
 
-    have Ysd1 : "heads' = None # ysd1" and Ysd2 : "tails' = Some (length pre1 + ptr) # ysd2" and Ysd3 : "count' = ysd3"
+    have Ysd1 : "heads' = None # ysd1" and Ysd2 : "tails' = Some (length pre1 + ptr) # ysd2" 
+                                       and Ysd3 : "count' = ysd3"
        using iht_dynamic(4)
         Ysdec' Ysdec_tup Estatic X_dyn Ysenc Len_ok Ptr_len
         abi_static_size_nonneg[of "abi_get_type x"]
@@ -857,7 +861,8 @@ next
     have Canenc : "(can_encode_as (Vtuple ts ys) 
           (pre1 @ (pre2 @ encode_int ptr) @ concat ysenc @ post') 
           (int (length pre1) + (int (length (pre2 @ encode_int ptr)))))"
-      using can_encode_as.Estatic[OF Ts_static Ts_valid Ysenc', of "pre1 @ pre2 @ encode_int ptr" post']
+      using can_encode_as.Estatic[OF Ts_static Ts_valid Ysenc', 
+                                  of "pre1 @ pre2 @ encode_int ptr" post']
             abi_encode_decode_static
       by(auto)
 
@@ -2104,7 +2109,7 @@ next
             have Vbad3 : "vbad \<in> set vs"
               using is_head_and_tail_tails_elem[OF Efarray_dyn(3) Vbad2] by auto
 
-            have False using Vfarray(1)[OF Vbad3 Efarray_dyn(5)[OF Vbad2]] Vfarray(1)[OF Vbad3] Tbad_bad Vbad1
+            have False using Vfarray(1)[OF Vbad3 Efarray_dyn(5)[OF Vbad2]]  Tbad_bad Vbad1
               by(auto)
   
             then show ?thesis by auto
@@ -2180,12 +2185,12 @@ case (Vtuple ts vs)
           using Efarray_dyn False Vtuple
           by(cases "those_err (map encode_static heads)"; auto)
 
+        have Vs_ts : "ts = map abi_get_type vs"
+          using Etuple_dyn by(auto simp add:tuple_value_valid_aux_def)
+
         show ?thesis
         proof(cases "decode'_dyn_tuple_heads (ts) 0 (start, full_code)")
           case (Inr err)
-
-          have Vs_ts : "ts = map abi_get_type vs"
-            using Etuple_dyn by(auto simp add:tuple_value_valid_aux_def)
 
           obtain tpre tbad tpost err'
             where Tbad: "decode' tbad (start + ty_heads_length tpre, full_code) = Err err'"
@@ -2271,7 +2276,8 @@ case (Vtuple ts vs)
               Estatic(4) Vbad_full
             by(auto)
 
-          have BadEnc : "can_encode_as vbad ((preX @ concat hpre_codes) @ vbad_code @ (concat hpost_codes @ postX))
+          have BadEnc : "can_encode_as vbad ((preX @ concat hpre_codes) @ vbad_code @ 
+                                             (concat hpost_codes @ postX))
                 (int (length (preX @ concat hpre_codes) ))"
           proof(rule can_encode_as.Estatic)
             show "abi_type_isstatic (abi_get_type vbad)" using Tbad_static Vbad_t by auto
@@ -2281,7 +2287,8 @@ case (Vtuple ts vs)
             show "encode_static vbad = Ok vbad_code" using Vbad_code by auto
           qed
 
-          have Heads_code' : "concat heads_code = concat hpre_codes @ (vbad_code @ concat hpost_codes)"
+          have Heads_code' : "concat heads_code = concat hpre_codes @ 
+                                                  (vbad_code @ concat hpost_codes)"
             using Heads_ok Heads_code Heads_bad Hpre_codes Bad_valid' Tbad_static 
                   Vbad_t Vbad_full Vbad_code Hpost_codes
                   those_err_split[of "map encode_static hpre"
@@ -2308,6 +2315,580 @@ case (Vtuple ts vs)
             Tbad_static Vbad_t Vtuple Etuple_dyn Vbad_full BadEnc'
             by(simp add:tuple_value_valid_aux_def)
 
+
+          thus ?thesis by auto
+        next
+          case (Inl dec_hd_res)
+          obtain vos idxs byteoffset bytes_parsed where Res :
+            "dec_hd_res = (vos, idxs, byteoffset, bytes_parsed)"
+            by(cases dec_hd_res; auto)
+
+          have Inl' :
+            "decode'_dyn_tuple_heads (map abi_get_type vs) 
+                (int 0) (start, full_code) = Ok dec_hd_res"
+            using Inl Vs_ts  by auto
+
+          have Start_fullcode : "(min (length full_code) (nat start)) = nat start"
+            using can_encode_as_start[OF Vtuple(2)]
+                  can_encode_as_start_nonneg[OF Vtuple(2)]
+            by auto
+
+          have Offs' : 
+            "(\<And>offset v. (offset, v) \<in> set tails \<Longrightarrow> can_encode_as v full_code (start + offset))"
+          proof-
+            fix offset v
+            have C' : "start + offset = offset + start" by auto
+            then show "(offset, v) \<in> set tails \<Longrightarrow> can_encode_as v full_code (start + offset)"
+              using Etuple_dyn(6)[of offset v] unfolding C' by auto
+          qed
+
+          have Wb : "ht_wellbehaved idxs (map abi_get_type vs) vos"
+          and Head_succeed :
+            "those (map2 ht_combine vos 
+               (map (\<lambda>to. case to of None \<Rightarrow> None 
+                  | Some t \<Rightarrow> Some (t - int (length (take (nat start) full_code)))) idxs)) = 
+                                                                            Some heads \<and>
+             map (\<lambda>x. fst x + int (length (take (nat start) full_code))) tails = somes idxs \<and>
+             byteoffset = heads_length vs + int (length []) \<and> 
+             ht_wellbehaved idxs (map abi_get_type vs) vos"
+            using 
+                  can_encode_as_start[OF Vtuple(2)]
+                  can_encode_as_start_nonneg[OF Vtuple(2)]
+                  abi_decode'_dyn_tuple_heads_succeed
+                    [OF Etuple_dyn(4), 
+                     of "[]" "take (nat start) full_code" "drop (nat start) full_code" "[]"
+                        vos idxs byteoffset bytes_parsed] Inl'
+                 Start_fullcode Res Etuple_dyn Vs_ts Offs' 
+            by(auto)
+
+          have Start_fullcode' : "int (length (take (nat start) full_code)) = start" 
+            using Start_fullcode can_encode_as_start_nonneg[OF Vtuple(2)]
+            by(auto)
+
+          have Combine :
+            "those (map2 ht_combine vos (map (\<lambda>to. case to of None \<Rightarrow> None 
+                    | Some t \<Rightarrow> Some (t - int (length (take (nat start) full_code)))) idxs)) =
+             those (map2 ht_combine vos (map (case_option None (\<lambda>t. Some (t - start))) idxs))"
+            unfolding Start_fullcode' by auto
+
+          have Ht2_combine' :
+            "those (map2 ht_combine vos (map (case_option None (\<lambda>t. Some (t - start))) idxs)) =
+              Some heads"
+            using 
+                Head_succeed
+                Start_fullcode'
+                can_encode_as_start[OF Vtuple(2)]
+                can_encode_as_start_nonneg[OF Vtuple(2)]
+            unfolding Combine
+            by(auto)
+
+          show ?thesis
+          proof(cases "decode'_dyn_tuple_tails idxs (map abi_get_type vs) 
+                          vos byteoffset (start, full_code)")
+            case (Inr err)
+            obtain offset' tbad err'
+              where Tbad_in : "(Some offset', tbad) \<in> set (zip idxs (map abi_get_type vs))" and
+                    Tbad_bad : "decode' tbad (offset', full_code) = Err err'"
+              using abi_decode'_dyn_tuple_tails_fail[OF Inr Wb] 
+              by auto
+
+            obtain vbad where Vbad1 : "abi_get_type vbad = tbad" 
+                        and Vbad2: "(offset' - start, vbad) \<in> set tails"
+              using is_head_and_tail_wellbehaved[OF Etuple_dyn(4) Wb, of start offset' tbad] 
+                  Head_succeed
+                  Start_fullcode'
+                  can_encode_as_start[OF Vtuple(2)]
+                  can_encode_as_start_nonneg[OF Vtuple(2)]
+                  Tbad_in
+                  Ht2_combine' unfolding Vs_ts
+              by(auto)
+
+            have Vbad3 : "vbad \<in> set vs"
+              using is_head_and_tail_tails_elem[OF Etuple_dyn(4) Vbad2] by auto
+
+            have False using Vtuple(1)[OF Vbad3 Etuple_dyn(6)[OF Vbad2]] Tbad_bad Vbad1
+              by(auto)
+  
+            then show ?thesis by auto
+          next
+            fix dec_tl_res
+            assume Inl'' : 
+              "decode'_dyn_tuple_tails idxs (map abi_get_type vs) 
+                    vos byteoffset (start, full_code) = 
+                Ok dec_tl_res"
+            hence Inl''' : 
+              "decode'_dyn_tuple_tails idxs (map abi_get_type vs) vos byteoffset 
+                  (start, full_code) = Ok dec_tl_res" using Vs_ts by auto
+
+            obtain vs_out bytes' where Res_tl : "dec_tl_res = (vs_out, bytes')"
+              by(cases dec_tl_res; auto)
+
+            have Dyn' : "list_ex abi_type_isdynamic (map abi_get_type vs)"
+              using Etuple_dyn
+              by(auto simp add: list_all_iff list_ex_iff tuple_value_valid_aux_def)
+
+            obtain bytes'' where C' :
+              "decode' (abi_get_type (Vtuple ts vs)) (start, full_code) = 
+              Ok (Vtuple ts vs, bytes'')"
+ 
+              using abi_decode'_dyn_tuple_tails_succeed[of idxs vs vos byteoffset
+                    "take (nat start) full_code" "[]" "drop (nat start) full_code" "[]"
+                    vs_out bytes', OF _ Etuple_dyn(4) Wb _]
+                  Inl' Res Start_fullcode
+                  can_encode_as_start[OF Vtuple(2)]
+                  can_encode_as_start_nonneg[OF Vtuple(2)] Res_tl
+                  Etuple_dyn Offs' Combine Head_succeed Vtuple Inl'''
+                  Vs_ts Dyn'
+              by(auto simp add:decode'.simps Let_def )
+            thus ?thesis by auto
+          qed
+        qed
+      next
+        case Etuple_dyn' : (Etuple_dyn tX headsX head_typesX tailsX)
+          then show ?thesis
+          using Etuple_dyn is_head_and_tail_heads_tuple_static[OF Etuple_dyn(4)]
+          by(auto simp add:tuple_value_valid_aux_def list_ex_iff list_all_iff)
+      qed
+    qed
+  qed
+next        
+  case (Vbytes bs)
+  then show ?case
+  proof(cases rule: can_encode_as.cases)
+    case (Estatic pre post code)
+    then show ?thesis by auto
+  next
+    case (Ebytes pre post count code)
+
+    show ?thesis using Ebytes(6)
+    proof(cases rule: can_encode_as.cases)
+      case (Estatic preX postX codeX)
+    
+      obtain n_div n_mod where Divmod: "divmod_nat (length bs) 32 = (n_div, n_mod)"
+        by(cases "divmod_nat (length bs) 32"; auto)
+
+      have Check1 : "check_padding (length bs) (pad_bytes bs @ post)" using Divmod
+      proof(cases n_mod)
+        case 0
+        then show ?thesis using Divmod by(auto)
+      next
+        case (Suc nat)
+        then show ?thesis using Divmod by(auto simp add:Let_def)
+      qed
+
+      show ?thesis using Check1 Vbytes Ebytes Estatic
+          uint_reconstruct_full[of 256 "int (length bs)"]
+          uint_reconstruct_full'[of 256 "int (length bs)"]
+          pad_bytes_len_gt[of bs] pad_bytes_prefix[of bs] int_length
+        by(auto simp add: decode'.simps Let_def 
+              simp del: check_padding.simps pad_bytes.simps)
+    qed
+  qed
+next
+  case (Vstring s)
+  then show ?case
+  proof(cases rule: can_encode_as.cases)
+    case (Estatic pre post code)
+    then show ?thesis by auto
+  next
+    case (Estring l)
+    show ?thesis using Estring(3)
+    proof(cases rule: can_encode_as.cases)
+      case (Estatic pre post code)
+      then show ?thesis by auto
+    next
+      case (Ebytes pre post count code)
+  
+      show ?thesis using Ebytes(6)
+      proof(cases rule: can_encode_as.cases)
+        case (Estatic preX postX codeX)
+      
+        obtain n_div n_mod where Divmod: "divmod_nat (length l) 32 = (n_div, n_mod)"
+          by(cases "divmod_nat (length l) 32"; auto)
+  
+        have Check1 : "check_padding (length l) (pad_bytes l @ post)" using Divmod
+        proof(cases n_mod)
+          case 0
+          then show ?thesis using Divmod by(auto)
+        next
+          case (Suc nat)
+          then show ?thesis using Divmod by(auto simp add:Let_def)
+        qed
+  
+        show ?thesis using Check1 Vstring Estring Ebytes Estatic
+            uint_reconstruct_full[of 256 "int (length l)"]
+            uint_reconstruct_full'[of 256 "int (length l)"]
+            pad_bytes_len_gt[of l] pad_bytes_prefix[of l] int_length
+            bytes_to_string_to_bytes[of s]
+          by(auto simp add: decode'.simps Let_def 
+                simp del: check_padding.simps pad_bytes.simps
+                bytes_to_string.simps string_to_bytes.simps)
+      qed
+    qed
+  qed
+next
+  case (Varray t vs)
+  show ?case using Varray(2)
+  proof(cases rule: can_encode_as.cases)
+    case (Estatic pre post code)
+    then show ?thesis using Varray
+      by(auto simp del: decode_static.simps simp add: decode'.simps)
+  next
+    case (Earray heads head_types tails)
+      (* idea: need to get count first *)
+    show ?thesis using Earray(3)
+    proof(cases rule: can_encode_as.cases)
+      case (Estatic pre1 post1 code1)
+      show ?thesis using Earray(4)
+      proof(cases rule: can_encode_as.cases)
+        case Estatic' : (Estatic pre2 post2 code2)
+        then obtain heads_code
+          where Heads_ok : "those_err (map encode_static heads) = Ok heads_code"
+          and Heads_code : "concat heads_code = code2"
+          using Efarray_dyn Varray
+          by(cases "those_err (map encode_static heads)"; auto)
+
+        have Vs_rep : "replicate (length vs) t = map abi_get_type vs"
+          using  sym[OF my_replicate_map[of abi_get_type t vs]] Earray
+          by(auto simp add:array_value_valid_aux_def)
+
+          show ?thesis
+          proof(cases "decode'_dyn_tuple_heads (replicate (length vs) t) 0
+                 (int (length pre2), pre1 @ encode_int (int (length vs)) @ post1)")
+          case (Inr err)
+          obtain tpre tbad tpost err'
+            where Tbad: "decode' tbad (start + 32 + ty_heads_length tpre, full_code) = Err err'"
+            and Tbad_t : "replicate (length vs) t = tpre @ [tbad] @ tpost"
+            and Tbad_static : "abi_type_isstatic tbad"
+            using abi_decode'_dyn_tuple_heads_fail[OF Inr]
+                  can_encode_as_start[OF Varray(2)]
+                  can_encode_as_start_nonneg[OF Varray(2)]
+                  Earray Estatic Estatic' Heads_ok
+                  int_length[of "int (length vs)"]
+                  uint_reconstruct_full[of 256 "int (length vs)"]
+                  ty_heads_length_heads_length[of vs]
+                  sym[OF my_replicate_map[of abi_get_type t vs]]
+                  heads_length_heads[OF Earray(2) Earray(4)]
+            by(auto simp add:array_value_valid_aux_def)
+ 
+          have Tbad_tvs : "tbad \<in> set (map abi_get_type vs)"
+            using  Tbad_t
+                  map_split_precise[of abi_get_type vs tpre tbad tpost] Vs_rep
+            by(auto simp add:tuple_value_valid_aux_def)
+
+          hence Tbad_tvs' : "tbad \<in> set (replicate (length vs) t)" using Vs_rep by auto
+
+          hence Tbad_is_t : "tbad = t" by auto
+
+          obtain vbad_pre vbad vbad_post where
+            Vbad_full : "vs = vbad_pre @ vbad # vbad_post" and
+            Vbad_full_pre : "length (vbad_pre) = length tpre"
+            using Tbad_t Vs_rep map_split_precise[of abi_get_type vs tpre tbad tpost]
+            by(auto)
+
+          have Vbad : "vbad \<in> set vs" 
+            using Tbad_tvs Vbad_full Vbad_full_pre Vs_rep by(auto)
+
+          have Vbad_t : "abi_get_type vbad = tbad" using Vbad_full Vbad_full_pre Vs_rep Tbad_t
+            by(auto)
+
+          have Vbad_heads : "vbad \<in> set heads"
+            using is_head_and_tail_vs_elem_static[OF Earray(2) Vbad] Tbad_static Vbad_t
+            by auto
+
+          have Bad_valid : "list_all abi_value_valid vs"
+            using encode_correct_converse_valid[OF Varray(2)] Vs_rep
+            by(simp add:array_value_valid_aux_def list_all_iff)
+
+          hence Bad_valid' : "abi_value_valid vbad" using Vbad
+            by(auto simp add: list_all_iff)
+
+          obtain hpre hpost where Heads_bad: "
+                   heads = hpre @ vbad # hpost \<and>
+                   length hpre = length vbad_pre \<and> 
+                    (\<forall>codes. those_err (map encode_static hpre) = Ok codes \<longrightarrow> 
+                             list_all abi_value_valid_aux heads \<longrightarrow> 
+                              int (length (concat codes)) = heads_length vbad_pre)"
+            using Varray.IH[OF Vbad, of full_code "start + 32 + ty_heads_length tpre"] Tbad
+            is_head_and_tail_heads_static_split_precise[OF Earray(2) Vbad_full Bad_valid]
+            Tbad_static Vbad_t Varray Etuple_dyn Vbad_full
+            encode_correct_converse_valid[OF Varray(2)]
+            by(auto)
+
+          hence Heads_bad3' : "\<And> codes . those_err (map encode_static hpre) = Ok codes \<Longrightarrow>
+                                         list_all abi_value_valid_aux heads \<Longrightarrow>
+                                         int (length (concat codes)) = heads_length vbad_pre"
+            by auto
+
+          obtain hpre_codes  where
+            Hpre_codes : "those_err (map encode_static hpre) = Ok hpre_codes"
+            using Tbad_static Vbad_t Vbad_full Heads_ok Heads_bad
+              those_err_split[of "map encode_static hpre" "map encode_static (vbad#hpost)"]
+            by(cases "those_err (map encode_static hpre)"; auto)
+
+          obtain vbad_hpost_codes where
+            Vbad_hpost_codes : "those_err (map encode_static (vbad#hpost)) = Ok vbad_hpost_codes"
+            using Tbad_static Vbad_t Vbad_full Heads_ok Heads_bad
+              those_err_split[of "map encode_static hpre" "map encode_static (vbad#hpost)"]
+            by(cases "those_err (map encode_static hpre)"; auto)
+
+          then obtain vbad_code where Vbad_code : "encode_static vbad = Ok vbad_code"
+            using Tbad_static Vbad_t Vbad_full Heads_ok Heads_bad Vbad_hpost_codes
+            by(cases "encode_static vbad"; auto)
+
+          then obtain hpost_codes where Hpost_codes : 
+            "those_err (map encode_static hpost) = Ok hpost_codes"
+            using Tbad_static Vbad_t Vbad_full Heads_ok Heads_bad Hpre_codes
+              those_err_split[of "map encode_static (hpre@[vbad])"]
+              Estatic(4) Vbad_full
+            by(auto)
+
+          have BadEnc : "can_encode_as vbad ((pre2 @ concat hpre_codes) @ vbad_code @ 
+                                             (concat hpost_codes @ post2))
+                (int (length (pre2 @ concat hpre_codes) ))"
+          proof(rule can_encode_as.Estatic)
+            show "abi_type_isstatic (abi_get_type vbad)" using Tbad_static Vbad_t by auto
+          next
+            show "abi_value_valid vbad" using Bad_valid' by auto
+          next
+            show "encode_static vbad = Ok vbad_code" using Vbad_code by auto
+          qed
+
+          have Heads_code' : "concat heads_code = concat hpre_codes @ (vbad_code @ concat hpost_codes)"
+            using Heads_ok Heads_code Heads_bad Hpre_codes Bad_valid' Tbad_static 
+                  Vbad_t Vbad_full Vbad_code Hpost_codes
+                  those_err_split[of "map encode_static hpre"
+                                     "map encode_static (vbad#hpost)" heads_code]
+            by(auto)
+
+          have Tpre_types : "tpre = map abi_get_type vbad_pre"
+            using Vbad_full Tbad_t Vs_rep
+                  Heads_ok Heads_code Hpre_codes Bad_valid' Tbad_static 
+                  Vbad_t Vbad_code Hpost_codes Vbad_full_pre
+                  map_split_precise[of abi_get_type vs tpre tbad tpost]
+            by(auto)
+
+          have BadEnc' : "can_encode_as vbad full_code (start + 32 + ty_heads_length tpre)"
+            using BadEnc Estatic Estatic' Heads_ok Heads_code' Heads_bad Tbad_t
+            Heads_bad3' Hpre_codes Bad_valid' Tbad_static 
+            Vbad_t Vbad_full Vbad_code Hpost_codes Tpre_types 
+            ty_heads_length_heads_length[of vbad_pre] 
+            by(auto)
+
+          have False using Varray.IH[OF Vbad, of full_code "start + 32 + ty_heads_length tpre"]
+            Tbad BadEnc'
+            Tbad_static Vbad_t Varray Etuple_dyn Vbad_full
+            by(simp add:array_value_valid_aux_def)
+
+          thus ?thesis by auto
+        next
+          case (Inl dec_hd_res)
+          obtain vos idxs byteoffset bytes_parsed where Res :
+            "dec_hd_res = (vos, idxs, byteoffset, bytes_parsed)"
+            by(cases dec_hd_res; auto)
+
+          have Inl' :
+            "decode'_dyn_tuple_heads (replicate (length vs) t) 
+                (int 0) (start + 32, full_code) = Ok dec_hd_res"
+            using Inl Vs_rep Estatic Estatic' by(auto)
+
+          have Start_fullcode : "int (min (length full_code) (nat (start + 32))) = start + 32"
+            using can_encode_as_start[OF Earray(4)]
+                  can_encode_as_start_nonneg[OF Earray(4)]
+            by(auto)
+
+          have Offs' : 
+            "(\<And>offset v. (offset, v) \<in> set tails \<Longrightarrow> 
+                  can_encode_as v full_code (start + 32 + offset))"
+          proof-
+            fix offset v
+            have C' : "start + 32 + offset = offset + start + 32" by auto
+            then show "(offset, v) \<in> set tails \<Longrightarrow>
+              can_encode_as v full_code (start + 32 + offset)"
+              using Earray(5)[of offset v] unfolding C' by(auto)
+          qed
+
+          have Start32' : "nat start + 32 = nat (start + 32)" using
+                  can_encode_as_start_nonneg[OF Varray(2)] by auto
+
+          have Wb : "ht_wellbehaved idxs (map abi_get_type vs) vos"
+          and Head_succeed :
+            "those (map2 ht_combine vos 
+               (map (\<lambda>to. case to of None \<Rightarrow> None 
+                  | Some t \<Rightarrow> Some (t - int (length (take (nat start + 32) full_code)))) idxs)) = 
+                                                                            Some heads \<and>
+             map (\<lambda>x. fst x + int (length (take (nat start + 32) full_code))) tails = somes idxs \<and>
+             byteoffset = heads_length vs + int (length []) \<and> 
+             ht_wellbehaved idxs (map abi_get_type vs) vos"
+            using 
+                  can_encode_as_start[OF Varray(2)]
+                  can_encode_as_start_nonneg[OF Varray(2)]
+                  abi_decode'_dyn_tuple_heads_succeed
+                    [OF Earray(2), 
+                     of "[]" "take (nat (start + 32)) full_code" "drop (nat (start + 32)) full_code" "[]"
+                        vos idxs byteoffset bytes_parsed] Inl'
+                 Start_fullcode Res Earray Vs_rep Offs' 
+             by(auto simp add: Start32')
+
+          have Start_fullcode' : "int (length (take (nat start + 32) full_code)) = start + 32" 
+            using Start_fullcode can_encode_as_start_nonneg[OF Varray(2)]
+            by(auto)
+
+          have Combine :
+            "those (map2 ht_combine vos (map (\<lambda>to. case to of None \<Rightarrow> None 
+                    | Some t \<Rightarrow> Some (t - int (length (take (nat start + 32) full_code)))) idxs)) =
+             those (map2 ht_combine vos 
+                                    (map (case_option None (\<lambda>t. Some (t - (start + 32)))) idxs))"
+            unfolding Start_fullcode' by(auto)
+
+          have Ht2_combine' :
+            "those (map2 ht_combine vos 
+                                    (map (case_option None (\<lambda>t. Some (t - (start + 32)))) idxs)) =
+              Some heads"
+            using 
+                Head_succeed
+                Start_fullcode'
+                can_encode_as_start[OF Varray(2)]
+                can_encode_as_start_nonneg[OF Varray(2)]
+            unfolding Combine
+            by(auto)
+
+          show ?thesis
+          proof(cases "decode'_dyn_tuple_tails idxs (map abi_get_type vs) 
+                          vos byteoffset (start + 32, full_code)")
+            case (Inr err)
+            obtain offset' tbad err'
+              where Tbad_in : "(Some offset', tbad) \<in> set (zip idxs (map abi_get_type vs))" and
+                    Tbad_bad : "decode' tbad (offset', full_code) = Err err'"
+              using abi_decode'_dyn_tuple_tails_fail[OF Inr Wb] 
+              by auto
+
+            obtain vbad where Vbad1 : "abi_get_type vbad = tbad" 
+                        and Vbad2: "(offset' - (start + 32), vbad) \<in> set tails"
+              using is_head_and_tail_wellbehaved[OF Earray(2) Wb, of "start + 32" offset' tbad] 
+                  Head_succeed
+                  Start_fullcode'
+                  can_encode_as_start[OF Varray(2)]
+                  can_encode_as_start_nonneg[OF Varray(2)]
+                  Tbad_in
+                  Ht2_combine' unfolding Vs_rep
+              by(auto)
+
+            have Vbad3 : "vbad \<in> set vs"
+              using is_head_and_tail_tails_elem[OF Earray(2) Vbad2] by auto
+
+            have False using Varray(1)[OF Vbad3 Earray(5)[OF Vbad2]] Tbad_bad Vbad1
+              by(auto)
+  
+            then show ?thesis by auto
+          next
+            fix dec_tl_res
+            assume Inl'' : 
+              "decode'_dyn_tuple_tails idxs (map abi_get_type vs) 
+                    vos byteoffset (start + 32, full_code) = 
+                Ok dec_tl_res"
+            hence Inl''' : 
+              "decode'_dyn_tuple_tails idxs (map abi_get_type vs) vos byteoffset 
+                  (start + 32, full_code) = Ok dec_tl_res" using Vs_rep by auto
+
+            obtain vs_out bytes' where Res_tl : "dec_tl_res = (vs_out, bytes')"
+              by(cases dec_tl_res; auto)
+
+            have Count : "decode_uint (take 32 (drop (nat start) full_code)) = int(length vs)"
+              using Estatic int_length[of "length vs"]
+              uint_reconstruct_full'[of 256 "length vs"]
+              by(auto)
+
+            obtain bytes'' where C' :
+              "decode' (abi_get_type (Varray t vs)) (start, full_code) = 
+              Ok (Varray t vs, bytes'')"
+ 
+              using abi_decode'_dyn_tuple_tails_succeed[of idxs vs vos byteoffset
+                    "take (nat start + 32) full_code" "[]" "drop (nat start + 32) full_code" "[]"
+                    vs_out bytes', OF _ Earray(2) Wb _]
+                  Inl' Res Start_fullcode Start32'
+                  can_encode_as_start[OF Varray(2)]
+                  can_encode_as_start_nonneg[OF Varray(2)]
+                  can_encode_as_start[OF Earray(4)]
+                  can_encode_as_start_nonneg[OF Earray(4)]
+                  Res_tl
+                  Etuple_dyn Offs' Combine Head_succeed Varray Inl'''
+                  Vs_rep Count Earray(4)
+              by(auto simp add:decode'.simps Let_def simp del:decode_uint.simps)
+            thus ?thesis by auto
+          qed
+        qed
+
+      next
+        case (Etuple_dyn tX headsX head_typesX tailsX)
+        then show ?thesis 
+          using is_head_and_tail_heads_tuple_static[OF Earray(2)]
+          by(auto simp add:array_value_valid_aux_def list_ex_iff list_all_iff)
+      qed
+    qed
+  qed
+qed
+(*
+next
+  case Estring
+  then show ?case sorry
+qed
+    qed
+  next
+    case False
+    show ?thesis using Vfarray(2)
+    proof(cases rule: can_encode_as.cases)
+      case (Estatic pre post code)
+      then show ?thesis using Vfarray abi_encode_decode_static[OF Estatic(5), of pre post] 
+                              encode_static_size[OF Estatic(5)]
+        by(auto simp del: decode_static.simps simp add: decode'.simps)
+    next
+      case (Efarray_dyn heads head_types tails)
+      show ?thesis using Efarray_dyn(4)
+      proof(cases rule: can_encode_as.cases)
+        case (Estatic preX postX codeX)
+
+        then obtain heads_code
+          where Heads_ok : "those_err (map encode_static heads) = Ok heads_code"
+          and Heads_code : "concat heads_code = codeX"
+          using Efarray_dyn False Vfarray
+          by(cases "those_err (map encode_static heads)"; auto)
+
+        have Vs_rep : "replicate (length vs) t = map abi_get_type vs"
+          using  sym[OF my_replicate_map[of abi_get_type t vs]] Efarray_dyn
+          by(auto simp add:farray_value_valid_aux_def)
+
+        have N : "n = length vs"
+          using  Efarray_dyn
+          by(auto simp add:farray_value_valid_aux_def)
+
+        show ?thesis
+        proof(cases "decode'_dyn_tuple_heads (replicate n t) 0 (start, full_code)")
+          case (Inr err)
+
+          obtain tpre tbad tpost err'
+            where Tbad: "decode' tbad (start + ty_heads_length tpre, full_code) = Err err'"
+            and Tbad_t : "replicate n t = tpre @ [tbad] @ tpost"
+            and Tbad_static : "abi_type_isstatic tbad"
+            using abi_decode'_dyn_tuple_heads_fail[OF Inr]
+                  can_encode_as_start[OF Vfarray(2)]
+                  can_encode_as_start_nonneg[OF Vfarray(2)]
+                  Efarray_dyn
+                  ty_heads_length_heads_length[of vs]
+                  sym[OF my_replicate_map[of abi_get_type t vs]]
+                  heads_length_heads[OF Efarray_dyn(3) Efarray_dyn(4)]
+            by(auto simp add:farray_value_valid_aux_def)
+ 
+          have "tbad \<in> set (map abi_get_type vs)"
+            using Efarray_dyn(1) Tbad_t
+                  my_replicate_map[of abi_get_type t vs]
+                  map_split_precise[of abi_get_type vs tpre tbad tpost]
+            by(auto simp add:farray_value_valid_aux_def)
+
+          hence Tbad_t' : "tbad = t" using Efarray_dyn
+            by(auto simp add:farray_value_valid_aux_def list_all_iff)
+
+          hence False using Efarray_dyn Tbad_static by auto
 
           thus ?thesis by auto
         next
@@ -2403,7 +2984,7 @@ case (Vtuple ts vs)
             have Vbad3 : "vbad \<in> set vs"
               using is_head_and_tail_tails_elem[OF Efarray_dyn(3) Vbad2] by auto
 
-            have False using Vfarray(1)[OF Vbad3 Efarray_dyn(5)[OF Vbad2]] Vfarray(1)[OF Vbad3] Tbad_bad Vbad1
+            have False using Vfarray(1)[OF Vbad3 Efarray_dyn(5)[OF Vbad2]]  Tbad_bad Vbad1
               by(auto)
   
             then show ?thesis by auto
@@ -2443,279 +3024,8 @@ case (Vtuple ts vs)
       qed
     qed
   qed
-        
-
-
-  case (Vtuple ts vs) thus ?case
-    apply(clarify)
-    apply(simp)
-    apply(rule_tac ?a1.0 = "(Vtuple ts vs)" and ?a2.0 = full_code and ?a3.0 = start
-in can_encode_as.cases; simp?)
-
-     (* static *)
-     apply(clarsimp)
-
-     apply(simp split:sum.splits)
-
-    apply(cut_tac v = "(Vtuple ts vs)"
-and code = code
-in encode_static_size; simp)
-
-
-    apply(cut_tac v = "(Vtuple ts vs)"
-and code = code
-and prefix = pre and post = post
-in abi_encode_decode_static; simp del:decode_static.simps)
-
-     apply(simp (no_asm_simp) add:decode'.simps del:decode_static.simps)
-
-    (* dynamic *)
-     apply(clarsimp)    
-     apply(simp (no_asm_simp) add:decode'.simps)
-      apply(simp add:tuple_value_valid_aux_def)
-      apply(clarsimp)
-
-      apply(atomize)
-      apply(simp add:Let_def)
-    apply(rule_tac conjI)
-       apply(simp add:list_ex_iff) apply(fastforce)
-
-    apply(clarsimp)
-
-      apply(case_tac "decode'_dyn_tuple_heads (map abi_get_type vs) (0::int) (starta, full_codea) ") apply(clarsimp)
-         apply(rename_tac  newa)
-
-           apply(subgoal_tac "int (min (length full_codea) (nat starta)) = starta")
-    apply(subgoal_tac "starta \<ge> 0")
-        apply(frule_tac
-?pre1.0 = "take(nat starta) full_codea" and ?pre2.0 = "[]"
-and ?l = "drop (nat starta) full_codea"
-and post = "[]"
-and heads' = a
-and tails' = aa
-and count' = ab
-and bytes = newa in abi_decode_dyn_tuple_heads_succeed; (simp)?)
-
-          apply(drule_tac x = offset in spec) apply(rotate_tac -1) apply(drule_tac x = v in spec) apply(clarsimp)
-           apply(subgoal_tac "starta + offset = offset + starta")
-            apply(arith) apply(arith)
-
-       apply(case_tac "decode'_dyn_tuple_tails aa (map abi_get_type vs) a ab (starta, full_codea)") apply(clarsimp)
-        apply(rename_tac  newa2)
-    apply(frule_tac can_encode_as_start; simp?)
-
-    apply(cut_tac
-?pre1.0 = "take(nat starta) full_codea" and ?pre2.0 = "[]"
-and ?code = "drop (nat starta) full_codea"
-and post = "[]"
-and heads' = a
-and tails' = aa
-and offset = "heads_length vs"
-and bytes' = newa2 in abi_decode_dyn_tuple_tails_succeed; (simp)?)
-
-          apply(drule_tac x = offset in spec) apply(rotate_tac -1) apply(drule_tac x = v in spec) apply(clarsimp)
-           apply(subgoal_tac "starta + offset = offset + starta")
-           apply(arith) apply(arith)
-
-       apply(case_tac "decode'_dyn_tuple_tails aa (map abi_get_type vs) a ab (starta, full_codea)") apply(clarsimp)
-        apply(rename_tac  newa2)
-    apply(frule_tac can_encode_as_start; simp?)
-
-
-    apply(clarsimp)
-
-         apply(frule_tac abi_decode_dyn_tuple_tails_fail) apply(clarsimp)
-         apply(clarsimp)
-    apply(frule_tac offset' = offset' and t = t and aa = aa and a = a and starta = starta in
-is_head_and_tail_wellbehaved; simp?)
-         apply(clarsimp)
-         apply(drule_tac x = "offset' - starta" in spec) apply(rotate_tac -1) apply(drule_tac x = v in spec) apply(clarsimp)
-         apply(frule_tac offset = "offset' - starta" and x = v in is_head_and_tail_tails_elem; simp?)
-         apply(clarsimp)
-         apply(drule_tac x = v in spec) apply(clarsimp)
-         apply(drule_tac x = full_codea in spec) apply(drule_tac x = offset' in spec)
-    apply(clarsimp)
-
-        apply(simp add:can_encode_as_start_nonneg)
-    apply(frule_tac can_encode_as_start)
-       apply(frule_tac can_encode_as_start_nonneg)
-       apply(subgoal_tac "0 \<le> foldl (+) (0::int) (map (abi_static_size \<circ> abi_get_type) vs)")
-        apply(arith)
-       apply(cut_tac l = "(map (abi_static_size \<circ> abi_get_type) vs)" in list_nonneg_sum)
-        apply(simp add:list_nonneg_def)
-        apply(simp add:list_all_iff abi_static_size_nonneg) apply(simp add:list_sum_def)
-
-
-    apply(frule_tac abi_decode_dyn_tuple_heads_fail; simp?)
-        apply(simp add:can_encode_as_start_nonneg)
-       apply(simp add:can_encode_as_start_nonneg)
-
-       apply(simp add:ty_heads_length_heads_length)
-
-           apply(subgoal_tac "abi_type_isstatic (abi_get_type (Vtuple head_types heads))")
-    apply(rule_tac ?a1.0 = "(Vtuple head_types heads)"
-and ?a2.0 = full_codea and ?a3.0 = starta
-in can_encode_as.cases; simp)
-         apply(clarsimp)
-         apply(frule_tac heads_length_heads; simp?) apply(simp)
-         apply(simp)
-        apply(frule_tac heads_length_heads; simp?)
-    apply(simp add:can_encode_as_start_nonneg)
-        apply(simp)
-
-       apply(clarsimp) apply(simp add:list_ex_iff) apply(clarsimp)
-
-       apply(frule_tac ht = xb in is_head_and_tail_head_types_elem; simp) 
-
-      apply(clarsimp)
-
-      apply(simp add: can_encode_as_start_nonneg)
-
-     apply(rule_tac ?a1.0 = "(Vtuple head_types heads)"
-and ?a2.0 = full_codea and ?a3.0 = starta
-in can_encode_as.cases; simp)
-        apply(clarsimp)
-
-       apply(simp split:sum.splits)
-
-    apply(subgoal_tac 
-"\<exists> vpre vbad vpost .
-vs = vpre @ vbad # vpost \<and>
-length tpre = length vpre \<and>
-length tpost = length vpost")
-        apply(clarsimp)
-
-    apply(drule_tac x = vbad in spec; clarsimp)
-
-        apply(drule_tac
-vpre = vpre
-and v = vbad 
-and vpost = vpost in is_head_and_tail_heads_static_split_precise; simp?)
-         apply(simp add:tuple_value_valid_aux_def)
-         apply(clarsimp)
-         apply(simp add:list_all_iff)
-        apply(clarsimp)
-        apply(drule_tac those_err_split; clarsimp)
-        apply(case_tac "encode_static vbad"; clarsimp)
-        apply(simp split:sum.splits)
-    apply(clarsimp)
-    apply(cut_tac  v = vbad and code = a
-and pre = "pre @ concat tvs"
-and post = "concat x1 @ post"
-
-in Estatic; simp)
-
-        apply(drule_tac x = "(pre @ concat tvs @ a @ concat x1 @ post)" in spec)
-    apply(rotate_tac -1)
-        apply(drule_tac x = "(int (length pre) + heads_length vpre)" in spec)
-        apply(clarsimp)
-        apply(simp add:ty_heads_length_heads_length)
-
-       apply(clarsimp)
-       apply(drule_tac map_split_precise; clarsimp)
-       apply(metis)
-
-     apply(drule_tac ht = t in is_head_and_tail_head_types_elem; clarsimp)
-
-    done
 next
-  (* problem with count in
-bytes case
 
-need to make sure that count is not empty
-and actually contains the encoding
-of the offset
-
-
-*)
-  case (Vbytes x)
-  then show ?case
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; simp del:pad_bytes.simps)
-     apply(clarify) apply(simp)
-
-    apply(frule_tac can_encode_as.cases; simp del:pad_bytes.simps)
-
-    apply(clarify)
-
-    apply(simp add:bytes_value_valid_def del:pad_bytes.simps)
-    apply(simp add:decode'.simps Let_def
-del:pad_bytes.simps skip_padding.simps decode_uint.simps take_append
-)
-
-(*
-    apply(subgoal_tac "int (length codea) + int (length posta) < decode_uint (take (32::nat) (codea @ posta)) + (32::int)")
-*)
-
-     apply(clarify)
-    apply(frule_tac uint_valid_length)
-     apply(simp del:decode_uint.simps)
-    apply(frule_tac uint_reconstruct_valid; simp)
-     apply(frule_tac uint_reconstruct; simp)
-     apply(rotate_tac -1)
-    apply(frule_tac uint_valid_length)
-     apply(simp del:decode_uint.simps)
-     apply(simp add:uint_valid_length)
-    apply(simp split:prod.splits option.splits)
-    apply(clarsimp)
-    apply(case_tac x2; clarsimp)
-    apply(arith)
-    done
-  next
-case (Vstring x)
-  then show ?case
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; simp del:pad_bytes.simps)
-     apply(clarify) apply(simp)
-
-    apply(drule_tac can_encode_as.cases; simp del:pad_bytes.simps)
-    apply(clarsimp)
-    apply(drule_tac can_encode_as.cases; simp del:pad_bytes.simps)
-
-    apply(clarify)
-
-    apply(simp add:string_value_valid_def bytes_value_valid_def del:pad_bytes.simps)
-    apply(simp add:decode'.simps Let_def
-del:pad_bytes.simps skip_padding.simps decode_uint.simps take_append
-)
-
-     apply(clarify)
-    apply(frule_tac uint_valid_length)
-     apply(simp del:decode_uint.simps)
-    apply(frule_tac uint_reconstruct_valid; simp)
-     apply(frule_tac uint_reconstruct; simp)
-     apply(rotate_tac -1)
-    apply(frule_tac uint_valid_length)
-     apply(simp del:decode_uint.simps)
-     apply(simp add:uint_valid_length)
-    apply(simp split:prod.splits option.splits)
-    apply(clarsimp)
-
-
-    apply(subgoal_tac
-"((\<lambda>b::8 word. char_of_integer (of_int (uint b))) \<circ>
-            (\<lambda>c::char. word_of_int (int_of_integer (integer_of_char c)))) =
-id")
-
-     apply(case_tac x2; clarsimp)
-    apply(arith)
-
-    apply(subgoal_tac "\<forall> c .
-char_of_integer (of_int (uint (word_of_int (int_of_integer (integer_of_char c)) :: 8 word)))
-= c") 
-    apply(rule_tac funext)
-      apply(clarsimp)
-
-
-    apply(clarsimp)
-      apply(simp add:word_of_int char_of_integer_def integer_of_char_def
-uint_word_of_int)
-      apply(cut_tac x = "of_char c" and xa = 256 in modulo_integer.rep_eq)
-    apply(clarsimp)
-    done
-next
-  case (Varray x1 x2)
-  then show ?case
     apply(clarify)
     apply(simp)
     apply(rule_tac ?a1.0 = "(Varray x1 x2)" and ?a2.0 = full_code and ?a3.0 = start
@@ -2930,7 +3240,8 @@ in Estatic; simp)
     apply(simp add:uint_valid_length)
     done
 qed
-
+*)
+(*
 lemma abi_decode_correct :
   "can_encode_as v full_code 0 \<Longrightarrow>
    decode (abi_get_type v) full_code = Ok v"
@@ -2940,148 +3251,79 @@ lemma abi_decode_correct :
   apply(frule_tac abi_decode_succeed2)
   apply(clarsimp)
   done
+*)
 
+lemma abi_decode_correct :
+  assumes H : "can_encode_as v full_code 0"
+  shows "decode (abi_get_type v) full_code = Ok v"
+  using encode_correct_converse_valid[OF H] abi_decode_succeed2[OF H]
+  by(auto)
 
-lemma abi_decode_static_type_ok [rule_format]:
-  "\<forall> index (full_code :: 8 word list) v .
-      decode_static t (index, full_code) = Ok v \<longrightarrow>
-      abi_get_type v = t"
-proof(induction t)
+lemma abi_decode_static_type_ok :
+  "decode_static t (index, full_code) = Ok v \<Longrightarrow>
+   abi_get_type v = t"
+  by(induction t arbitrary: index full_code v;
+        auto simp add:Let_def split:if_splits;
+        auto simp add:Let_def split:if_splits sum.splits)
+
+lemma abi_decode'_type_ok :
+  "decode' t (index, full_code) = Ok (v, sz) \<Longrightarrow>
+   abi_get_type v = t"
+proof(induction t arbitrary: index full_code  v sz)
 case (Tuint x)
   then show ?case 
-    apply(simp add:Let_def split:if_splits)
-    done
+    by(auto simp add:Let_def decode'.simps split:if_splits)
 next
   case (Tsint x)
   then show ?case
-    apply(simp add:Let_def split:if_splits)
-    done
+    by(auto simp add:Let_def decode'.simps split:if_splits)
 next
   case Taddr
   then show ?case 
-    apply(simp add:Let_def split:if_splits)
-    done
+    by(auto simp add:Let_def decode'.simps split:if_splits)
 next
   case Tbool
   then show ?case
-    apply(simp add:Let_def split:if_splits)
-    done
+    by(auto simp add:Let_def decode'.simps split:if_splits)
 next
   case (Tfixed x1a x2a)
   then show ?case
-    apply(simp add:Let_def split:if_splits)
-    done
+    by(auto simp add:Let_def decode'.simps split:if_splits)
 next
   case (Tufixed x1a x2a)
   then show ?case 
-    apply(simp add:Let_def split:if_splits)
-    done
+    by(auto simp add:Let_def decode'.simps split:if_splits)
 next
   case (Tfbytes x)
   then show ?case
-    apply(simp add:Let_def split:if_splits)
-    done
+    by(auto simp add:Let_def decode'.simps split:if_splits)
 next
   case Tfunction
   then show ?case
-    apply(simp add:Let_def split:if_splits)
-    done
+    by(auto simp add:Let_def decode'.simps split:if_splits)
 next
   case (Tfarray t x2a)
-  then show ?case
-    apply(simp add:Let_def split:if_splits sum.splits)
-    done
+  show ?case using Tfarray(2) unfolding decode'.simps Tfarray(1)
+    by(auto simp add:Let_def split:if_splits sum.splits)
 next
   case (Ttuple x)
-  then show ?case 
-    apply(simp add:Let_def split:if_splits sum.splits)
-    done
+  then show ?case using Ttuple(2) unfolding decode'.simps Ttuple(1)
+    by(auto simp add:Let_def split:if_splits sum.splits)
 next
   case Tbytes
-  then show ?case 
-    apply(simp add:Let_def split:if_splits sum.splits)
-    done
+  then show ?case unfolding decode'.simps Let_def
+    (* TODO: this is a bit slower than it should be. *)
+    by(auto split:if_split_asm)
 next
   case Tstring
-  then show ?case
-    apply(simp add:Let_def split:if_splits sum.splits)
-    done
+  then show ?case unfolding decode'.simps Let_def
+    (* TODO: this is a bit slower than it should be. *)
+    by(auto split:if_split_asm)
 next
   case (Tarray t)
-  then show ?case
-    apply(simp add:Let_def split:if_splits sum.splits)
-    done
-qed
-
-lemma abi_decode'_type_ok [rule_format]:
-  "\<forall> index (full_code :: 8 word list) v sz.
-      decode' t (index, full_code) = Ok (v, sz) \<longrightarrow>
-      abi_get_type v = t"
-proof(induction t)
-case (Tuint x)
-  then show ?case 
-    apply(simp add:Let_def decode'.simps split:if_splits)
-    done
-next
-  case (Tsint x)
-  then show ?case
-    apply(simp add:Let_def decode'.simps split:if_splits)
-    done
-next
-  case Taddr
-  then show ?case 
-    apply(simp add:Let_def decode'.simps split:if_splits)
-    done
-next
-  case Tbool
-  then show ?case
-    apply(simp add:Let_def decode'.simps split:if_splits)
-    done
-next
-  case (Tfixed x1a x2a)
-  then show ?case
-    apply(simp add:Let_def decode'.simps split:if_splits)
-    done
-next
-  case (Tufixed x1a x2a)
-  then show ?case 
-    apply(simp add:Let_def decode'.simps split:if_splits)
-    done
-next
-  case (Tfbytes x)
-  then show ?case
-    apply(simp add:Let_def decode'.simps split:if_splits)
-    done
-next
-  case Tfunction
-  then show ?case
-    apply(simp add:Let_def decode'.simps split:if_splits)
-    done
-next
-  case (Tfarray t x2a)
-  then show ?case
-     apply(simp add:Let_def decode'.simps split:if_splits sum.splits)
-    done
-next
-  case (Ttuple x)
-  then show ?case 
-    apply(simp add:Let_def decode'.simps split:if_splits sum.splits)
-    done
-next
-  case Tbytes
-  then show ?case 
-    apply(simp add:Let_def decode'.simps split:if_splits sum.splits)
-    done
-next
-  case Tstring
-  then show ?case
-    apply(simp add:Let_def decode'.simps split:if_splits sum.splits)
-    done
-next
-  case (Tarray t)
-  then show ?case
-    apply(simp add:Let_def decode'.simps split:if_splits sum.splits)
-    done
+  show ?case using Tarray(2) unfolding decode'.simps Tarray(1)
+    unfolding Let_def
+    by(auto split:if_splits sum.splits)
 qed
 
 
