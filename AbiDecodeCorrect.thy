@@ -3241,17 +3241,6 @@ in Estatic; simp)
     done
 qed
 *)
-(*
-lemma abi_decode_correct :
-  "can_encode_as v full_code 0 \<Longrightarrow>
-   decode (abi_get_type v) full_code = Ok v"
-  apply(frule_tac encode_correct_converse_valid)
-  apply(simp)
-  apply(clarify)
-  apply(frule_tac abi_decode_succeed2)
-  apply(clarsimp)
-  done
-*)
 
 lemma abi_decode_correct :
   assumes H : "can_encode_as v full_code 0"
@@ -3326,6 +3315,56 @@ next
     by(auto split:if_splits sum.splits)
 qed
 
+(* helper lemmas for static value decode \<rightarrow> encode lemmas *)
+lemma uint_reencode :
+ assumes Hcode : "32 \<le> length code"
+ shows "encode_int (decode_uint (code)) = take 32 code"
+  unfolding encode_int.simps decode_uint.simps word_of_int word_of_int_uint
+proof(rule word_rsplit_rcat_size)
+  have Hcode' : "min (length code) 32 = 32" using Hcode by auto
+  show "size (word_rcat (take 32 code) :: 256 word) = length (take 32 code) * LENGTH(8)" using Hcode'
+    by(auto simp add: word_size)
+qed
+
+lemma sint_reencode :
+ assumes Hcode : "32 \<le> length code"
+ shows "encode_int (decode_sint (code)) = take 32 code"
+  unfolding encode_int.simps decode_sint.simps word_of_int word_sint.Rep_inverse
+proof(rule word_rsplit_rcat_size)
+  have Hcode' : "min (length code) 32 = 32" using Hcode by auto
+  show "size (word_rcat (take 32 code) :: 256 word) = length (take 32 code) * LENGTH(8)" using Hcode'
+    by(auto simp add: word_size)
+qed
+
+(*
+value "(2 ^ 160) :: int"
+
+declare [[show_types]]
+(* helper lemmas for Vfunction *)
+have bin_rcat_ub : 
+    "bin_rcat (8::nat) (map uint bs) mod (1461501637330902918203684832716283019655932542976::int))
+
+lemma words_reencode160 :
+    "length bs = 20 \<Longrightarrow>
+     word_rsplit (word_rcat bs :: 160 word) = (bs :: 8 word list)"
+proof-
+  fix bs
+  assume H : "length (bs :: 8 word list) = 20"
+  show "word_rsplit (word_rcat bs :: 160 word) = (bs :: 8 word list)"
+  using bin_rsplit_rcat[of 8 "map uint bs"] H
+  apply(auto simp add: uint_value_valid_def word_rcat_def word_rsplit_def uint_word_of_int)
+
+  have C' : "map word_of_int (map (bintrunc (8::nat) \<circ> uint) bs) mod (1461501637330902918203684832716283019655932542976::int) = bs" 
+
+  apply(simp)
+(*
+(*
+     uint_value_valid 32 (uint (word_rcat (take 4 (drop (20 + nat index) full_code))) :: 4 word) \<Longrightarrow>
+     length (word_rsplit (word_rcat (take 20 (drop (nat index) full_code)))) = 20 \<Longrightarrow>
+     length (word_rsplit (word_rcat (take 4 (drop (20 + nat index) full_code)))) = 4 \<Longrightarrow>
+*)
+*)
+(*
 
 lemma abi_decode_encode_static' [rule_format]:
   "(\<forall> t index (full_code :: 8 word list) . 
@@ -3359,140 +3398,199 @@ lemma abi_decode_encode_static' [rule_format]:
                   (\<exists> (codes :: 8 word list list) . those_err (map encode_static vs) = Ok codes \<and>
                            take (nat (list_sum (map abi_static_size ts))) (drop (nat index) full_code) = concat codes)))
     )"
+*)
+*)
+
+lemma abi_decode_encode_static':
+  "(\<And> t index (full_code :: 8 word list) . 
+    abi_type_valid t \<Longrightarrow>
+    0 \<le> index \<Longrightarrow>
+    nat index + nat (abi_static_size t) \<le> length full_code \<Longrightarrow>
+    decode_static t (index, full_code) = Ok v \<Longrightarrow>
+    abi_get_type v = t \<Longrightarrow>
+     (abi_value_valid v \<and>
+     (\<exists> (code :: 8 word list) . encode_static v = Ok code \<and>
+         take (nat (abi_static_size t)) (drop (nat index) full_code) = code)))" and
+
+    "(\<And> v t n index full_code  .
+          v = (Vfarray t n vs) \<Longrightarrow>
+                  abi_type_valid t \<Longrightarrow>
+                  0 \<le>  index \<Longrightarrow>
+                  nat index + nat (n * abi_static_size t) \<le> length full_code \<Longrightarrow>
+                  decode_static_up (replicate n t) (index, full_code) = Ok vs \<Longrightarrow>
+                  map abi_get_type vs = replicate n t \<Longrightarrow>
+                  (list_all abi_value_valid vs \<and>
+                  (\<exists> (codes :: 8 word list list) . those_err (map encode_static vs) = Ok codes \<and>
+                           take (nat (n * (abi_static_size t))) (drop (nat index) full_code) = concat codes)))" and
+
+     "(\<And> v ts index full_code  .
+          v = (Vtuple ts vs) \<Longrightarrow>
+                  list_all abi_type_valid ts \<Longrightarrow>
+                  0 \<le> index \<Longrightarrow>
+                  nat index + nat (list_sum (map abi_static_size ts)) \<le> length full_code \<Longrightarrow>
+                  decode_static_tup (ts) (index, full_code) = Ok vs \<Longrightarrow>
+                  map abi_get_type vs = ts \<Longrightarrow>
+                  (list_all abi_value_valid vs \<and>
+                  (\<exists> (codes :: 8 word list list) . those_err (map encode_static vs) = Ok codes \<and>
+                           take (nat (list_sum (map abi_static_size ts))) (drop (nat index) full_code) = concat codes)))"
 proof(induction rule:my_abi_value_induct)
 (* Vuint *)
-case (1 x1 x2)
-  then show ?case
-    apply(clarsimp)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
-    apply(rule_tac sym)
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
-    done
+  case (1 n i)
+  then show ?case using uint_reencode[of "drop (nat index) full_code"]
+    by(auto simp add: Let_def split:if_split_asm simp del:encode_int.simps decode_uint.simps)
 next
 (* Vsint *)
-  case (2 x1 x2)
-  then show ?case 
-    apply(clarsimp)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
-
-    apply(rule_tac sym)
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
-    done
+  case (2 n i)
+  then show ?case using sint_reencode[of "drop (nat index) full_code"]
+    by(auto simp add: Let_def split:if_split_asm simp del:encode_int.simps decode_sint.simps)
 next
 (* Vaddr *)
   case (3 x)
-  then show ?case
-    apply(clarsimp)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
-
-    apply(rule_tac sym)
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
-    done
+  then show ?case using uint_reencode[of "drop (nat index) full_code"]
+    by(auto simp add: Let_def split: if_split_asm)
 next
+(* Vbool *)
   case (4 x)
+  have Sz : "32 \<le> length full_code - nat index" using 4 by auto
   then show ?case
-    apply(clarsimp)
-    apply(simp add: bool_value_valid_def Let_def split: if_split_asm)
-
-     apply(drule_tac word_uint.Rep_inverse')
-    apply(simp)
-    apply(subgoal_tac
-" word_rsplit (word_rcat (take (32::nat) (drop (nat index) full_code))::256 word) = take (32::nat) (drop (nat index) full_code)")
-
-    apply(simp)
-
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
-
-     apply(drule_tac word_uint.Rep_inverse')
-    apply(simp)
-    apply(subgoal_tac
-" word_rsplit (word_rcat (take (32::nat) (drop (nat index) full_code))::256 word) = take (32::nat) (drop (nat index) full_code)")
-
-    apply(simp)
-
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
-    done
+  proof(cases x)
+    case True
+    then show ?thesis using 4 uint_reencode[of "drop (nat index) full_code"] Sz
+      by(auto simp add: bool_value_valid_def Let_def split: if_split_asm 
+              simp del:encode_int.simps decode_sint.simps)
+  next
+    case False
+    then show ?thesis using 4 uint_reencode[of "drop (nat index) full_code"] Sz
+      by(auto simp add: bool_value_valid_def Let_def split: if_split_asm 
+              simp del:encode_int.simps decode_sint.simps)
+  qed
 next
 (* Vfixed *)
   case (5 m n r)
-  then show ?case 
-    apply(clarsimp)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
-    apply(simp add:Rat.quotient_of_int)
-    apply(rule_tac sym)
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
-    done
+  have Sz : "32 \<le> length full_code - nat index" using 5 by auto
+  then show ?case using 5 sint_reencode[of "drop (nat index) full_code"]
+    by(auto simp add: Let_def Rat.quotient_of_int
+               split:if_split_asm simp del:encode_int.simps decode_sint.simps)
 next
 (* Vufixed *)
   case (6 m n r)
-  then show ?case 
-    apply(clarsimp)
-    apply(simp add: Let_def split: if_split_asm)
-    apply(clarsimp)
-    apply(simp add:Rat.quotient_of_int)
-    apply(rule_tac sym)
-    apply(rule_tac word_rsplit_rcat_size)
-    apply(simp)
-    apply(simp add:min_absorb2)
-    apply(simp add:word_size)    
-    done
+  have Sz : "32 \<le> length full_code - nat index" using 6 by auto
+  then show ?case using 6 uint_reencode[of "drop (nat index) full_code"]
+    by(auto simp add: Let_def Rat.quotient_of_int
+               split:if_split_asm simp del:encode_int.simps decode_sint.simps)
 next
 (* Fbytes *)
   case (7 n bs)
-  then show ?case
-    apply(clarsimp)
-    apply(simp add: Let_def fbytes_value_valid_def split: if_split_asm)
-    apply(clarify)
-    apply(simp del:pad_bytes.simps)
 
-    apply(simp split:prod.splits del:pad_bytes.simps)
-    apply(case_tac x2) 
-     apply(subgoal_tac "n = 32") apply(clarsimp)
-    apply(simp add:divmod_nat_def; clarsimp)
-     apply(fastforce)
+  obtain dv md where Divmod : "divmod_nat n 32 = (dv, md)"
+    by (cases "divmod_nat n 32"; auto)
 
-    apply(clarsimp)
-    apply(rule_tac sym)
-    apply(simp add: append_eq_conv_conj) 
-    apply(rule_tac conjI) 
-     apply(subgoal_tac "min n (32 :: nat) = n") apply(clarsimp)
-     apply(arith)
-    apply(simp add:divmod_nat_def; clarsimp)
+  have Len32 : "32 \<le> length full_code - nat index" using 7 Divmod
+    by(auto)
 
-    apply(subgoal_tac "n = Suc nata")
-     apply(simp)
+  hence Len32' : "min (length full_code - nat index) 32 = 32"
+    by auto
 
-    apply(cut_tac k = n and l = 32 in int_mod_eq')
-      apply(simp)
-    apply(case_tac "n = 32"; clarsimp)
-    apply(simp)
-    done
+  show ?case
+  proof(cases md)
+    case 0
+    then have N  : "n = 32" using 7 Divmod
+      by(auto simp add:divmod_nat_def)
+
+    show ?thesis using 7 0 Divmod N Len32 Len32'
+      by(auto simp add:fbytes_value_valid_def)
+  next
+    case (Suc md')
+
+    hence Suc' : "n \<noteq> 32" using Divmod by(auto simp add: divmod_nat_def)
+
+    have Check : "check_padding n (drop (nat index) full_code)" using 7 Suc Divmod
+      by(cases "check_padding n (drop (nat index) full_code)";
+         auto simp add: Let_def fbytes_value_valid_def 
+              simp del:pad_bytes.simps check_padding.simps)
+
+    have Min_n : "min (length full_code - nat index) n = n" using Suc 7 by(auto)
+
+    have N_bound : "n < 32" using Suc Divmod 7 Min_n Suc'
+      by(auto simp add: fbytes_value_valid_def Let_def)
+
+    have N_bound' : "n - md' = 1" using Suc N_bound Divmod
+      by(auto simp add: divmod_nat_def)
+
+    have Len32'' :"length (pad_bytes (take n (drop (nat index) full_code))) = 32"
+      using 7 Suc Check Min_n Divmod N_bound' N_bound
+      by(auto simp add:Let_def fbytes_value_valid_def)
+
+    then show ?thesis using 7 Divmod Suc Check Min_n N_bound
+        check_padding_pad_bytes[OF Check]
+      by(auto simp add: Let_def fbytes_value_valid_def
+              simp del:pad_bytes.simps check_padding.simps)
+  qed
 next
   (* function *)
-  case 8
-  then show ?case sorry
+  case (8 i j)
+  have Check : "check_padding 24 (drop (nat index) full_code)" using 8
+    by(cases "check_padding 24 (drop (nat index) full_code)";
+                 auto simp add:Let_def function_value_valid_def divmod_nat_def
+                      simp del: check_padding.simps)
+
+  have Valid1 : "uint_value_valid 160 (uint (word_rcat 
+                                      (take 20 (drop (nat index) full_code)) :: 160 word))"
+    using 8 Check 
+    by(auto simp add:Let_def function_value_valid_def divmod_nat_def split:if_split_asm
+            simp del: check_padding.simps)
+
+  have Valid2 : "uint_value_valid 32 (uint (word_rcat
+                                           (take 4 (drop (20 + nat index) full_code)) :: 32 word))"
+    using 8 Check Valid1
+    by(auto simp add:Let_def function_value_valid_def divmod_nat_def split:if_split_asm
+            simp del: check_padding.simps)
+
+
+  have Len1 : "length (word_rsplit
+                        (word_rcat 
+                          (take 20 (drop (nat index) full_code)) :: 160 word) :: 8 word list) = 20"
+  proof(rule length_word_rsplit_even_size[of 8])
+    show "8 = LENGTH(8)" by auto
+  next
+    show "size (word_rcat (take 20 (drop (nat index) full_code)) :: 160 word) = 20 * 8"
+      by (auto simp add: word_size)
+  qed
+
+  have Len2 : "length (word_rsplit (word_rcat
+                  (take 4 (drop (20 + nat index) full_code)) :: 32 word) :: 8 word list) = 4"
+  proof(rule length_word_rsplit_even_size[of 8])
+    show "8 = LENGTH(8)" by auto
+  next
+    show "size (word_rcat (take 4 (drop (20 + nat index) full_code))  :: 32 word) = 4 * 8"
+      by (auto simp add: word_size)
+  qed
+
+  have Min1 : "min (length full_code - nat index) 20 = 20"
+  using 8 by(auto)
+
+  then have Size1: "size (word_rcat (take 20 (drop (nat index) full_code)) :: 160 word) =
+                      length (take 20 (drop (nat index) full_code)) * LENGTH(8)"
+    by(auto simp add:word_size) 
+
+  have Min2 : "min (length full_code - (20 + nat index)) 4 = 4"
+  using 8 by(auto)
+
+  then have Size2: "size (word_rcat (take 4 (drop (20 + nat index) full_code)) :: 32 word) = 
+                      length (take 4 (drop (20 + nat index) full_code)) * LENGTH(8)"
+    by(auto simp add:word_size) 
+
+  then show ?case using 8 Check Valid1 Valid2 Len1 Len2
+      check_padding_pad_bytes[of "24" "(drop (nat index) full_code)"]
+    apply(auto simp add:Let_def function_value_valid_def divmod_nat_def
+        simp del: encode_int.simps decode_uint.simps)
+    apply(auto simp add:Let_def function_value_valid_def divmod_nat_def word_size
+        simp del: encode_int.simps decode_uint.simps)
+    apply(simp add: word_rsplit_rcat_size[OF Size1] word_rsplit_rcat_size[OF Size2])
+    apply(insert take_add[of 20 12 "(drop (nat index) full_code)"])
+    apply(simp)
+    apply(insert take_add[of 4 8 "take 12 (drop (20 + nat index) full_code)"])
+    apply(simp)
 next
   (* Farray *)
   case (9 t n l)
