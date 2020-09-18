@@ -1876,7 +1876,9 @@ qed
 
         
 (* abi_dynamic_size_bound bounds encoding size *)
-(* TODO: make this look more like encode_static_size' *)
+(* The nesting of quantifiers here in the second clause appears to be necessary
+   in order to prevent Isabelle's automation from reassociating the clauses
+   in an unwanted way *)
 lemma abi_dynamic_size_bound_correct' :
   shows "(\<And> bound code .
               encode v = Ok code \<Longrightarrow>
