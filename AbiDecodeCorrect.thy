@@ -3336,71 +3336,6 @@ proof(rule word_rsplit_rcat_size)
     by(auto simp add: word_size)
 qed
 
-(*
-value "(2 ^ 160) :: int"
-
-declare [[show_types]]
-(* helper lemmas for Vfunction *)
-have bin_rcat_ub : 
-    "bin_rcat (8::nat) (map uint bs) mod (1461501637330902918203684832716283019655932542976::int))
-
-lemma words_reencode160 :
-    "length bs = 20 \<Longrightarrow>
-     word_rsplit (word_rcat bs :: 160 word) = (bs :: 8 word list)"
-proof-
-  fix bs
-  assume H : "length (bs :: 8 word list) = 20"
-  show "word_rsplit (word_rcat bs :: 160 word) = (bs :: 8 word list)"
-  using bin_rsplit_rcat[of 8 "map uint bs"] H
-  apply(auto simp add: uint_value_valid_def word_rcat_def word_rsplit_def uint_word_of_int)
-
-  have C' : "map word_of_int (map (bintrunc (8::nat) \<circ> uint) bs) mod (1461501637330902918203684832716283019655932542976::int) = bs" 
-
-  apply(simp)
-(*
-(*
-     uint_value_valid 32 (uint (word_rcat (take 4 (drop (20 + nat index) full_code))) :: 4 word) \<Longrightarrow>
-     length (word_rsplit (word_rcat (take 20 (drop (nat index) full_code)))) = 20 \<Longrightarrow>
-     length (word_rsplit (word_rcat (take 4 (drop (20 + nat index) full_code)))) = 4 \<Longrightarrow>
-*)
-*)
-(*
-
-lemma abi_decode_encode_static' [rule_format]:
-  "(\<forall> t index (full_code :: 8 word list) . 
-    abi_type_valid t \<longrightarrow>
-    0 \<le> index \<longrightarrow>
-    nat index + nat (abi_static_size t) \<le> length full_code \<longrightarrow>
-    decode_static t (index, full_code) = Ok v \<longrightarrow>
-    abi_get_type v = t \<longrightarrow>
-   (abi_value_valid v \<and>
-   (\<exists> (code :: 8 word list) . encode_static v = Ok code \<and>
-       take (nat (abi_static_size t)) (drop (nat index) full_code) = code))) \<and>
-    (
-      (\<forall> v t n index full_code  .
-          v = (Vfarray t n vs) \<longrightarrow>
-                  abi_type_valid t \<longrightarrow>
-                  0 \<le>  index \<longrightarrow>
-                  nat index + nat (n * abi_static_size t) \<le> length full_code \<longrightarrow>
-                  decode_static_tup (replicate n t) (index, full_code) = Ok vs \<longrightarrow>
-                  map abi_get_type vs = replicate n t \<longrightarrow>
-                  (list_all abi_value_valid vs \<and>
-                  (\<exists> (codes :: 8 word list list) . those_err (map encode_static vs) = Ok codes \<and>
-                           take (nat (n * (abi_static_size t))) (drop (nat index) full_code) = concat codes))) \<and>
-      (\<forall> v ts  index full_code  .
-          v = (Vtuple ts vs) \<longrightarrow>
-                  list_all abi_type_valid ts \<longrightarrow>
-                  0 \<le> index \<longrightarrow>
-                  nat index + nat (list_sum (map abi_static_size ts)) \<le> length full_code \<longrightarrow>
-                  decode_static_tup (ts) (index, full_code) = Ok vs \<longrightarrow>
-                  map abi_get_type vs = ts \<longrightarrow>
-                  (list_all abi_value_valid vs \<and>
-                  (\<exists> (codes :: 8 word list list) . those_err (map encode_static vs) = Ok codes \<and>
-                           take (nat (list_sum (map abi_static_size ts))) (drop (nat index) full_code) = concat codes)))
-    )"
-*)
-*)
-
 lemma abi_decode_encode_static':
   "(\<And> t index (full_code :: 8 word list) . 
     abi_type_valid t \<Longrightarrow>
@@ -3417,7 +3352,7 @@ lemma abi_decode_encode_static':
                   abi_type_valid t \<Longrightarrow>
                   0 \<le>  index \<Longrightarrow>
                   nat index + nat (n * abi_static_size t) \<le> length full_code \<Longrightarrow>
-                  decode_static_up (replicate n t) (index, full_code) = Ok vs \<Longrightarrow>
+                  decode_static_tup (replicate n t) (index, full_code) = Ok vs \<Longrightarrow>
                   map abi_get_type vs = replicate n t \<Longrightarrow>
                   (list_all abi_value_valid vs \<and>
                   (\<exists> (codes :: 8 word list list) . those_err (map encode_static vs) = Ok codes \<and>
@@ -3580,208 +3515,250 @@ next
                       length (take 4 (drop (20 + nat index) full_code)) * LENGTH(8)"
     by(auto simp add:word_size) 
 
-  then show ?case using 8 Check Valid1 Valid2 Len1 Len2
+
+  have Conc'1 : "drop 24 (take 32 (drop (nat index) full_code)) = [0, 0, 0, 0, 0, 0, 0, 0]"
+    using 8 Check Valid1 Valid2 Len1 Len2 Min2
       check_padding_pad_bytes[of "24" "(drop (nat index) full_code)"]
-    apply(auto simp add:Let_def function_value_valid_def divmod_nat_def
+    by(auto simp add:Let_def function_value_valid_def divmod_nat_def
         simp del: encode_int.simps decode_uint.simps)
-    apply(auto simp add:Let_def function_value_valid_def divmod_nat_def word_size
+
+  hence Conc'2 : "take 32 (drop (nat index) full_code) =
+    word_rsplit (word_rcat (take 20 (drop (nat index) full_code)) :: 160 word) @ 
+    word_rsplit (word_rcat (take 4 (drop (20 + nat index) full_code)) :: 32 word) @ 
+    [0, 0, 0, 0, 0, 0, 0, 0]" using 8 Check Valid1 Valid2 Len1 Len2 Min2
+    take_add[of 20 12 "(drop (nat index) full_code)"]
+    take_add[of 4 8 "take 12 (drop (20 + nat index) full_code)"]
+    unfolding word_rsplit_rcat_size[OF Size1]
+    unfolding word_rsplit_rcat_size[OF Size2]
+    by(simp del: encode_int.simps decode_uint.simps)
+
+  show ?case using 8 Conc'1 Conc'2 Check Valid1 Valid2 Len1 Len2 Min2
+    by(auto simp add:Let_def function_value_valid_def divmod_nat_def word_size
         simp del: encode_int.simps decode_uint.simps)
-    apply(simp add: word_rsplit_rcat_size[OF Size1] word_rsplit_rcat_size[OF Size2])
-    apply(insert take_add[of 20 12 "(drop (nat index) full_code)"])
-    apply(simp)
-    apply(insert take_add[of 4 8 "take 12 (drop (20 + nat index) full_code)"])
-    apply(simp)
 next
   (* Farray *)
-  case (9 t n l)
-  then show ?case
-    apply(clarsimp)
-    apply(rotate_tac 1) apply(drule_tac mythin) apply(clarsimp)
-    apply(simp split:sum.splits if_split_asm)
-    apply(clarsimp)
-    apply(simp add:farray_value_valid_aux_def; clarsimp)
-    apply(drule_tac x = t in spec)
-    apply(clarsimp)
-    apply(drule_tac x = "length l" in spec)
-    apply(drule_tac x = index in spec) apply(clarsimp)
-    apply(drule_tac x = full_code in spec)
-    apply(clarsimp)
-    apply(simp add:list_all_iff)
-    apply(subgoal_tac " map abi_get_type l = replicate (length l) t")
-     apply(clarsimp)
+  case (9 t' n l)
+  obtain dec where Dec: "decode_static_tup (replicate n t') (index, full_code) = Ok dec"
+    using "9.prems"
+    by(cases "decode_static_tup (replicate n t') (index, full_code)"; auto)
 
-    apply(simp add:my_replicate_map list_all_iff)
-    done
+  then have V : "farray_value_valid_aux t' n dec" using "9.prems"
+    by(cases "farray_value_valid_aux t' n dec"; auto)
+
+  then show ?case using "9.prems" "9.IH"(1)[of "Vfarray t' n l" t' n index full_code] Dec
+                        my_replicate_map[of "abi_get_type" t' l]
+    by(auto simp add:farray_value_valid_aux_def list_all_iff)
 next
 (* Tuple *)
   case (10 ts vs)
-  then show ?case
-    apply(clarsimp)
-    apply(drule_tac mythin) apply(clarsimp)
-    apply(simp split:sum.splits if_split_asm)
-    apply(clarsimp)
-    apply(simp add:tuple_value_valid_aux_def; clarsimp)
-    apply(drule_tac x = ts in spec)
-    apply(clarsimp)
-    apply(drule_tac x = index in spec) apply(clarsimp)
-    apply(drule_tac x = full_code in spec)
-    apply(clarsimp)
-    apply(simp add:list_all_iff list_sum_def)
-     apply(clarsimp)
-    done
+
+  obtain dec where Dec: "decode_static_tup ts (index, full_code) = Ok dec"
+    using "10.prems"
+    by(cases "decode_static_tup ts (index, full_code) "; auto)
+
+  then have V : "tuple_value_valid_aux ts dec" using "10.prems"
+    by(cases "tuple_value_valid_aux ts dec"; auto)
+
+  then show ?case using "10.prems" "10.IH"(2)[of "Vtuple ts vs" ts index full_code] Dec
+    by(auto simp add:tuple_value_valid_aux_def list_all_iff list_sum_def)
 next
 (* Bytes *)
   case (11)
-  then show ?case apply(clarsimp)
-    done
+  then show ?case by auto
 next
 (* String *)
   case (12)
-  then show ?case by clarsimp
+  then show ?case by auto
 next
 (* Array *)
   case (13 t vs)
-  then show ?case by clarsimp
+  then show ?case by auto
 next
-
 (* Nil *)
   case 14
-  then show ?case
-    apply(clarsimp) apply(simp add:list_sum_def)
-    done
-(* Cons *)
-  case (15 v vs)
-  then show ?case
-    apply(clarsimp)
-    apply(rule_tac conjI)
-
+  {
     (* Farray *)
-     apply(rotate_tac 2) apply(drule_tac mythin) apply(clarsimp)
-     apply(case_tac n; clarsimp)
-     apply(simp split:sum.splits) apply(clarsimp)
-    apply(drule_tac x = "(abi_get_type v)" in spec) apply(rotate_tac -1) apply(clarsimp)
-     apply(drule_tac x = index in spec) apply(clarsimp)
-    apply(rotate_tac -1)
-    apply(drule_tac x = full_code in spec)
-     apply(clarsimp)
+    case 1
+    then show ?case by auto
+  next
+    (* Tuple *)
+    case 2
+    then show ?case by(auto simp add:list_sum_def)
+  }
+next
+(* Cons *)
+  case (15 v' vs)
+  {
+    (* Farray *)
+    case 1
+    then obtain n' where N' : "n = Suc n'" by(cases n; auto)
 
-    apply(cut_tac v = "abi_get_type v" in abi_static_size_nonneg)
+    then obtain dec where Dec : "decode_static (abi_get_type v') (index, full_code) = Ok dec"
+      using "1" by (cases "decode_static (abi_get_type v') (index, full_code)"; auto)
 
-     apply(subgoal_tac "nat index + nat (abi_static_size (abi_get_type v)) \<le> length full_code") apply(clarsimp)
-      apply(drule_tac x = "(abi_get_type v)" in spec) apply(clarsimp)
+    then obtain dec2 where Dec2 : "decode_static_tup (replicate n' (abi_get_type v'))
+                             (index + abi_static_size (abi_get_type v'), full_code) = Ok dec2"
+      using "1" N'
+      by(cases "decode_static_tup (replicate n' (abi_get_type v'))
+                             (index + abi_static_size (abi_get_type v'), full_code)";
+          auto)
 
-    apply(drule_tac x = nata in spec)
-      apply(drule_tac x = "index +  abi_static_size (abi_get_type v)" in spec)
-    apply(subgoal_tac "(0::int) \<le> index + abi_static_size (abi_get_type v)") apply(clarsimp)
-      apply(drule_tac x = full_code in spec)
-      apply(clarsimp)
+    have Dec' : "decode_static (abi_get_type v') (index, full_code) = Ok v'"
+      using 1 Dec Dec2 N' by(auto)
 
-      apply(subgoal_tac "nat (index + abi_static_size (abi_get_type v)) + nat (int nata * abi_static_size (abi_get_type v))
-\<le> length full_code") apply(clarsimp)
+    have Dec2' : "decode_static_tup (replicate n' (abi_get_type v'))
+                             (index + abi_static_size (abi_get_type v'), full_code) = Ok vs"
+      using 1 Dec Dec2 Dec' N' by(auto)
 
-    apply(subgoal_tac "nat (((1::int) + int nata) * abi_static_size (abi_get_type v)) =
-nat (abi_static_size (abi_get_type v)) + nat ((int nata) * abi_static_size (abi_get_type v))")
+    have Bound2 : "nat (index + abi_static_size (abi_get_type v')) +
+                   nat (int n' * abi_static_size (abi_get_type v'))
+                   \<le> length full_code"
+      using 1 N' nat_mult_distrib[of "1 + int n'"] nat_mult_distrib[of "int n'"]
+                 nat_add_distrib[of "1" "int n'"]
+      by(auto)
 
-    apply(clarsimp)
-        apply(simp add:take_add)
-    apply(subgoal_tac "(nat (abi_static_size (abi_get_type v)) + nat index) = (nat (index + nat (abi_static_size (abi_get_type v))))")
-         apply(clarsimp)
-         apply(clarsimp)
-    apply(arith)
+    hence Bound1 : "nat index + nat (abi_static_size (abi_get_type v')) \<le> length full_code"
+      using nat_add_distrib[of "index" "abi_static_size (abi_get_type v')"] 1
+      by(auto)
 
-    apply(simp add:Int.nat_mult_distrib)
-    apply(simp add:Int.nat_add_distrib)
+    have TakeDrop :
+    "\<And> codes .
+       take (nat (int n' * abi_static_size (abi_get_type v'))) 
+            (drop (nat (index + abi_static_size (abi_get_type v'))) full_code) = concat codes \<Longrightarrow>
+       take (nat ((1 + int n') * abi_static_size (abi_get_type v'))) (drop (nat index) full_code) =
+       take (nat (abi_static_size (abi_get_type v'))) (drop (nat index) full_code) @ concat codes"
+    proof-
+      fix codes :: "8 word list list"
+      assume H : "take (nat (int n' * abi_static_size (abi_get_type v'))) 
+            (drop (nat (index + abi_static_size (abi_get_type v'))) full_code) = concat codes"
 
-    apply(simp add:Int.nat_mult_distrib)
-    apply(simp add:Int.nat_add_distrib)
+      have Com : "(nat (abi_static_size (abi_get_type v')) + nat index) = 
+                  (nat (index + abi_static_size (abi_get_type v')))"
+        using abi_static_size_nonneg[of "abi_get_type v'"]  1
+        by(auto)
 
-      apply(arith)
+      show "take (nat ((1 + int n') * abi_static_size (abi_get_type v'))) 
+                 (drop (nat index) full_code) =
+       take (nat (abi_static_size (abi_get_type v'))) (drop (nat index) full_code) @ concat codes"
 
-    apply(simp add:Int.nat_mult_distrib)
-        apply(simp add:Int.nat_add_distrib)
+        using H nat_mult_distrib[of "1 + int n'"] nat_mult_distrib[of "int n'"]
+              nat_add_distrib[of "1" "int n'"] 
+        by(auto simp add:take_add Com)
+    qed
+
+    show ?case using "15.IH"(2)[of "Vfarray t n' vs" t n' 
+                                   "index + abi_static_size (abi_get_type v')" full_code]
+                          "15.IH"(1)[of t "index" full_code]
+                          1 N' Dec' Dec2' abi_static_size_nonneg[of "abi_get_type v'"] Bound2 Bound1 
+                          TakeDrop
+      by(auto)
+  next
 
     (* Tuple *)
-    apply(rotate_tac 1) apply(drule_tac mythin) apply(clarsimp)
-    apply(simp split:sum.splits) apply(clarsimp)
+    case 2
 
-    apply(drule_tac x = "(abi_get_type v)" in spec) apply(rotate_tac -1) apply(clarsimp)
-     apply(drule_tac x = index in spec) apply(clarsimp)
-    apply(rotate_tac -1)
-    apply(drule_tac x = full_code in spec)
-     apply(clarsimp)
+    then obtain dec where Dec : "decode_static (abi_get_type v') (index, full_code) = Ok dec"
+      using "2" by (cases "decode_static (abi_get_type v') (index, full_code)"; auto)
 
-    apply(drule_tac x = "(map abi_get_type vs)" in spec) apply(rotate_tac -1) apply(clarsimp)
-     apply(drule_tac x = "index + abi_static_size (abi_get_type v)" in spec) 
 
-    apply(cut_tac v = "abi_get_type v" in abi_static_size_nonneg)
+    then obtain dec2 where Dec2 : "decode_static_tup (map abi_get_type vs)
+                             (index + abi_static_size (abi_get_type v'), full_code) = Ok dec2"
+      using "2" 
+      by(cases "decode_static_tup (map abi_get_type vs)
+                             (index + abi_static_size (abi_get_type v'), full_code)";
+          auto)
 
-    apply(subgoal_tac "(0::int) \<le> index + abi_static_size (abi_get_type v)"; clarsimp)
-    apply(subgoal_tac "nat index + nat (abi_static_size (abi_get_type v)) \<le> length full_code") apply(clarsimp)
-    apply(drule_tac x = full_code in spec) apply(clarsimp)
+    have Dec' : "decode_static (abi_get_type v') (index, full_code) = Ok v'"
+      using 2 Dec Dec2  by(auto)
 
-     apply(subgoal_tac " nat (index + abi_static_size (abi_get_type v)) + nat (list_sum (map (abi_static_size \<circ> abi_get_type) vs)) \<le> length full_code")
-      apply(clarsimp)
+    have Dec2' : "decode_static_tup (map abi_get_type vs)
+                             (index + abi_static_size (abi_get_type v'), full_code) = Ok vs"
+      using 2 Dec Dec2 Dec'  by(auto)
 
-      apply(simp add:list_sum_def)
-    apply(cut_tac x = "(abi_static_size (abi_get_type v))" and i = 0
-and xs = "(map (abi_static_size \<circ> abi_get_type) vs)" in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
-      apply(clarsimp)
+    have Tl_nonneg : "0 \<le> foldl (+) 0 (map (abi_static_size \<circ> abi_get_type) vs)" 
+      using list_nonneg_sum[of "map (abi_static_size \<circ> abi_get_type) vs"] abi_static_size_nonneg 
+      unfolding list_sum_def list_nonneg_def 
+      by(auto simp add:list_all_iff)
 
-    apply(subgoal_tac
-"nat (abi_static_size (abi_get_type v) + foldl (+) (0::int) (map (abi_static_size \<circ> abi_get_type) vs)) =
-nat (abi_static_size (abi_get_type v)) + nat (foldl (+) (0::int) (map (abi_static_size \<circ> abi_get_type) vs))"  )
-      apply(simp add:take_add)
+    have Bound2 : "nat index + nat (foldl (+) (abi_static_size (abi_get_type v')) 
+                                   (map (abi_static_size \<circ> abi_get_type) vs)) \<le> length full_code"
+      using nat_add_distrib[of "index" "abi_static_size (abi_get_type v')"] 2
+            abi_static_size_nonneg[of "abi_get_type v'"]
+            sym[OF foldl_plus[of "abi_static_size (abi_get_type v')"  0
+                                 "(map (abi_static_size \<circ> abi_get_type) vs)"]]
+      by(auto simp add:list_sum_def)
 
-    apply(subgoal_tac "(nat (abi_static_size (abi_get_type v)) + nat index) = (nat (index + nat (abi_static_size (abi_get_type v))))")
-        apply(clarsimp)
+    hence Bound2' : "nat (index + abi_static_size (abi_get_type v')) + 
+                     nat (list_sum (map abi_static_size (map abi_get_type vs))) \<le> length full_code"
+      unfolding list_sum_def
+      using sym[OF foldl_plus[of "abi_static_size (abi_get_type v')"  0
+                                 "(map (abi_static_size \<circ> abi_get_type) vs)"]] 2
+      abi_static_size_nonneg[of "abi_get_type v'"]
+      nat_add_distrib Tl_nonneg
+      by(auto)
 
-    apply(clarsimp)
-    apply(arith)
+    have Bound1 : "nat index + nat (abi_static_size (abi_get_type v')) \<le> length full_code"
+      using nat_add_distrib[of "index" "abi_static_size (abi_get_type v')"] 2
+            abi_static_size_nonneg[of "abi_get_type v'"]
+            sym[OF foldl_plus[of "abi_static_size (abi_get_type v')"  0
+                                 "(map (abi_static_size \<circ> abi_get_type) vs)"]]
+            Tl_nonneg
+      by(auto simp add:list_sum_def)
 
-      apply(cut_tac l = " (map (abi_static_size \<circ> abi_get_type) vs)" in list_nonneg_sum)
-       apply(simp add:list_nonneg_def list_all_iff) apply(clarsimp)
-    apply(simp add:abi_static_size_nonneg)
-    apply(simp add:Int.nat_add_distrib list_sum_def)
 
-      apply(cut_tac l = " (map (abi_static_size \<circ> abi_get_type) vs)" in list_nonneg_sum)
-       apply(simp add:list_nonneg_def list_all_iff) apply(clarsimp)
-    apply(simp add:abi_static_size_nonneg)
-     apply(simp add:Int.nat_add_distrib list_sum_def)
+    have TakeDrop :
+    "\<And> codes .
+       take (nat (list_sum (map (abi_static_size \<circ> abi_get_type) vs)))
+            (drop (nat (index + abi_static_size (abi_get_type v'))) full_code) = concat codes \<Longrightarrow>
+       take (nat (list_sum (abi_static_size (abi_get_type v') # 
+                            map (abi_static_size \<circ> abi_get_type) vs)))
+            (drop (nat index) full_code) =
+       take (nat (abi_static_size (abi_get_type v'))) (drop (nat index) full_code) @ concat codes"
+    proof-
+      fix codes :: "8 word list list"
+      assume H : "take (nat (list_sum (map (abi_static_size \<circ> abi_get_type) vs)))
+            (drop (nat (index + abi_static_size (abi_get_type v'))) full_code) = concat codes"
 
-    apply(cut_tac x = "(abi_static_size (abi_get_type v))" and i = 0
-and xs = "(map (abi_static_size \<circ> abi_get_type) vs)" in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
-      apply(clarsimp)
-    apply(simp add:Int.nat_add_distrib)
+      have Com : "(nat (abi_static_size (abi_get_type v')) + nat index) = 
+                  (nat (index + abi_static_size (abi_get_type v')))"
+        using abi_static_size_nonneg[of "abi_get_type v'"]  2
+        by(auto)
 
-    apply(simp add:Int.nat_add_distrib)
-    apply(simp add:list_sum_def)
-      apply(cut_tac l = " (map (abi_static_size \<circ> abi_get_type) vs)" in list_nonneg_sum)
-       apply(simp add:list_nonneg_def list_all_iff) apply(clarsimp)
-    apply(simp add:abi_static_size_nonneg)
-    apply(simp add:Int.nat_add_distrib list_sum_def)
-    apply(cut_tac x = "(abi_static_size (abi_get_type v))" and i = 0
-and xs = "(map (abi_static_size \<circ> abi_get_type) vs)" in foldl_plus) apply(rotate_tac -1) apply(drule_tac sym)
-      apply(clarsimp)
-    apply(simp add:Int.nat_add_distrib)
-    done
+      show "take (nat (list_sum (abi_static_size (abi_get_type v') # 
+                            map (abi_static_size \<circ> abi_get_type) vs)))
+            (drop (nat index) full_code) =
+       take (nat (abi_static_size (abi_get_type v'))) (drop (nat index) full_code) @ concat codes"
 
+        using H nat_add_distrib[of "index" "abi_static_size (abi_get_type v')"]  2
+                sym[OF foldl_plus[of "abi_static_size (abi_get_type v')"  0
+                                 "(map (abi_static_size \<circ> abi_get_type) vs)"]]
+                nat_add_distrib[of "(abi_static_size (abi_get_type v'))"
+                                   "foldl (+) 0 (map (abi_static_size \<circ> abi_get_type) vs)"]
+                abi_static_size_nonneg[of "abi_get_type v'"] Tl_nonneg
+        by(auto simp add:take_add Com list_sum_def)
+    qed
+
+    show ?case using "15.IH"(3)[of "Vtuple (map abi_get_type vs) vs" "map abi_get_type vs"
+                                   "index + abi_static_size (abi_get_type v')" full_code
+                               ,OF refl _ _ Bound2' Dec2' refl]
+                          "15.IH"(1)[of "abi_get_type v'" "index" full_code
+                               ,OF _ _ Bound1 Dec' refl]
+                          2  abi_static_size_nonneg[of "abi_get_type v'"] 
+                          TakeDrop
+      by(auto simp del:  decode_static_tup.simps)
+  }
 qed
 
-lemma abi_decode_encode_static [rule_format]:
-"(\<forall> t index (full_code :: 8 word list) . 
-    decode_static t (index, full_code) = Ok v \<longrightarrow>
-    abi_type_valid t \<longrightarrow>
-    0 \<le> index \<longrightarrow>
-    nat index + nat (abi_static_size t) \<le> length full_code \<longrightarrow>
-   (abi_value_valid v \<and>
-   (\<exists> (code :: 8 word list) . encode_static v = Ok code \<and>
-       take (nat (abi_static_size t)) (drop (nat index) full_code) = code)))"
-  apply(clarsimp)
-  apply(cut_tac t = t in abi_decode_static_type_ok; simp?)
-  apply(cut_tac v = v in abi_decode_encode_static'; simp?)
-  apply(clarsimp)
-  done
-
+lemma abi_decode_encode_static :
+"decode_static t (index, full_code) = Ok v \<Longrightarrow>
+ abi_type_valid t \<Longrightarrow>
+ 0 \<le> index \<Longrightarrow>
+ nat index + nat (abi_static_size t) \<le> length full_code \<Longrightarrow>
+ (abi_value_valid v \<and>
+ (\<exists> (code :: 8 word list) . encode_static v = Ok code \<and>
+     take (nat (abi_static_size t)) (drop (nat index) full_code) = code))"
+  using abi_decode_static_type_ok[of t] abi_decode_encode_static'
+  by auto
 
 lemma Estatic_easier :
   "abi_type_isstatic (abi_get_type v) \<Longrightarrow>
