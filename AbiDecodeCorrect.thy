@@ -169,44 +169,36 @@ lemma int_length :
 
 lemma decode_uint_valid :
   "uint_value_valid 256 (decode_uint l)"
-  apply(clarsimp)
-  apply(cut_tac x = "(word_rcat (take (32::nat) l))"
-in decode_uint_max)
-  apply(simp add:uint_value_valid_def max_u256_def)
-  done
+  using decode_uint_max[of "word_rcat (take (32 :: nat) l)"]
+  by(simp add:uint_value_valid_def max_u256_def)
 
 (* lemmas for reasoning about byte padding *)
 lemma pad_bytes_skip_padding :
 "length (pad_bytes l) =
  skip_padding (length l)"
-  apply(simp split:prod.splits)
-  apply(clarsimp)
-  apply(case_tac x2; clarsimp)
-  apply(simp add:divmod_nat_def)
-  apply(clarsimp)
-  apply(arith)
-  done
+proof-
+  obtain dv md where DM : "divmod_nat (length l) 32 = (dv, md)"
+    by(cases "divmod_nat (length l) 32"; auto)
+
+  show "length (pad_bytes l) =
+        skip_padding (length l)" using DM
+    by(cases md; auto simp add: divmod_nat_def)
+qed
 
 lemma take_min :
 "take (min (length l) n) l = take n l"
 proof(induction l arbitrary: n)
   case Nil
-  then show ?case apply(clarsimp) done
+  then show ?case by auto
 next
   case (Cons a l)
   then show ?case
-    apply(clarsimp)
-    apply(case_tac n; clarsimp)
-    done
+    by(cases n; auto)
 qed
 
 lemma skip_padding_gt :
   "n \<le> skip_padding n"
-  apply(clarsimp)
-  apply(simp add:divmod_nat_def)
-  apply(case_tac "n mod 32"; clarsimp)
-  apply(arith)
-  done
+  by(cases "n mod 32"; auto simp add:divmod_nat_def)
 
 lemma pad_bytes_len_gt :
   "length bs \<le> length (pad_bytes bs)"
@@ -239,34 +231,56 @@ next
 qed
 
 lemma check_padding_pad_bytes :
-"check_padding n l \<Longrightarrow>
-pad_bytes (take n l) = take (length (pad_bytes (take n l))) l"
-  apply(simp split:prod.splits)
-  apply(clarsimp) apply(simp add:Let_def)
-  apply(case_tac x2; clarsimp)
-   apply(case_tac x2a; clarsimp)
-    apply(simp only:take_min)
+  assumes H : "check_padding n l"
+  shows "pad_bytes (take n l) = take (length (pad_bytes (take n l))) l"
+proof-
 
-  apply(subgoal_tac "min (length l) n = n")
-    apply(clarsimp)
-  apply(arith)
+  obtain dv md where DM : "divmod_nat (length l) 32 = (dv, md)"
+    by(cases "divmod_nat (length l) 32"; auto)
 
-  apply(case_tac x2a; clarsimp)
-  apply(subgoal_tac "min (length l) n = n")
-    apply(clarsimp)
-  apply(simp add:divmod_nat_def; clarsimp)
-  apply(arith)
+  obtain dv' md' where DM' :  "divmod_nat n 32 = (dv', md')"
+    by(cases "divmod_nat n 32"; auto)
 
-  apply(subgoal_tac "min (length l) n = n")
-   apply(clarsimp)
-   apply(simp add:List.drop_take)
+  have Min : "min (length l) n = n" using H DM DM'
+  proof(cases md')
+    case 0
+    then show ?thesis using H DM DM'
+      by(auto simp add:Let_def)
+  next
+    case (Suc nat)
+    then show ?thesis using H DM DM'
+      by(auto simp add:Let_def divmod_nat_def)
+  qed
 
-  apply(simp add:List.take_add)
+  show ?thesis
+  proof(cases md')
+    case 0
+    then show ?thesis using H DM DM' Min
+      by(auto simp add:Let_def)
+  next
+    case (Suc nat)
+    then show ?thesis using H DM DM' Min
+      by(auto simp add:Let_def divmod_nat_def List.drop_take List.take_add)
+  qed
+qed
 
-  apply(simp add:divmod_nat_def; clarsimp)
-  apply(arith)
-  done
+lemma check_padding_pad_bytes' :
+  assumes H : "check_padding n l"
+  shows "pad_bytes (take n l) = take (skip_padding n) l"
+proof-
 
+  have "skip_padding n \<le> length l" using H
+    by(auto simp add:Let_def)
+  hence Lt : "n \<le> length l" using skip_padding_gt[of n] by auto
+  hence Min : "min (length l) n = n" by auto
+  hence Len : "(length (take n l)) = n" by auto
+
+  show ?thesis
+    using check_padding_pad_bytes[OF H]
+    unfolding pad_bytes_skip_padding Len by simp
+qed
+
+(* lemmas for string <-> bytes conversion *)
 lemma bytes_to_string_to_bytes :
   "bytes_to_string (string_to_bytes l) = l"
 proof(induction l)
@@ -274,14 +288,8 @@ proof(induction l)
   then show ?case by auto
 next
   case (Cons a l)
-  then show ?case 
-    apply(clarsimp)
-    apply(simp add: uint_word_of_int)
-      apply(simp add:word_of_int char_of_integer_def integer_of_char_def
-uint_word_of_int)
-      apply(cut_tac x = "of_char a" and xa = 256 in modulo_integer.rep_eq)
-    apply(clarsimp)
-    done
+  then show ?case using modulo_integer.rep_eq[of "of_char a" 256]
+    by(simp add:word_of_int char_of_integer_def integer_of_char_def uint_word_of_int)
 qed
 
 lemma string_to_bytes_to_string :
@@ -291,12 +299,8 @@ proof(induction l)
   then show ?case by auto
 next
   case (Cons a l)
-  then show ?case 
-    apply(clarsimp)
-    apply(simp add:word_of_int char_of_integer_def integer_of_char_def uint_idem)
-      apply(cut_tac w = a in uint_idem)
-    apply(clarsimp)
-    done
+  then show ?case using uint_idem[of a]
+    by(auto simp add:word_of_int char_of_integer_def integer_of_char_def uint_idem)
 qed
 
 (* static encoder success implies static decoder success
@@ -3466,6 +3470,11 @@ next
   qed
 qed
 
+lemma check_padding_skip_padding :
+"check_padding n l \<Longrightarrow>
+ skip_padding n \<le> length l"
+  by(auto simp only:Let_def check_padding.simps)
+
 (* Decoder implies specification (can_encode_as) *)
 (* The nesting of quantifiers here in the second clause appears to be necessary
    in order to prevent Isabelle's automation from reassociating the clauses
@@ -3620,760 +3629,417 @@ next
     by(auto simp add:decode'.simps simp del: decode_static.simps
             split:if_split_asm sum.split_asm)
 next
-  (* Vfarray *)
-  case (9 t n l) then show ?case
+(* Vfarray *)
+  case (9 t' n' l')
+  show ?case
+  proof(cases "abi_type_isstatic t'")
+    case True
+    then show ?thesis using "9.prems"
+      abi_decode_encode_static[of t start full_code "(Vfarray t' n' l')"]
+      Estatic_easier[of "(Vfarray t' n' l')"]
+      by(auto simp add:decode'.simps simp del: decode_static.simps
+            split:if_split_asm sum.split_asm)
+  next
+    case False
 
-    apply(clarsimp)
-    apply(rotate_tac 1) apply(drule_tac mythin) apply(drule_tac mythin)
-    apply(clarsimp)
-      apply(simp add:decode'.simps Let_def del: decode_static.simps split:if_splits sum.splits prod.splits)
+    obtain heads' tails' count' bytes where
+      Heads : "decode'_dyn_tuple_heads (replicate n' t') 0 (start, full_code) = 
+                Ok (heads', tails', count', bytes)" using "9.prems" False
+      by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
 
-(* static *)
-    apply(rotate_tac 1) apply(drule_tac mythin) (* don't need inductive hypothesis *)
-          apply(clarify)
-        apply(simp add:Let_def decode'.simps del: decode_static.simps split:if_splits sum.splits)
-        apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
-        apply(clarify)
-       apply(simp add:abi_static_size_nonneg)
-       apply(simp add:Int.nat_mult_distrib)   
-     apply(cut_tac v = t in abi_static_size_nonneg) 
-    apply(simp split:sum.splits)
+    then obtain bytes' where
+      Tails : "decode'_dyn_tuple_tails tails' (replicate n' t') heads' count' (start, full_code) =
+                Ok (l', bytes')" using "9.prems" False
+      by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
 
-      apply(rule_tac Estatic_easier; (simp del:encode_static.simps)?)
+    have Min : "(int (min (length full_code) (nat start))) = start"
+      using "9.prems"
+      by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
 
-      apply(simp add:Int.nat_add_distrib)
-       apply(cut_tac v = t in abi_static_size_nonneg) 
-      apply(clarsimp)
-     apply(simp add:abi_static_size_nonneg)
-       apply(simp add:Int.nat_mult_distrib)   
+    obtain heads head_types tails where
+      IH_spec :
+      " abi_value_valid (Vfarray t' n' l') \<and>
+        is_head_and_tail l' heads head_types tails \<and>
+        can_encode_as (Vtuple head_types heads) 
+          (take (nat start) full_code @ [] @ drop (nat start) full_code)
+          (int (length (take (nat start) full_code)) + int (length [])) \<and>
+        (\<forall>offset v.
+            (offset, v) \<in> set tails \<longrightarrow>
+            can_encode_as v (take (nat start) full_code @ [] @ 
+              drop (nat start) full_code) (int (length (take (nat start) full_code)) + offset)) \<and>
+        those (map2 ht_combine heads' 
+          (map (\<lambda>a. case a of 
+            None \<Rightarrow> None 
+            | Some t \<Rightarrow> Some (t - int (length (take (nat start) full_code)))) tails')) =
+        Some heads \<and>
+        map (\<lambda>x. fst x + int (length (take (nat start) full_code))) tails = somes tails' \<and> 
+        ht_wellbehaved tails' (map abi_get_type l') heads'"
+      using  False "9.prems" Heads Tails
+             "9.IH"(1)[of "Vfarray t' n' l'" t' n' "[]" "take (nat start) full_code"
+                          "drop (nat start) full_code" heads' 
+                          tails' count' bytes count' bytes'] Min
+      by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
 
-(* dynamic *)
-     apply(drule_tac x = t in spec)
-     apply(clarsimp) apply(drule_tac x = n in spec)
-     apply(drule_tac x = "take (nat start) full_code" in spec)
-    apply(drule_tac x = "[]" in spec) apply(clarsimp)
-     apply(drule_tac x = "drop (nat start) full_code" in spec) apply(clarsimp)
-     apply(drule_tac x = x1a in spec)
-     apply(drule_tac x = x1b in spec)
+    have Offs' : 
+      "(\<And>offset v. (offset, v) \<in> set tails \<Longrightarrow> can_encode_as v full_code (offset + start))"
+    proof-
+      fix offset v
+      assume Hin : "(offset, v) \<in> set tails"
+      then show "can_encode_as v full_code (offset + start)"
+      using IH_spec Min unfolding add.commute[of "offset" "start"]
+       by(auto)
+    qed
 
-    apply(subgoal_tac "int (min (length full_code) (nat start)) = start")
-
-      apply(clarsimp)
-      apply(subgoal_tac "(\<exists>(count''::int) bytes'::int. decode'_dyn_tuple_tails x1b (replicate n t) x1a count'' (start, full_code) = Ok (l, bytes'))")
-    apply(clarsimp)
-
-     apply(rule_tac Efarray_dyn; simp?)
-      apply(drule_tac x = "offset" in spec) apply(drule_tac x = v in spec) apply(clarsimp)
-       apply(simp add:add.commute)
-
-      apply(fastforce)
-
-    apply(arith)
-    done
+    show ?thesis using False "9.prems" Heads Tails IH_spec Min Offs'
+                             Efarray_dyn[of t' n' l' heads head_types tails full_code start]
+      by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
+  qed
 next
 (* Vtuple *)
   case (10 ts vs)
-  then show ?case
-        apply(clarsimp)
-    apply(drule_tac mythin) apply(rotate_tac 1) apply(drule_tac mythin)
-    apply(clarsimp)
-    apply(simp add:decode'.simps Let_def del: decode_static.simps split:if_splits sum.splits prod.splits)
+  show ?case
+  proof(cases "abi_type_isstatic (Ttuple ts)")
+    case True
+    then show ?thesis using "10.prems"
+      abi_decode_encode_static[of t start full_code "(Vtuple ts vs)"]
+      Estatic_easier[of "(Vtuple ts vs)"]
+      by(auto simp add:decode'.simps simp del: decode_static.simps
+            split:if_split_asm sum.split_asm)
+  next
+    case False
 
-(* static *)
-        apply(clarify)
-        apply(simp add:Let_def decode'.simps del: decode_static.simps split:if_splits sum.splits)
-        apply(drule_tac abi_decode_encode_static; (simp del:encode_static.simps)?)
-        apply(clarify)
-        apply(simp add:abi_static_size_nonneg)
-        apply(cut_tac l = "(map abi_static_size ts)" in list_nonneg_sum)
-         apply(simp add:list_nonneg_def) apply(simp add:list_all_iff) apply(clarsimp)
-         apply(simp add:abi_static_size_nonneg)
+    obtain heads' tails' count' bytes where
+      Heads : "decode'_dyn_tuple_heads (ts) 0 (start, full_code) = 
+                Ok (heads', tails', count', bytes)" using "10.prems" False
+      by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
 
-      apply(simp add:list_sum_def)
+    then obtain bytes' where
+      Tails : "decode'_dyn_tuple_tails tails' (ts) heads' count' (start, full_code) =
+                Ok (vs, bytes')" using "10.prems" False
+      by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
 
-      apply(rule_tac Estatic_easier; (simp del:encode_static.simps)?)
-       apply(simp add:Int.nat_add_distrib)
+    have Min : "(int (min (length full_code) (nat start))) = start"
+      using "10.prems"
+      by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
 
+    obtain heads head_types tails where
+      IH_spec :
+      " abi_value_valid (Vtuple ts vs) \<and>
+        is_head_and_tail vs heads head_types tails \<and>
+        can_encode_as (Vtuple head_types heads) 
+          (take (nat start) full_code @ [] @ drop (nat start) full_code)
+          (int (length (take (nat start) full_code)) + int (length [])) \<and>
+        (\<forall>offset v.
+            (offset, v) \<in> set tails \<longrightarrow>
+            can_encode_as v (take (nat start) full_code @ [] @ 
+              drop (nat start) full_code) (int (length (take (nat start) full_code)) + offset)) \<and>
+        those (map2 ht_combine heads' 
+          (map (\<lambda>a. case a of 
+            None \<Rightarrow> None 
+            | Some t \<Rightarrow> Some (t - int (length (take (nat start) full_code)))) tails')) =
+        Some heads \<and>
+        map (\<lambda>x. fst x + int (length (take (nat start) full_code))) tails = somes tails' \<and> 
+        ht_wellbehaved tails' (map abi_get_type vs) heads'"
 
-(* dynamic *)
-     apply(drule_tac x = ts in spec)
-     apply(clarsimp) 
-     apply(drule_tac x = "take (nat start) full_code" in spec)
-    apply(drule_tac x = "[]" in spec) apply(clarsimp)
-     apply(drule_tac x = "drop (nat start) full_code" in spec) apply(clarsimp)
-     apply(drule_tac x = x1a in spec)
-     apply(drule_tac x = x1b in spec)
+      using False "10.prems" Heads Tails
+                  "10.IH"(2)[of "Vtuple ts vs" ts "[]" "take (nat start) full_code"
+                                "drop (nat start) full_code" heads'
+                                tails' count' bytes count' bytes'] Min
+      by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
 
-    apply(subgoal_tac "int (min (length full_code) (nat start)) = start")
-
-      apply(clarsimp)
-      apply(subgoal_tac "\<exists>(count'::int) bytes::int. decode'_dyn_tuple_heads ts (0::int) (int (min (length full_code) (nat start)), full_code) = Ok (x1a, x1b, count', bytes)")
-    apply(clarsimp)
-
-       apply(subgoal_tac "(\<exists>(count''::int) bytes'::int. decode'_dyn_tuple_tails x1b ts x1a count'' (start, full_code) = Ok (vs, bytes'))")
-    apply(clarsimp)
-
-    apply(simp add:list_ex_iff) apply(clarsimp)
-     apply(rule_tac t = x in Etuple_dyn; simp?)
-      apply(drule_tac x = "offset" in spec) apply(drule_tac x = v in spec) apply(clarsimp)
-       apply(simp add:add.commute)
-
-       apply(fastforce)
-
-apply(fastforce)
-
-    apply(arith)
-
-    
-    done
+    have Offs' : 
+      "(\<And>offset v. (offset, v) \<in> set tails \<Longrightarrow> can_encode_as v full_code (offset + start))"
+    proof-
+      fix offset v
+      assume Hin : "(offset, v) \<in> set tails"
+      then show "can_encode_as v full_code (offset + start)"
+      using IH_spec Min unfolding add.commute[of "offset" "start"]
+       by(auto)
+    qed
+      
+    show ?thesis using False "10.prems" Heads Tails IH_spec Min Offs'
+                             Etuple_dyn[of ts vs _ heads head_types tails full_code start]
+      by(auto simp add:decode'.simps Let_def list_ex_iff split: if_split_asm sum.split_asm)
+  qed
 next
 (* Vbytes *)
   case (11 x)
 
-  thus ?case
-    apply(clarsimp)
-    apply(simp add:decode'.simps Let_def)
-    apply(simp add:split:if_splits del:decode_uint.simps)
-    apply(simp add:Let_def del:decode_uint.simps)
-    apply(simp add: Let_def split:if_splits del:check_padding.simps skip_padding.simps decode_uint.simps)
-    apply(clarify)
-
-    apply(subgoal_tac
-"(int (min (length full_code - ((32::nat) + nat start)) (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))))
-= int (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))")
-       apply(simp del:check_padding.simps decode_uint.simps skip_padding.simps)
-    apply(simp add: Let_def split:if_splits del:check_padding.simps skip_padding.simps decode_uint.simps)
-
-    apply(cut_tac
-l = "(take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code))"
-and pre = "take (nat start) full_code"
-and post = "(drop (nat start) (drop 32 (drop (skip_padding (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))) full_code)))"
-and count = "take 32 (drop (nat start) full_code)"
-in Ebytes)
-
-    apply(simp del:check_padding.simps pad_bytes.simps skip_padding.simps decode_uint.simps)
-    apply(simp add:bytes_value_valid_def Let_def del:skip_padding.simps decode_uint.simps)
-
-
-    apply(simp add: decode_uint_valid del:decode_uint.simps)
-         apply(simp add:uint_value_valid_def del:pad_bytes.simps)
-
-    apply(simp (no_asm_simp))
-
-       apply(arith)
-
-       apply(rule_tac Estatic_easier)
-    apply(simp (no_asm))
-    apply(simp (no_asm))
-
-    apply(cut_tac l = "(take (32::nat) (drop (nat start) full_code))"
-in decode_uint_valid)
-    apply(simp)
-
-    apply(rotate_tac 1)
-          apply(drule_tac mythin) apply(drule_tac mythin)
-    apply(rotate_tac 1)
-    apply(drule_tac mythin) apply(drule_tac mythin)
-          apply(drule_tac mythin) 
-
-    apply(simp)
-
-         apply(simp only: encode_static.simps)
-
-        apply(simp)
-
-
-       apply(subgoal_tac "min (length full_code - nat start) 32 = 32")
-        apply(arith)
-       apply(arith)
-
-      apply(simp (no_asm) del:decode_uint.simps split:prod.split)
-    apply(clarify)
-
-    apply(simp del: decode_uint.simps add:uint_value_valid_def)
-       apply(subgoal_tac "min (length full_code - nat start) 32 = 32")
-
-    apply(simp del:decode_uint.simps)
-
-    apply(cut_tac l = "(take (32::nat) (drop (nat start) full_code))"
-in decode_uint_valid)
-
-    apply(simp)
-
-        apply(rule_tac "word_rsplit_rcat_size")
-        apply(simp (no_asm_simp) add:word_size)    
-
-       apply(clarsimp)
-    apply(subgoal_tac
-"0 \<le> decode_uint (take (32::nat) (drop (nat start) full_code))")
-       apply(arith)
-    apply(simp only:decode_uint.simps uint_0)
-
-    apply(subgoal_tac
-"(take (nat start) full_code @
-         take (32::nat) (drop (nat start) full_code) @
-pad_bytes (take (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))) (drop ((32::nat) + nat start) full_code)) @
-         drop (nat start) (drop (32::nat) (drop (skip_padding (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))) full_code)))
-=
-full_code") apply(simp only:)
-
-
-    apply(subgoal_tac
-"(skip_padding (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))) =
-length (pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)))")
-    apply(simp only: split:prod.splits nat.split_asm)
-
-(*
-    apply(simp del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps split:prod.splits)
-         apply(simp only:List.append_eq_conv_conj)
-*)
-        apply(subgoal_tac "(int (length (take (nat start) full_code))) = start")
-         apply(simp only:)
-
-
-         apply(subgoal_tac "(min (length full_code) (nat start)) = nat start")
-         apply(simp (no_asm_simp))
-
-         apply(simp del:pad_bytes.simps skip_padding.simps check_padding.simps decode_uint.simps split:prod.splits)
-
-
-    apply(subgoal_tac
-"0 \<le> decode_uint (take (32::nat) (drop (nat start) full_code))")
-    apply(rotate_tac 1) apply(rotate_tac 1)
-       apply(arith)
-    apply(simp only:decode_uint.simps uint_0)
-
-
-
-    apply(simp only:pad_bytes_skip_padding)
-    apply(simp (no_asm_simp) del:skip_padding.simps)
-       apply(frule_tac check_padding_pad_bytes) 
-          apply(subgoal_tac "min (length full_code - nat start) (32::nat) = 32")
-
-    apply(subgoal_tac "min (length full_code - ((32::nat) + nat start)) (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))
-= (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))")
-    apply(simp only: decode_uint.simps)
-            apply(simp del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps)
-
-
-        apply(simp only:decode_uint.simps)
-(*
-    apply(subgoal_tac
-"(nat start + ((32::nat) + length (pad_bytes (take (nat (uint (word_rcat ( (take (32::nat) (drop (nat start) full_code)))))) (drop ((32::nat) + nat start) full_code)))))
-= (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)) + ((32::nat) + nat start))")
-             apply(rotate_tac -1)
-*)
-
-    apply(drule_tac x = "int (min (length full_code - ((32::nat) + nat start)) (nat (uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))) :: 256 word))))"
-and f = nat
-in arg_cong)
-    apply(simp only: nat_int)
-
-    apply(subgoal_tac
-"(take (32::nat) (take (32::nat) (drop (nat start) full_code)) =
-(take (32 :: nat) (drop (nat start) full_code)))")
-    apply(simp only:)
-
-        apply(simp (no_asm_simp))
-    apply(subgoal_tac
-"0 \<le> decode_uint (take (32::nat) (drop (nat start) full_code))")
-            apply(simp only: decode_uint.simps)
-            apply(rotate_tac -3)
-        apply(drule_tac f = nat in arg_cong) apply(simp only:nat_int)
-
-    apply(rotate_tac 1)
-        apply(drule_tac mythin)
-    apply(rotate_tac 3)
-        apply(drule_tac mythin)
-    apply(drule_tac mythin) apply(drule_tac mythin)
-          apply(drule_tac mythin) 
-    apply(arith)
-
-    apply(simp (no_asm_simp))
-
-    apply(simp (no_asm_simp) del:skip_padding.simps pad_bytes.simps )
-
-    apply(frule_tac check_padding_pad_bytes)
-    apply(simp only: pad_bytes_skip_padding)
-
-    apply(frule_tac s =
-"pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code))"
-and t = 
-"take (skip_padding (length (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code))))
-        (drop ((32::nat) + nat start) full_code)"
-and P = "(\<lambda> pb . 
-take (nat start) full_code @
-       take (32::nat) (drop (nat start) full_code) @
-       pb @
-       drop (nat start + ((32::nat) + skip_padding (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))))) full_code =
-       full_code)"
-in subst)
-
-    apply(subgoal_tac
-"take (32::nat) (drop (nat start) full_code) @
-       pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)) @
-       drop (nat start + ((32::nat) + skip_padding (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))))) full_code
-= drop (nat start) full_code")
-
-    apply(simp only: decode_uint.simps)
-    apply(simp (no_asm_simp) del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps List.drop_drop)
-
-    apply(subgoal_tac
-" pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)) @
-       drop (nat start + ((32::nat) + skip_padding (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))))  full_code
-=
-drop (32 :: nat) (drop (nat start) full_code)")
-    apply(simp only: decode_uint.simps)
-    apply(simp (no_asm_simp) del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps List.drop_drop)
-
-    apply(simp only: decode_uint.simps)
-
-       apply(subgoal_tac "drop (nat start + ((32::nat) + skip_padding (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))))) full_code
-=drop (skip_padding  (length (take (nat (uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))) :: 256 word)))
-(drop ((32::nat) + nat start) full_code)))) (drop ((32::nat) + nat start) full_code)")
-
-    apply(simp (no_asm_simp) del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps List.drop_drop)
-    apply(simp only:List.drop_drop)
-       apply(simp only:List.drop_drop)
-    apply(simp (no_asm_simp) del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps List.drop_drop)
-
-    apply(rule_tac arg_cong)
-
-    apply(subgoal_tac
-"(nat start + ((32::nat) + skip_padding (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))))
-=
-(skip_padding (min (length full_code - ((32::nat) + nat start)) (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))) + ((32::nat) + nat start)) ")
-        apply(simp only:)
-
-    apply(subgoal_tac
-" (min (length full_code - ((32::nat) + nat start)) (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))) = 
-(nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))")
-        apply(simp only:)
-
-       apply(subgoal_tac "
-length full_code - ((32::nat) + nat start) \<ge> (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))"
-)
-        apply(simp only: decode_uint.simps )
-        apply(rotate_tac -1)
-        apply(drule_tac min_absorb2)
-
-
-    apply(subgoal_tac "(take (32::nat) (take (32::nat) (drop (nat start) full_code))) = ((take (32::nat) (drop (nat start) full_code)))")
-    apply(simp only:)
-        apply(simp (no_asm_simp))
-
-
-       apply(rotate_tac 2)
-      apply(drule_tac mythin)
-    apply(drule_tac mythin)
-      apply(drule_tac mythin)
-       apply(drule_tac mythin)
-apply(drule_tac mythin)
-
-       apply(subgoal_tac "0 \<le> uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))))")
-        apply(fastforce)
-    apply(simp)
-
-
-    apply(subgoal_tac
-"take (skip_padding (length (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)))) (drop ((32::nat) + nat start) full_code)
-=
-pad_bytes (take (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))) (drop ((32::nat) + nat start) full_code))")
-
-    apply(simp only: decode_uint.simps)
-      apply(simp only: decode_uint.simps)
-
-    apply(subgoal_tac "(take (32::nat) (take (32::nat) (drop (nat start) full_code))) = ((take (32::nat) (drop (nat start) full_code)))")
-    apply(simp only:)
-        apply(simp (no_asm_simp))
-
-    apply(simp )
-
-     apply(arith)
-    done
+  have Hyps : "0 \<le> start" 
+              "32 + start \<le> int (length full_code)" 
+              "decode_uint (take 32 (drop (nat start) full_code)) + 32 + start \<le> 
+               int (length full_code)" 
+              "check_padding (nat (decode_uint (take 32 (drop (nat start) full_code))))
+                             (drop (32 + nat start) full_code)"
+              "take (nat (decode_uint (take 32 (drop (nat start) full_code))))
+                    (drop (32 + nat start) full_code) = x"
+              "int (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code))))) + 
+                    32 = len"
+    using 11 
+    by(auto simp add:decode'.simps Let_def bytes_value_valid_def split:if_split_asm 
+              simp del: decode_uint.simps check_padding.simps skip_padding.simps)
+
+  have Gt0 : "0 \<le> (decode_uint (take 32 (drop (nat start) full_code)))" 
+    by auto
+
+  have Min1 : "nat (decode_uint (take 32 (drop (nat start) full_code))) \<le> 
+                    length full_code - (32 + nat start)"
+    using Hyps(1) Hyps(3)
+    by(auto)
+
+  have Min1A :
+  "(int (min (length full_code - (32 + nat start))
+    (nat (decode_uint (take 32 (drop (nat start) full_code)))))) =
+    (decode_uint (take 32 (drop (nat start) full_code)))"
+    using Hyps(3)
+          min_absorb2[OF Min1] Gt0
+    by(auto simp del:decode_uint.simps)  
+
+  have Min2 : " (int (min (length full_code) (nat start))) = start"
+    using Hyps(1) Hyps(2) by(auto)
+
+  have Min2 :
+  "(min (length full_code - (32 + nat start))
+        (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))))) =
+   (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))))"
+    using min_absorb2[OF check_padding_skip_padding[OF Hyps(4)]]
+    by(auto simp add: Let_def simp del: pad_bytes.simps decode_uint.simps skip_padding.simps)
+
+  have Comm:
+    "32 + nat start + skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))) =
+    (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))) + (32 + nat start))"
+    by(auto)
+
+  have Min3 : "(min (length full_code) (nat start)) = (nat start)"
+    using Hyps(2) by auto
+
+  have Min4 : "min (length full_code - nat start) 32 = 32"
+    using Hyps(1) Hyps(2) Hyps(3) by auto
+
+  have Min5 : "(min (length full_code - (32 + nat start)) 
+                    (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))))) =
+               (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))))"
+    using min_absorb2[OF check_padding_skip_padding[OF Hyps(4)]]
+    by(auto simp del: pad_bytes.simps decode_uint.simps skip_padding.simps)
+
+
+  have Conc' :
+    "can_encode_as 
+      (Vbytes (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) 
+                    (drop (32 + nat start) full_code)))
+      ((take (nat start) full_code) @ (take 32 (drop (nat start) full_code)) @
+       pad_bytes (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) 
+                   (drop (32 + nat start) full_code)) @
+       (drop (32 + nat start + (skip_padding 
+            (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))))
+              full_code)) 
+      (int (length (take (nat start) full_code)))"
+  proof(rule Ebytes[OF _ refl])
+    show "abi_value_valid (Vbytes (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) 
+                                        (drop (32 + nat start) full_code)))"
+      using Hyps 
+      by(auto simp add:decode'.simps Let_def bytes_value_valid_def Min1A decode_uint_valid 
+              split:if_split_asm 
+              simp del: decode_uint.simps check_padding.simps skip_padding.simps)
+  next
+    show "length (take 32 (drop (nat start) full_code)) = 32"
+      using Hyps(1) Hyps(2) by(auto)
+  next
+    show "can_encode_as
+          (Vuint 256 
+            (int (length (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) 
+                                   (drop (32 + nat start) full_code)))))
+         (take (nat start) full_code @
+          take 32 (drop (nat start) full_code) @
+          pad_bytes (take (nat (decode_uint (take 32 (drop (nat start) full_code))))
+                    (drop (32 + nat start) full_code)) @
+          drop (32 + nat start + (skip_padding 
+                (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))))) full_code)
+         (int (length (take (nat start) full_code)))"
+    proof(rule Estatic; (simp; fail)?)
+      show "abi_value_valid (Vuint 256 (int (length (take (nat (decode_uint 
+              (take 32 (drop (nat start) full_code)))) (drop (32 + nat start) full_code)))))"
+        using min_absorb2[OF Min1] Gt0 decode_uint_valid
+        by(auto simp del: decode_uint.simps pad_bytes.simps)
+    next
+      have "32 \<le> length full_code - nat start" using Hyps(1) Hyps(2) by(auto)
+
+      thus "encode_static (Vuint 256 (int (length (take (nat (decode_uint 
+              (take 32 (drop (nat start) full_code)))) (drop (32 + nat start) full_code))))) = 
+            Ok (take 32 (drop (nat start) full_code))"
+        using min_absorb2[OF Min1] Gt0 uint_reencode[of "(drop (nat start) full_code)"]
+        by(auto simp del: pad_bytes.simps)
+    qed
+  qed
+
+  have ListPart : "(take (nat start) full_code @
+      take 32 (drop (nat start) full_code) @
+      pad_bytes (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) (drop (32 + nat start) full_code)) @
+      drop (32 + nat start + (skip_padding 
+            (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))))) full_code)
+  = full_code"
+    unfolding check_padding_pad_bytes'[OF Hyps(4)] 
+    unfolding append_eq_conv_conj 
+    using Min3 Min4 Min5
+    by(auto simp add: Comm simp del: pad_bytes.simps decode_uint.simps skip_padding.simps)
+
+  show ?case using Conc' unfolding ListPart
+    unfolding Hyps using Min3 Hyps(1) by(simp)
 next
 (* Vstring *)
-  case (12 x)
-  then show ?case
-
-    apply(clarsimp)
-    apply(simp add:decode'.simps Let_def)
-    apply(simp add:split:if_splits del:decode_uint.simps)
-    apply(simp add:Let_def del:decode_uint.simps)
-    apply(simp add:split:if_splits del:check_padding.simps bytes_to_string.simps skip_padding.simps decode_uint.simps)
-    apply(simp add:Let_def del:decode_uint.simps)
-    apply(simp add:split:if_splits del:check_padding.simps bytes_to_string.simps skip_padding.simps decode_uint.simps)
-
-(*    apply(clarify) *)
-
-    apply(subgoal_tac
-"(int (min (length full_code - ((32::nat) + nat start)) (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))))
-= int (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))")
-       apply(simp del:check_padding.simps decode_uint.simps skip_padding.simps bytes_to_string.simps split:if_splits)
-
-    apply(rule_tac Estring; (simp (no_asm) del:decode_uint.simps string_to_bytes.simps bytes_to_string.simps)?)
-
-    apply(simp only: string_value_valid_def)
-         apply(drule_tac mythin) apply(drule_tac mythin)
-       apply(drule_tac mythin)
-       (*apply(drule_tac mythin)
-      apply(drule_tac mythin) apply(drule_tac mythin)
-apply(drule_tac mythin)  *)
-    apply(simp  add: decode_uint_valid string_value_valid_def del:decode_uint.simps)
-    apply(simp  add:uint_value_valid_def)
-
-    apply(subgoal_tac
-"length x =
-length ((take (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))) (drop ((32::nat) + nat start) full_code)))")
-    apply(simp only:)
-    apply(simp add: string_to_bytes_to_string del: check_padding.simps bytes_to_string.simps string_to_bytes.simps skip_padding.simps decode_uint.simps)
-    apply(cut_tac x = "(word_rcat (take (32::nat) (drop (nat start) full_code)))"
-in decode_uint_max) apply(simp add:max_u256_def)
-       apply(drule_tac f = length in arg_cong)
-    apply(simp)
-
-    apply(subgoal_tac "(min (length full_code - ((32::nat) + nat start)) (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))) =
-nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))")
-
-
-    apply(simp del:string_to_bytes.simps check_padding.simps pad_bytes.simps skip_padding.simps decode_uint.simps)
-
-    apply(cut_tac
-l = "(take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code))"
-and pre = "take (nat start) full_code"
-and post = "(drop (nat start) (drop 32 (drop (skip_padding (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))) full_code)))"
-and count = "take 32 (drop (nat start) full_code)"
-in Ebytes)
-
-
-    apply(simp del:check_padding.simps pad_bytes.simps skip_padding.simps decode_uint.simps)
-    apply(simp add:bytes_value_valid_def Let_def del:skip_padding.simps decode_uint.simps)
-
-
-           apply(simp only: decode_uint_valid )
-          apply(simp only:)
-         apply(simp (no_asm_simp))
-
-    apply(subgoal_tac
-"0 \<le> decode_uint (take (32::nat) (drop (nat start) full_code))")
-
-         apply(simp only:decode_uint.simps)
-
-    apply(rule_tac min_absorb2)
-         apply(rotate_tac 2)
-         apply(drule_tac mythin)
-    apply(drule_tac mythin)
-         apply(drule_tac mythin)
-apply(drule_tac mythin)
-
-         apply(arith)
-    apply(simp only:decode_uint.simps)
-
-
-       apply(rule_tac Estatic_easier)
-    apply(simp (no_asm))
-    apply(simp (no_asm))
-
-    apply(cut_tac l = "(take (32::nat) (drop (nat start) full_code))"
-in decode_uint_valid)
-    apply(simp (no_asm_simp))
-
-    apply(rotate_tac 1)
-          apply(drule_tac mythin) apply(drule_tac mythin)
-    apply(rotate_tac 1)
-    apply(drule_tac mythin) apply(drule_tac mythin)
-          apply(drule_tac mythin) 
-
-    apply(simp)
-
-         apply(simp only: encode_static.simps)
-
-    apply(simp only:decode_uint.simps)
-
-    apply(simp (no_asm_simp))
-
-         apply(subgoal_tac "min (length full_code - nat start) 32 = 32")
-    apply(drule_tac mythin) apply(drule_tac mythin)
-          apply(drule_tac mythin) 
-
-          apply(arith)
-
-    apply(rotate_tac 2)
-    apply(drule_tac mythin) apply(drule_tac mythin)
-         apply(drule_tac mythin) apply(drule_tac mythin) 
-         apply(rule_tac min_absorb2)
-         apply(simp only: decode_uint.simps)
-    apply(subgoal_tac "uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))) :: 256 word) \<ge> 0")
-       apply(arith)
-
-    apply(simp only:uint_0)
-
-      apply(simp (no_asm) del:decode_uint.simps split:prod.split)
-    apply(clarify)
-
-    apply(simp del: decode_uint.simps add:uint_value_valid_def)
-       apply(subgoal_tac "min (length full_code - nat start) 32 = 32")
-
-    apply(simp del:decode_uint.simps)
-
-    apply(cut_tac l = "(take (32::nat) (drop (nat start) full_code))"
-in decode_uint_valid)
-
-    apply(simp (no_asm_simp))
-
-        apply(rule_tac "word_rsplit_rcat_size")
-        apply(simp (no_asm_simp) add:word_size)    
-
-        apply(clarsimp)
-    apply(rotate_tac 2)
-    apply(drule_tac mythin) apply(drule_tac mythin)
-         apply(drule_tac mythin) apply(drule_tac mythin) 
-         apply(rule_tac min_absorb2)
-    apply(subgoal_tac "uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word) \<ge> 0")
-       apply(arith)
-    apply(simp only:decode_uint.simps uint_0)
-
-
-    apply(subgoal_tac
-"
-(take (nat start) full_code @
-         take (32::nat) (drop (nat start) full_code) @
-         pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)) @
-         drop (nat start) (drop (32::nat) (drop (skip_padding (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))) full_code)))
-=
-full_code")
-
-    apply(simp only:decode_uint.simps)
-
-    apply(subgoal_tac
-"(skip_padding (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))) =
-length (pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)))")
-    apply(simp only: decode_uint.simps split:prod.splits nat.split_asm)
-
-    apply(subgoal_tac
-"(take (nat (uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))) :: 256  word))) (drop (32 + nat start) full_code))
-= string_to_bytes x")
-
-    apply(simp only:)
-
-(*
-    apply(simp del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps split:prod.splits)
-         apply(simp only:List.append_eq_conv_conj)
-*)
-        apply(subgoal_tac "(int (length (take (nat start) full_code))) = start")
-         apply(simp only:)
-
-
-         apply(subgoal_tac "(min (length full_code) (nat start)) = nat start")
-         apply(simp (no_asm_simp))
-
-          apply(simp del:pad_bytes.simps skip_padding.simps check_padding.simps decode_uint.simps split:prod.splits)
-
-    apply(rotate_tac 2)
-    apply(drule_tac mythin) apply(drule_tac mythin)
-           apply(drule_tac mythin) apply(drule_tac mythin)
-           apply(drule_tac mythin) apply(drule_tac mythin)
-          apply(rule_tac min_absorb2)
-    apply(subgoal_tac "uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word) \<ge> 0")
-       apply(arith)
-    apply(simp only:decode_uint.simps uint_0)
-
-    apply(subgoal_tac
-" map (\<lambda>b::8 word. char_of_integer (of_int (uint b)))
-        (take (nat (uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))) :: 256 word))) (drop ((32::nat) + nat start) full_code)) 
-       = bytes_to_string(take (nat (uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))) :: 256 word))) (drop ((32::nat) + nat start) full_code)) 
-")
-          apply(clarify)
-          apply(simp only:)
-          apply(simp only:string_to_bytes_to_string)
-    apply(simp (no_asm_simp) )
-
-    apply(simp only:pad_bytes_skip_padding)
-    apply(simp (no_asm_simp) del:bytes_to_string.simps skip_padding.simps)
-       apply(frule_tac check_padding_pad_bytes) 
-          apply(subgoal_tac "min (length full_code - nat start) (32::nat) = 32")
-
-    apply(subgoal_tac "min (length full_code - ((32::nat) + nat start)) (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))
-= (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))")
-    apply(simp only: decode_uint.simps)
-            apply(simp (no_asm_simp) del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps)
-
-(*
-    apply(subgoal_tac
-"(nat start + ((32::nat) + length (pad_bytes (take (nat (uint (word_rcat ( (take (32::nat) (drop (nat start) full_code)))))) (drop ((32::nat) + nat start) full_code)))))
-= (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)) + ((32::nat) + nat start))")
-             apply(rotate_tac -1)
-*)
-
-    apply(drule_tac x = "int (min (length full_code - ((32::nat) + nat start)) (nat (uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))) :: 256 word))))"
-and f = nat
-in arg_cong)
-    apply(simp only: nat_int)
-
-    apply(subgoal_tac
-"(take (32::nat) (take (32::nat) (drop (nat start) full_code)) =
-(take (32 :: nat) (drop (nat start) full_code)))")
-    apply(simp only:)
-(*
-        apply(simp (no_asm_simp))
-    apply(subgoal_tac
-"0 \<le> decode_uint (take (32::nat) (drop (nat start) full_code))")
-            apply(simp only: decode_uint.simps)
-            apply(rotate_tac -3)
-        apply(drule_tac f = nat in arg_cong) apply(simp only:nat_int)
-
-    apply(rotate_tac 1)
-        apply(drule_tac mythin)
-    apply(rotate_tac 3)
-        apply(drule_tac mythin)
-    apply(drule_tac mythin) apply(drule_tac mythin)
-          apply(drule_tac mythin) 
-    apply(arith)
-*)
-
-    apply(frule_tac check_padding_pad_bytes)
-    apply(simp only: pad_bytes_skip_padding decode_uint.simps)
-
-    apply(cut_tac s =
-"pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code))"
-and t = 
-"take (skip_padding (length (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code))))
-        (drop ((32::nat) + nat start) full_code)"
-and P = "(\<lambda> pb . 
-take (nat start) full_code @
-       take (32::nat) (drop (nat start) full_code) @
-       pb @
-       drop (nat start + ((32::nat) + skip_padding (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))))) full_code =
-       full_code)"
-in subst)
-    apply(simp only:decode_uint.simps)
-
-    apply(subgoal_tac
-"take (32::nat) (drop (nat start) full_code) @
-       pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)) @
-       drop (nat start + ((32::nat) + skip_padding (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))))) full_code
-= drop (nat start) full_code")
-
-    apply(simp only: decode_uint.simps)
-    apply(simp (no_asm_simp) del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps List.drop_drop)
-
-    apply(subgoal_tac
-" pad_bytes (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)) @
-       drop (nat start + ((32::nat) + skip_padding (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))))  full_code
-=
-drop (32 :: nat) (drop (nat start) full_code)")
-    apply(simp only: decode_uint.simps)
-    apply(simp (no_asm_simp) del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps List.drop_drop)
-
-    apply(simp only: decode_uint.simps)
-
-       apply(subgoal_tac "drop (nat start + ((32::nat) + skip_padding (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))))) full_code
-=drop (skip_padding  (length (take (nat (uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))) :: 256 word)))
-(drop ((32::nat) + nat start) full_code)))) (drop ((32::nat) + nat start) full_code)")
-
-    apply(simp (no_asm_simp) del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps List.drop_drop)
-    apply(simp only:List.drop_drop)
-       apply(simp only:List.drop_drop)
-    apply(simp (no_asm_simp) del:pad_bytes.simps skip_padding.simps decode_uint.simps check_padding.simps List.drop_drop)
-
-    apply(rule_tac arg_cong)
-
-    apply(subgoal_tac
-"(nat start + ((32::nat) + skip_padding (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))))
-=
-(skip_padding (min (length full_code - ((32::nat) + nat start)) (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))) + ((32::nat) + nat start)) ")
-        apply(simp only:)
-
-    apply(subgoal_tac
-" (min (length full_code - ((32::nat) + nat start)) (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))) = 
-(nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)))")
-        apply(simp only:)
-
-       apply(subgoal_tac "
-length full_code - ((32::nat) + nat start) \<ge> (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))"
-)
-        apply(simp only: decode_uint.simps )
-        apply(rotate_tac -1)
-(*        apply(drule_tac min_absorb2)   *)
-
-
-(*
-    apply(subgoal_tac "(take (32::nat) (take (32::nat) (drop (nat start) full_code))) = ((take (32::nat) (drop (nat start) full_code)))")
-    apply(simp only:)
-        apply(simp (no_asm_simp))
-*)
-
-       apply(rotate_tac 3)
-      apply(drule_tac mythin)
-    apply(drule_tac mythin)
-      apply(drule_tac mythin)
-       apply(drule_tac mythin)
-           apply(drule_tac mythin)
-       apply(drule_tac mythin)
-           apply(drule_tac mythin)
-       apply(drule_tac mythin)
-apply(drule_tac mythin)
-
-       apply(subgoal_tac "0 \<le> uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))))")
-            apply(simp only: decode_uint.simps)
-    apply(fastforce)
-    apply(simp)
-
-
-    apply(subgoal_tac
-"take (skip_padding (length (take (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))) (drop ((32::nat) + nat start) full_code)))) (drop ((32::nat) + nat start) full_code)
-=
-pad_bytes (take (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))) (drop ((32::nat) + nat start) full_code))")
-
-    apply(simp only: decode_uint.simps)
-          apply(simp only: decode_uint.simps)
-
-         apply(simp (no_asm_simp))
-
-       apply(subgoal_tac "
-length full_code - ((32::nat) + nat start) \<ge> (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))"
-)
-        apply(simp only: decode_uint.simps )
-        apply(rotate_tac -1)
-
-       apply(rotate_tac 3)
-      apply(drule_tac mythin)
-    apply(drule_tac mythin)
-      apply(drule_tac mythin)
-       apply(drule_tac mythin)
-           apply(drule_tac mythin)
-           apply(drule_tac mythin)
-
-       apply(subgoal_tac "0 \<le> uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))) :: 256 word)")
-            apply(simp only: decode_uint.simps)
-    apply(fastforce)
-    apply(simp)
-
-
-    apply(rotate_tac 3)
-        apply(rule_tac min_absorb2)
-      apply(drule_tac mythin)
-    apply(drule_tac mythin)
-      apply(drule_tac mythin)
-       apply(drule_tac mythin)
-       apply(drule_tac mythin)
-apply(drule_tac mythin)
-
-       apply(subgoal_tac "0 \<le> uint (word_rcat (take (32::nat) (take (32::nat) (drop (nat start) full_code))) :: 256 word)")
-            apply(simp only: decode_uint.simps)
-       apply(fastforce)
-
-    apply(rotate_tac 3)
-      apply(rule_tac min_absorb2)
-      apply(drule_tac mythin)
-    apply(drule_tac mythin)
-      apply(drule_tac mythin)
-      apply(simp)
-
-    apply(simp )
-
-     apply(arith)
-    done
+  case (12 s)
+
+  obtain x where X : "x = string_to_bytes s" by auto
+
+  have Hyps : "0 \<le> start" 
+              "32 + start \<le> int (length full_code)" 
+              "decode_uint (take 32 (drop (nat start) full_code)) + 32 + start \<le> 
+               int (length full_code)" 
+              "check_padding (nat (decode_uint (take 32 (drop (nat start) full_code))))
+                             (drop (32 + nat start) full_code)"
+              "x = take (nat (decode_uint (take 32 (drop (nat start) full_code))))
+                    (drop (32 + nat start) full_code)"
+              "int (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code))))) + 
+                    32 = len"
+    using 12  X
+         by(auto simp add:decode'.simps Let_def bytes_value_valid_def string_to_bytes_to_string
+                 split:if_split_asm 
+                 simp del: decode_uint.simps check_padding.simps skip_padding.simps
+                           string_to_bytes.simps bytes_to_string.simps)
+
+  show ?case
+  proof(rule Estring[OF _ refl _])
+    have "length (string_to_bytes s) \<le>
+          (nat (decode_uint (take 32 (drop (nat start) full_code))))"
+      using Hyps List.length_take[of "(nat (decode_uint (take 32 (drop (nat start) full_code))))" 
+                                     "(string_to_bytes s)"] unfolding X
+      by(auto simp add: string_value_valid_def
+               simp del: decode_uint.simps check_padding.simps skip_padding.simps
+                         string_to_bytes.simps bytes_to_string.simps)
+
+    hence "uint_value_valid 256 (length (string_to_bytes s))"
+      using decode_uint_valid[of "(take 32 (drop (nat start) full_code))"]
+      by(auto simp add: uint_value_valid_def)
+
+    hence "uint_value_valid 256 (length s)"
+      unfolding string_to_bytes.simps by auto
+
+    then show "abi_value_valid (Vstring s)" using Hyps unfolding X
+      by(auto simp add: string_value_valid_def
+              simp del: decode_uint.simps check_padding.simps skip_padding.simps
+                        string_to_bytes.simps bytes_to_string.simps)
+  next
+    (* the following is copied from the bytes case. it would be convenient
+       to have a lemma capturing this. *)
+    have Gt0 : "0 \<le> (decode_uint (take 32 (drop (nat start) full_code)))" 
+      by auto
+  
+    have Min1 : "nat (decode_uint (take 32 (drop (nat start) full_code))) \<le> 
+                      length full_code - (32 + nat start)"
+      using Hyps(1) Hyps(3)
+      by(auto)
+  
+    have Min1A :
+    "(int (min (length full_code - (32 + nat start))
+      (nat (decode_uint (take 32 (drop (nat start) full_code)))))) =
+      (decode_uint (take 32 (drop (nat start) full_code)))"
+      using Hyps(3)
+            min_absorb2[OF Min1] Gt0
+      by(auto simp del:decode_uint.simps)  
+  
+    have Min2 : " (int (min (length full_code) (nat start))) = start"
+      using Hyps(1) Hyps(2) by(auto)
+  
+    have Min2 :
+    "(min (length full_code - (32 + nat start))
+          (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))))) =
+     (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))))"
+      using min_absorb2[OF check_padding_skip_padding[OF Hyps(4)]]
+      by(auto simp add: Let_def simp del: pad_bytes.simps decode_uint.simps skip_padding.simps)
+  
+    have Comm:
+      "32 + nat start + skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))) =
+      (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))) + (32 + nat start))"
+      by(auto)
+  
+    have Min3 : "(min (length full_code) (nat start)) = (nat start)"
+      using Hyps(2) by auto
+  
+    have Min4 : "min (length full_code - nat start) 32 = 32"
+      using Hyps(1) Hyps(2) Hyps(3) by auto
+  
+    have Min5 : "(min (length full_code - (32 + nat start)) 
+                      (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))))) =
+                 (skip_padding (nat (decode_uint (take 32 (drop (nat start) full_code)))))"
+      using min_absorb2[OF check_padding_skip_padding[OF Hyps(4)]]
+      by(auto simp del: pad_bytes.simps decode_uint.simps skip_padding.simps)
+  
+    have Conc' :
+      "can_encode_as 
+        (Vbytes (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) 
+                      (drop (32 + nat start) full_code)))
+        ((take (nat start) full_code) @ (take 32 (drop (nat start) full_code)) @
+         pad_bytes (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) 
+                     (drop (32 + nat start) full_code)) @
+         (drop (32 + nat start + (skip_padding 
+              (nat (decode_uint (take (32::nat) (drop (nat start) full_code))))))
+                full_code)) 
+        (int (length (take (nat start) full_code)))"
+    proof(rule Ebytes[OF _ refl])
+      show "abi_value_valid (Vbytes (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) 
+                                          (drop (32 + nat start) full_code)))"
+        using Hyps 
+        by(auto simp add:decode'.simps Let_def bytes_value_valid_def Min1A decode_uint_valid 
+                split:if_split_asm 
+                simp del: decode_uint.simps check_padding.simps skip_padding.simps)
+    next
+      show "length (take 32 (drop (nat start) full_code)) = 32"
+        using Hyps(1) Hyps(2) by(auto)
+    next
+      show "can_encode_as
+            (Vuint 256 
+              (int (length (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) 
+                                     (drop (32 + nat start) full_code)))))
+           (take (nat start) full_code @
+            take 32 (drop (nat start) full_code) @
+            pad_bytes (take (nat (decode_uint (take 32 (drop (nat start) full_code))))
+                      (drop (32 + nat start) full_code)) @
+            drop (32 + nat start + (skip_padding 
+                  (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))))) full_code)
+           (int (length (take (nat start) full_code)))"
+      proof(rule Estatic; (simp; fail)?)
+        show "abi_value_valid (Vuint 256 (int (length (take (nat (decode_uint 
+                (take 32 (drop (nat start) full_code)))) (drop (32 + nat start) full_code)))))"
+          using min_absorb2[OF Min1] Gt0 decode_uint_valid
+          by(auto simp del: decode_uint.simps pad_bytes.simps)
+      next
+        have "32 \<le> length full_code - nat start" using Hyps(1) Hyps(2) by(auto)
+  
+        thus "encode_static (Vuint 256 (int (length (take (nat (decode_uint 
+                (take 32 (drop (nat start) full_code)))) (drop (32 + nat start) full_code))))) = 
+              Ok (take 32 (drop (nat start) full_code))"
+          using min_absorb2[OF Min1] Gt0 uint_reencode[of "(drop (nat start) full_code)"]
+          by(auto simp del: pad_bytes.simps)
+      qed
+    qed
+
+    have ListPart : "(take (nat start) full_code @
+        take 32 (drop (nat start) full_code) @
+        pad_bytes (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) 
+                        (drop (32 + nat start) full_code)) @
+        drop (32 + nat start + (skip_padding 
+              (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))))) full_code)
+    = full_code"
+      unfolding check_padding_pad_bytes'[OF Hyps(4)] 
+      unfolding append_eq_conv_conj 
+      using Min3 Min4 Min5
+      by(auto simp add: Comm simp del: pad_bytes.simps decode_uint.simps skip_padding.simps)
+
+    show "can_encode_as (Vbytes (string_to_bytes s)) full_code start"
+      using Conc' unfolding ListPart
+      unfolding sym[OF X] Hyps using Min3 Hyps(1) 
+      by(simp del: pad_bytes.simps decode_uint.simps skip_padding.simps string_to_bytes.simps)
+  qed
 next
 (* Varray *)
   case (13 t vs)
