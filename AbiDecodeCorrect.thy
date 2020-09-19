@@ -3486,7 +3486,7 @@ lemma abi_decode_succeed_converse_gen :
             abi_get_type v = t \<Longrightarrow>
             can_encode_as v full_code (start)" and
 
-         "\<And> v t n ts pre1 pre2 count code heads'  tails' count' count'' bytes bytes'.
+         "\<And> v t n n' ts pre1 pre2 count code heads'  tails' count' count'' bytes bytes'.
              (v = (Vfarray t n vs) \<Longrightarrow> 
               abi_type_isdynamic t \<Longrightarrow>
               abi_type_valid t \<Longrightarrow>
@@ -4042,8 +4042,111 @@ next
   qed
 next
 (* Varray *)
-  case (13 t vs)
-  then show ?case 
+  case (13 t' vs')
+
+  have Start_nonneg : "0 \<le> start"
+    using "13.prems"
+    by(cases "0 \<le> start"; auto simp add: decode'.simps)
+
+  hence Start_bound :
+    "start \<le> int (length full_code)"
+    using "13.prems"
+    by(cases "start \<le> int (length full_code)"; auto simp add: decode'.simps)
+
+  hence Start_idx_size : "32 + start \<le> length full_code"
+    using "13.prems" Start_nonneg
+    by(cases "32 + start \<le> length full_code";
+        auto simp add: decode'.simps)
+
+  then obtain heads' tails' count' bytes where
+     Heads : "decode'_dyn_tuple_heads 
+               (replicate (nat (decode_uint (take 32 (drop (nat start) full_code)))) t') 0 
+               (start + 32, full_code) = 
+               Ok (heads', tails', count', bytes)" 
+     using "13.prems" Start_nonneg Start_bound
+     by(cases "decode'_dyn_tuple_heads 
+               (replicate (nat (decode_uint (take 32 (drop (nat start) full_code)))) t') 0 
+               (start + 32, full_code) ";
+         auto simp add:decode'.simps Let_def )
+
+  then obtain bytes' where
+    Tails : "decode'_dyn_tuple_tails tails' 
+              (replicate (nat (decode_uint (take 32 (drop (nat start) full_code)))) t') 
+              heads' count' (start + 32, full_code) =
+              Ok (vs', bytes')" using "13.prems" Start_nonneg Start_bound Start_idx_size
+    by(cases "decode'_dyn_tuple_tails tails' 
+              (replicate (nat (decode_uint (take 32 (drop (nat start) full_code)))) t') 
+              heads' count' (start + 32, full_code)";
+        auto simp add:decode'.simps Let_def)
+
+  have Min : "(int (min (length full_code) (nat start))) = start"
+    using Start_bound Start_nonneg
+    by(auto)
+
+  have Len_valid : "uint_value_valid (256::nat) (int (length vs'))"
+    using "13.prems" decode'_tuple_tails_length[OF Tails] decode_uint_valid
+    by(auto)
+
+  have Len_val : "(nat (decode_uint (take 32 (drop (nat start) full_code)))) = length vs'"
+    using "13.prems" decode'_tuple_tails_length[OF Tails] decode_uint_valid
+    by(auto)
+
+  have Len_encoded : 
+    "take (nat start) full_code @ encode_int (int (length vs')) @ drop (nat start + 32) full_code
+     = full_code" sorry
+
+  have Len_len : "length (encode_int (int (length vs'))) = 32" 
+    using int_length by auto
+
+  have Len_can_enc : "can_encode_as (Vuint 256 (int (length vs'))) full_code start" sorry
+
+  obtain heads head_types tails where
+    IH_spec :
+    " abi_value_valid (Varray t' vs') \<and>
+      is_head_and_tail vs' heads head_types tails \<and>
+      can_encode_as (Vtuple head_types heads) 
+        full_code
+        (int (length (take (nat start) full_code)) + 32 + int (length [])) \<and>
+      (\<forall>offset v.
+          (offset, v) \<in> set tails \<longrightarrow>
+            can_encode_as v 
+              full_code
+              (int (length (take (nat start) full_code)) + 32 + offset)) \<and>
+      those (map2 ht_combine heads' 
+        (map (\<lambda>a. case a of 
+          None \<Rightarrow> None 
+          | Some t \<Rightarrow> Some (t - int (length (take (nat start) full_code)) - 32)) tails')) =
+      Some heads \<and>
+      map (\<lambda>x. fst x + int (length (take (nat start) full_code)) + 32) tails = somes tails' \<and> 
+      ht_wellbehaved tails' (map abi_get_type vs') heads'"
+    using  "13.prems" Heads Tails Start_nonneg Start_bound Start_idx_size
+           "13.IH"(3)[of "Varray t' vs'" t' "encode_int (int (length vs'))"
+                        "length vs'" "length vs'" "[]"
+                        "take (nat start) full_code "
+                        "drop (nat start + 32) full_code" heads' tails' count' bytes count' bytes'] 
+                      Min int_length Len_valid Len_val sym[OF Len_encoded] Len_len
+    by(auto simp add:decode'.simps Let_def  simp del: decode_uint.simps encode_int.simps)      
+
+  have Offs' : 
+    "(\<And>offset v. (offset, v) \<in> set tails \<Longrightarrow> can_encode_as v full_code (offset + start + 32))"
+  proof-
+    fix offset v
+    assume Hin : "(offset, v) \<in> set tails"
+    have Comm : "offset + start + 32 = start + 32 + offset" by auto
+    then show "can_encode_as v full_code (offset + start + 32)"
+    using IH_spec Min Hin unfolding Comm
+    by(auto)
+  qed
+
+  show ?case using "13.prems" Heads Tails IH_spec Min Offs' Len_can_enc
+                           Earray[of t' vs' heads head_types tails full_code start]
+    by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
+next
+
+
+  show ?case using "13.prems"(1)
+
+  show ?case  using "13.prems" "13.IH"(3)
 
     apply(clarsimp)
     apply(drule_tac mythin) apply(drule_tac mythin)
