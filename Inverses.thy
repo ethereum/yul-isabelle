@@ -18,6 +18,8 @@ proof(-)
     by auto
 qed
 
+(* "Round-trip" theorem 1:
+   Decoding an encoded result gives the original input *)
 theorem encode_decode :
   assumes H : "encode v = Ok bytes"
   shows "decode (abi_get_type v) bytes = Ok v"
@@ -43,6 +45,10 @@ proof(-)
   show ?thesis using abi_encode_correct_converse[OF 0 Hbound] by auto
 qed
 
+(* "Round-trip" theorem 2:
+   Encoder will succeed when run on decoded data
+   (because encoder only produces canonical encodings, the re-encoding is not
+   guaranteed to be the same, but will decode to the same data) *)
 theorem decode_encode_decode :
   assumes Hdec : "decode (abi_get_type v) bytes = Ok v"
   assumes Hbound : "sint_value_valid (256 :: nat) (abi_dynamic_size_bound v)"

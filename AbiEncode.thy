@@ -60,7 +60,7 @@ fun encode_static :: "abi_value \<Rightarrow> 8 word list orerror" where
          | Ok bs \<Rightarrow> Ok (List.concat bs))"
 | "encode_static _ = Err ''Called static encoder on dynamic value''"
 
-(* TODO: This does not (I believe) support Unicode/UTF8 *)
+(* TODO: I am not sure if Isabelle's string library supports UTF-8 *)
 fun string_to_bytes :: "char list \<Rightarrow> 8 word list" where
 "string_to_bytes s = 
   List.map (\<lambda> c . word_of_int (int_of_integer (integer_of_char c))) s"
@@ -89,12 +89,14 @@ fun encode' :: "abi_value \<Rightarrow> 8 word list orerror"
 (* Given a list of (offset, tail-bytes) pairs
    We return a pair of byte-lists
    First is heads; second is tails. *)
-and encode'_tuple_heads :: "abi_value list \<Rightarrow> (int * 8 word list) list \<Rightarrow> (8 word list * 8 word list) orerror"
+and encode'_tuple_heads :: "abi_value list \<Rightarrow> (int * 8 word list) list \<Rightarrow> 
+                            (8 word list * 8 word list) orerror"
 
 (* first int input is length of tails so far *)
 (* second int input is length of all (encoded) head-bytes
    for this data structure (statically calculated) *)
-and encode'_tuple_tails :: "(abi_value) list \<Rightarrow> int \<Rightarrow> int \<Rightarrow> (int * 8 word list) list orerror" where
+and encode'_tuple_tails :: "(abi_value) list \<Rightarrow> int \<Rightarrow> int \<Rightarrow> 
+                            (int * 8 word list) list orerror" where
 "encode' v =
   (if abi_type_isstatic (abi_get_type v) then
       encode_static v
@@ -152,7 +154,8 @@ and encode'_tuple_tails :: "(abi_value) list \<Rightarrow> int \<Rightarrow> int
           (case encode'_tuple_tails rest headlen len_total' of
                                   Err s \<Rightarrow> Err s
                                   | Ok ts \<Rightarrow> 
-                                    (if sint_value_valid 256 (len_total + headlen) then Ok ((len_total + headlen, enc)#ts)
+                                    (if sint_value_valid 256 (len_total + headlen)
+                                     then Ok ((len_total + headlen, enc)#ts)
                                      else Err ''Encoded value is too long''))))"
         
 

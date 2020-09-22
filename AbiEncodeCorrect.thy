@@ -415,7 +415,8 @@ next
       by(auto)
 
     obtain ab_code pre post where
-      "encode' ab = Ok ab_code \<and> tails' = pre @ ab_code @ post \<and> ac = heads_len + int (length enc') + int (length pre)"
+      "encode' ab = Ok ab_code \<and> tails' = pre @ ab_code @ post \<and> 
+                    ac = heads_len + int (length enc') + int (length pre)"
       using iht_dynamic.prems iht_dynamic.hyps
                               iht_dynamic.IH[of bvt "heads_len + (length enc')" 
                                                 heads' tails' ac ab]
@@ -874,7 +875,8 @@ proof(induction v arbitrary: code pre post;
         unfolding Code_ht append_assoc
       proof(rule Estatic[OF Static Valid])
         show "encode_static (Vtuple iht_typ iht_h) = Ok heads"
-          using encode'_tuple_heads_correct1[OF Iht Iht_h Iht_typ Iht_tl Valid _ Hhts] Static Vfarray
+          using encode'_tuple_heads_correct1[OF Iht Iht_h Iht_typ Iht_tl Valid _ Hhts] 
+                Static Vfarray
           by(auto)
       qed
     next
@@ -3069,7 +3071,7 @@ proof(induction rule:can_encode_as.induct; auto)
 qed
 
 (* 
-  main theroem 2:
+  main theorem 2:
   if can_encode_as predicate holds, and our bound for the value's size
   is small enough to be representable as an s256,
   then encoder will return an encoding for it.
@@ -3760,7 +3762,8 @@ next
             have Lens : "length vt = length vt_code"
               using encode'_tuple_tails_len[OF Inl] by auto
   
-            obtain vbad err' where Vbad_in : "vbad \<in> set vt" and Vbad_bad :  "encode' vbad = Err err'"
+            obtain vbad err' where Vbad_in : "vbad \<in> set vt" 
+                             and Vbad_bad :  "encode' vbad = Err err'"
               using encode'_tuple_heads_fail[OF Inr' Lens] by auto
   
             have Vbad_valid : "abi_value_valid vbad"
@@ -3867,7 +3870,8 @@ next
             have Lens : "length vt = length vt_code"
               using encode'_tuple_tails_len[OF Inl] by auto
   
-            obtain vbad err' where Vbad_in : "vbad \<in> set vt" and Vbad_bad :  "encode' vbad = Err err'"
+            obtain vbad err' where Vbad_in : "vbad \<in> set vt"
+                             and Vbad_bad :  "encode' vbad = Err err'"
               using encode'_tuple_heads_fail[OF Inr' Lens] by auto
   
             have Vbad_valid : "abi_value_valid vbad"

@@ -4,7 +4,8 @@ begin
 
 (* Inductive specification of ABI encoding.
    This specification captures _all_ encodings, including
-   non-canonical ones*)
+   non-canonical ones (i.e. valid encodings not produced by the standard
+   Solidity ABI encoder)*)
 
 (* is_head_and_tail predicate captures the structure 
    of dynamic tuples/arrays as they are being encoded
@@ -25,9 +26,9 @@ iht_nil :  "is_head_and_tail [] [] [] []"
    is_head_and_tail (x#xs) ((Vsint 256 ptr) # ys) ((Tsint 256) # ts) ((ptr, x)#tails)"
 
 (*  NB: for static data types, we are using the same encoders as the implementation -
-    this is not ideal but it's also not clear if they can be separately specified in a useful way. *)
+    this is not ideal but it's also not clear they can be separately specified in a useful way. *)
 
-(* predicate specifying correct encoding
+(* Predicate specifying correct encoding
    first parameter is a (decoded) datum
    second parameter is a byte-string corresponding to
      a buffer in which the encoding of the datum can be found

@@ -11,11 +11,6 @@ fun decode_uint :: "8 word list \<Rightarrow> int" where
 "decode_uint l =
   (Word.uint (Word.word_rcat (take 32 l) :: 256 word))"
 
-lemma decode_uint_max :
-"\<And> (x :: 256 word) . Word.uint x \<le>  max_u256"
-  apply(cut_tac x = "x :: 256 word" in Word.uint_range')
-  apply(auto simp add:max_u256_def)
-  done
 
 fun decode_sint :: "8 word list \<Rightarrow> int" where
 "decode_sint l =
@@ -201,7 +196,8 @@ and decode'_dyn_tuple_heads :: "abi_type list \<Rightarrow> int \<Rightarrow> (i
                 (abi_value option list *  (int option) list * int * int) orerror"
 (* list parameter gives an offset for each field that still needs to be parsed
    the int parameter is an index of how many bytes into our overall tuple encoding we are *)
-and decode'_dyn_tuple_tails :: "(int option) list \<Rightarrow> abi_type list \<Rightarrow> abi_value option list \<Rightarrow> int \<Rightarrow> (int * 8 word list) \<Rightarrow> 
+and decode'_dyn_tuple_tails :: "(int option) list \<Rightarrow> abi_type list \<Rightarrow> abi_value option list \<Rightarrow> 
+                                int \<Rightarrow> (int * 8 word list) \<Rightarrow> 
                 (abi_value list * int) orerror"
 where
 "decode' t (ix, l) =
@@ -212,7 +208,8 @@ where
   
   (if abi_type_isstatic t
     then
-      if int (length l) < (abi_static_size t) + ix then Err (decode_err ''Too few bytes for given static type'' (ix, l))
+      if int (length l) < (abi_static_size t) + ix 
+      then Err (decode_err ''Too few bytes for given static type'' (ix, l))
       else (case decode_static t (ix, l) of
             Err s \<Rightarrow> Err s
             | Ok v \<Rightarrow> Ok (v, (abi_static_size t)))
@@ -227,8 +224,9 @@ where
               Err s \<Rightarrow> Err s
               | Ok (vs, bytes_parsed') \<Rightarrow> Ok (Vfarray t n vs, bytes_parsed + bytes_parsed'))))
       | Tarray t \<Rightarrow>
-       if int (length l) < 32 + ix then Err (decode_err ''Too few bytes; could not read array size'' (ix, l))
-        else let n = (decode_uint (take 32 l')) in
+       if int (length l) < 32 + ix 
+       then Err (decode_err ''Too few bytes; could not read array size'' (ix, l))
+       else let n = (decode_uint (take 32 l')) in
         (let ts = List.replicate (nat n) t in
         (case decode'_dyn_tuple_heads ts 0 (ix + 32, l) of
           Err s \<Rightarrow> Err s
@@ -244,16 +242,23 @@ where
               Err s \<Rightarrow> Err s
               | Ok (vs, bytes_parsed') \<Rightarrow> Ok (Vtuple ts vs, bytes_parsed + bytes_parsed')))
       | Tbytes \<Rightarrow>
-        if int (length l) < 32 + ix then Err (decode_err ''Too few bytes; could not read bytestream size'' (ix, l))
+        if int (length l) < 32 + ix
+        then Err (decode_err ''Too few bytes; could not read bytestream size'' (ix, l))
         else let sz = (decode_uint (take 32 l')) in
-             if int (length l) < sz + 32 + ix then Err (decode_err ''Fewer bytes remaining than bytestream size'' (ix, l))
-             else (if check_padding (nat sz) (drop 32 l') then Ok (Vbytes (take (nat sz) (drop 32 l')), int(skip_padding (nat sz)) + 32)
+             if int (length l) < sz + 32 + ix
+             then Err (decode_err ''Fewer bytes remaining than bytestream size'' (ix, l))
+             else (if check_padding (nat sz) (drop 32 l') 
+                   then Ok (Vbytes (take (nat sz) (drop 32 l')), int(skip_padding (nat sz)) + 32)
                    else Err (decode_err ''Invalid bytes padding'' (ix, l)))
       | Tstring \<Rightarrow> 
-        if int(length l) < 32 + ix then Err (decode_err ''Too few bytes; could not read string size'' (ix, l))
+        if int(length l) < 32 + ix 
+        then Err (decode_err ''Too few bytes; could not read string size'' (ix, l))
         else let sz = (decode_uint (take 32 l')) in
-             if int (length l) < sz + 32 + ix then Err (decode_err ''Fewer bytes remaining than string size'' (ix, l))
-             else (if check_padding (nat sz) (drop 32 l') then Ok (Vstring (bytes_to_string (take (nat sz) (drop 32 l'))), int (skip_padding (nat sz)) + 32)
+             if int (length l) < sz + 32 + ix
+             then Err (decode_err ''Fewer bytes remaining than string size'' (ix, l))
+             else (if check_padding (nat sz) (drop 32 l') 
+             then Ok (Vstring (bytes_to_string (take (nat sz) (drop 32 l')))
+                     , int (skip_padding (nat sz)) + 32)
                    else Err (decode_err ''Invalid string padding'' (ix, l)))
       | _ \<Rightarrow> Err (decode_err ''This should be dead code'' (ix, l)))))))"
 
@@ -267,13 +272,15 @@ where
         | Ok (v, bytes_parsed) \<Rightarrow>
           (case decode'_dyn_tuple_heads tt (n + nat (abi_static_size th)) (ix, l) of
             Err s \<Rightarrow> Err s
-            | Ok (vos, idxs, n', bytes_parsed') \<Rightarrow> Ok (Some v # vos, None#idxs, n', bytes_parsed + bytes_parsed')))
+            | Ok (vos, idxs, n', bytes_parsed') \<Rightarrow> 
+                Ok (Some v # vos, None#idxs, n', bytes_parsed + bytes_parsed')))
     else
       (if length l' < 32 then Err (decode_err ''Too few bytes; could not read tuple head'' (ix, l))
        else let sz = (decode_sint (take 32 l')) in
             (case decode'_dyn_tuple_heads tt (n + 32) (ix, l) of
               Err s \<Rightarrow> Err s
-              | Ok (vos, idxs, n', bytes_parsed) \<Rightarrow> Ok (None # vos, (Some (ix + sz))#idxs, n', bytes_parsed + 32)))))"
+              | Ok (vos, idxs, n', bytes_parsed) \<Rightarrow> 
+                  Ok (None # vos, (Some (ix + sz))#idxs, n', bytes_parsed + 32)))))"
 
 | "decode'_dyn_tuple_tails [] [] []  _ (ix, l) = Ok ([], 0)"
 | "decode'_dyn_tuple_tails (None#t) (th#tt) (Some vh#vt) offset (ix, l) = 
@@ -289,7 +296,8 @@ where
                      let offset' = offset + bytes_parsed in
                      (case decode'_dyn_tuple_tails t tt vt offset' (ix, l) of
                            Err s \<Rightarrow> Err s
-                           | Ok (vs, bytes_parsed') \<Rightarrow> Ok (v#vs, bytes_parsed + bytes_parsed'))))                          
+                           | Ok (vs, bytes_parsed') \<Rightarrow> 
+                              Ok (v#vs, bytes_parsed + bytes_parsed'))))                          
       "
 
 | "decode'_dyn_tuple_tails _ _ _ _ (ix, l) = Err (decode_err ''Should be dead code'' (ix, l))"

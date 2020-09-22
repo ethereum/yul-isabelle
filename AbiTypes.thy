@@ -80,6 +80,8 @@ fun abi_type_valid where
 | "abi_type_valid (Tarray t) = abi_type_valid t"
 | "abi_type_valid _ = True"
 
+(* Dynamic ABI types have a size that cannot be computed statically
+   (i.e. more information is needed than just the type *)
 fun abi_type_isdynamic :: "abi_type \<Rightarrow> bool" where
 "abi_type_isdynamic (Tfarray t n) = (abi_type_isdynamic t)"
 | "abi_type_isdynamic (Tbytes) = True"
@@ -238,7 +240,6 @@ definition list_sumr :: "int list \<Rightarrow> int" where
 "list_sumr xs = List.foldr (+) xs 0"
 
 (* size in bytes of a (static) ABI datum *)
-(* TODO: figure out how function decoding is supposed to work. *)
 fun abi_static_size :: "abi_type \<Rightarrow> int" where
 "abi_static_size (Tuint n) = 32"
 | "abi_static_size (Tsint n) = 32"
@@ -275,10 +276,10 @@ fun abi_dynamic_size_bound :: "abi_value \<Rightarrow> int" where
           Vfarray t n l \<Rightarrow> n * 32 + list_sum (map abi_dynamic_size_bound l)
           | Vtuple ts vs \<Rightarrow> (length vs * 32) + list_sum (map abi_dynamic_size_bound vs)
           | Varray t l \<Rightarrow> 32 + (length l * 32) + list_sum (map abi_dynamic_size_bound l)
-          | Vbytes bs \<Rightarrow> 32 + length bs + 32
-          | Vstring s \<Rightarrow> 32 + length s + 32))" (* extra 32 at end is for byte padding *)
+          | Vbytes bs \<Rightarrow> 32 + length bs + 32 \<comment> \<open> extra 32 at end is for padding \<close>
+          | Vstring s \<Rightarrow> 32 + length s + 32 \<comment> \<open> extra 32 at end is for padding \<close>))"
 
-(* this should capture the exact size of dynamic structures
+(* This should capture the exact size of dynamic structures
    its correctness hasn't been proven and in practice we use the upper bound given above
    the implementation is retained partly to demonstrate how much simpler the
    upper-bound calculation is. *)

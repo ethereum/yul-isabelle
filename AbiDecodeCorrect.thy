@@ -7,6 +7,11 @@ begin
 
 (* Helpers for decoding integers *)
 
+lemma decode_uint_max :
+"Word.uint (x :: 256 word) \<le>  max_u256"
+  using Word.uint_range'[of "x :: 256 word"]
+  by(auto simp add:max_u256_def)
+
 lemma take_split32 :
 "(take (32::nat) (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)) = 
               (word_rsplit (word_of_int x2 :: 256 word) :: 8 word list)"
@@ -2833,7 +2838,9 @@ next
   qed
 qed
 
-lemma abi_decode_correct :
+(* Main theorem 3:
+   Specification implies successful decoding *)
+theorem abi_decode_correct :
   assumes H : "can_encode_as v full_code 0"
   shows "decode (abi_get_type v) full_code = Ok v"
   using encode_correct_converse_valid[OF H] abi_decode_succeed2[OF H]
@@ -5566,7 +5573,8 @@ next
   }
 qed
 
-lemma abi_decode_correct_converse :
+(* Main theorem 4: Decoder implies specification *)
+theorem abi_decode_correct_converse :
   assumes H : "decode t full_code = Ok v"
   shows "can_encode_as v full_code (0)"
 proof(-)
