@@ -94,7 +94,7 @@ lemma sint_reconstruct_valid :
                                    (word_of_int x2 :: 256 word) :: 8 word list)) :: 256 word))"
 proof-
   have Hlt' : "(2 :: int)^(x1 - 1) \<le> (2 :: int)^(256 - 1)"
-  proof(rule power_increasing; (auto; fail)?)
+  proof(rule power_increasing; (simp; fail)?)
     show "x1 - 1 \<le> 256 - 1" using Hlt by auto
   qed
 
@@ -3475,6 +3475,14 @@ lemma check_padding_skip_padding :
  skip_padding n \<le> length l"
   by(auto simp only:Let_def check_padding.simps)
 
+lemma decode_sint_valid256 : "sint_value_valid 256 (decode_sint bs)"
+  using sint_range_size[of "word_rcat (take 32 (bs :: 8 word list)) :: 256 word"]
+  by(auto simp add: sint_value_valid_def word_size)
+
+lemma decode_uint_valid256 : "uint_value_valid 256 (decode_uint bs)"
+  using uint_range_size[of "word_rcat (take 32 (bs :: 8 word list)) :: 256 word"]
+  by(auto simp add: uint_value_valid_def word_size)
+
 (* Decoder implies specification (can_encode_as) *)
 (* The nesting of quantifiers here in the second clause appears to be necessary
    in order to prevent Isabelle's automation from reassociating the clauses
@@ -4091,14 +4099,54 @@ next
     using "13.prems" decode'_tuple_tails_length[OF Tails] decode_uint_valid
     by(auto)
 
-  have Len_encoded : 
+  have "0 \<le> decode_uint (take 32 (drop (nat start) full_code))"
+    by(auto)
+
+  hence Len_val' : "decode_uint (take 32 (drop (nat start) full_code)) = length vs'"
+    using arg_cong[OF Len_val, of int]
+    by(auto)
+
+  have Start32 : "32 \<le> length full_code - nat start" using Start_idx_size Start_nonneg
+    by auto
+
+  hence Len_reencode :
+    "encode_int (int (length vs')) = (take 32 (drop (nat start) full_code))"
+    using uint_reencode[of "drop (nat start) full_code"]
+    unfolding sym[OF Len_val'] Start_idx_size
+    by(auto simp del: encode_int.simps)
+
+  have Min1 : "min (length full_code) (nat start) = (nat start)"
+    using Start_bound by auto
+
+  have Min2 : "(min (length full_code - nat start) 32) = 32"
+    using Start32 by auto
+
+  have Comm: "(nat start + 32) = (32 + nat start)" by auto
+
+  hence Len_encoded_full : 
     "take (nat start) full_code @ encode_int (int (length vs')) @ drop (nat start + 32) full_code
-     = full_code" sorry
+     = full_code" unfolding Len_reencode append_eq_conv_conj using Min1 Min2
+    by(auto simp add: Comm)
 
   have Len_len : "length (encode_int (int (length vs'))) = 32" 
     using int_length by auto
 
-  have Len_can_enc : "can_encode_as (Vuint 256 (int (length vs'))) full_code start" sorry
+  have Len_can_enc : "can_encode_as (Vuint 256 (int (length vs'))) full_code start"
+  proof(rule Estatic_easier; (simp; fail)?)
+    show "abi_value_valid (Vuint 256 (int (length vs')))" using Len_valid
+      by(auto)
+  next
+    show "encode_static (Vuint 256 (int (length vs'))) = Ok (take 32 (drop (nat start) full_code))"
+      using Len_reencode
+      by(auto)
+  next
+    show "0 \<le> start"
+      using Start_nonneg by auto
+  next
+    show "nat start + nat (abi_static_size (abi_get_type (Vuint 256 (int (length vs'))))) \<le> 
+            length full_code" using Start32
+      by(auto)
+  qed
 
   obtain heads head_types tails where
     IH_spec :
@@ -4124,7 +4172,7 @@ next
                         "length vs'" "length vs'" "[]"
                         "take (nat start) full_code "
                         "drop (nat start + 32) full_code" heads' tails' count' bytes count' bytes'] 
-                      Min int_length Len_valid Len_val sym[OF Len_encoded] Len_len
+                      Min int_length Len_valid Len_val sym[OF Len_encoded_full] Len_len
     by(auto simp add:decode'.simps Let_def  simp del: decode_uint.simps encode_int.simps)      
 
   have Offs' : 
@@ -4142,878 +4190,1380 @@ next
                            Earray[of t' vs' heads head_types tails full_code start]
     by(auto simp add:decode'.simps Let_def split: if_split_asm sum.split_asm)
 next
-
-
-  show ?case using "13.prems"(1)
-
-  show ?case  using "13.prems" "13.IH"(3)
-
-    apply(clarsimp)
-    apply(drule_tac mythin) apply(drule_tac mythin)
-    apply(clarsimp)
-    apply(simp add:decode'.simps Let_def del: decode_static.simps split:if_splits sum.splits prod.splits)
-     apply(drule_tac x = t in spec)
-    apply(clarsimp)
-
-     apply(subgoal_tac "uint_value_valid (256::nat) (int (length vs))") apply(clarsimp)
-     apply(subgoal_tac "length (word_rsplit (word_of_int (int (length vs)) :: 256 word) :: 8 word list) = (32::nat) ")
-    apply(drule_tac x = "length vs" in spec)
-      apply(clarsimp)
-
-    apply(frule_tac decode'_tuple_tails_length; clarsimp)
-
-     apply(drule_tac x = "take (nat start) full_code" in spec)
-    apply(drule_tac x = "[]" in spec) apply(clarsimp)
-    apply(drule_tac x = "(drop (32::nat) (drop (nat start) full_code))" in spec)
-    apply(subgoal_tac "min (length full_code - nat start) (32::nat) = (32::nat)") 
-(* need lemma that decode'_dyn_tuple_tails preserves length. this should not be hard. *)
-     apply(drule_tac x = x1a in spec)
-     apply(drule_tac x = x1b in spec)
-
-    apply(subgoal_tac "int (min (length full_code) (nat start) + 32) = start + 32")
-
-      apply(clarsimp)
-      apply(subgoal_tac "(\<exists>(count'::int) bytes::int.
-           decode'_dyn_tuple_heads (replicate (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))) t) (0::int)
-            (int (min (length full_code) (nat start)) + (32::int),
-             take (nat start) full_code @
-             word_rsplit (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word) @ drop (32::nat) (drop (nat start) full_code)) =
-           Ok (x1a, x1b, count', bytes))")
-        apply(clarsimp)
-    apply(subgoal_tac "
-   (\<exists>(count''::int) bytes'::int.
-           decode'_dyn_tuple_tails x1b (replicate (nat (uint (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word))) t) x1a count''
-            (start + (32::int),
-             take (nat start) full_code @ word_rsplit (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word) @ drop ((32::nat) + nat start) full_code) =
-           Ok (vs, bytes'))")
-    apply(clarsimp)
-
-
-    apply(subgoal_tac
-"(take (nat start) full_code @ word_rsplit (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word) @ drop (32::nat) (drop (nat start) full_code))
-= full_code")
-
-         apply(rule_tac Earray; (simp (no_asm_simp))?)
-
-    apply(subgoal_tac "take (32::nat) (drop (nat start) full_code) @   drop (32::nat) (drop (nat start) full_code) = drop (nat start) full_code")
-           apply(cut_tac n = 32 and m = "nat start" and xs = full_code in List.drop_drop)
-           apply(rotate_tac -1) apply(drule_tac sym) apply( simp only: List.append_take_drop_id)
-
-            apply(rule_tac Estatic_easier; (simp (no_asm_simp))?)
-
-         apply(rule_tac word_rsplit_rcat_size)
-               apply(simp (no_asm_simp) add:word_size)
-    apply(arith)
-
-              apply( simp (no_asm_simp) only: List.append_take_drop_id)
-
-    apply(clarsimp)
-
-(*
-    apply(drule_tac 
-x = " take (nat start) full_code @ word_rsplit (word_of_int (int (length vs)) :: 256 word) @  drop (32::nat) (drop (nat start) full_code)"
-and y = full_code
-and f = "(\<lambda> x. take 32 (drop (nat start) x))"
-in arg_cong)
-              apply(clarsimp)
-           apply(cut_tac n = 32 and m = "nat start" and xs = full_code in List.drop_drop)
-              apply(rotate_tac -1) apply(drule_tac sym)
-
-              apply( simp (no_asm_simp) only: List.append_take_drop_id)
-
-    apply(clarsimp)
-*)
-
-           apply(drule_tac x = offset in spec) apply(drule_tac x = v in spec) apply(clarsimp)
-
-    apply(subgoal_tac
-"(offset + start + (32::int)) = (start + (32::int) + offset) ")
-            apply(simp (no_asm_simp))
-           apply(arith)
-
-    apply(subgoal_tac "word_rsplit (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)
-= take (32 :: nat) (drop (nat start) full_code)")
-    apply(simp)
-    apply(subgoal_tac
-"(take (nat start) full_code @ take (32::nat) (drop (nat start) full_code) @ drop ((32::nat) + nat start) full_code)
-= full_code") 
-          apply(assumption)
-
-    apply(subgoal_tac "take (32::nat) (drop (nat start) full_code) @  drop ((32::nat) + nat start) full_code = drop (nat start) full_code")
-           apply(cut_tac n = 32 and m = "nat start" and xs = full_code in List.drop_drop)
-              apply(rotate_tac -1) apply(drule_tac sym)
-
-              apply( simp (no_asm_simp) only: List.append_take_drop_id)
-           apply(cut_tac n = 32 and m = "nat start" and xs = full_code in List.drop_drop)
-             apply(rotate_tac -1) apply(drule_tac sym)
-             apply( simp (no_asm_simp) only: List.append_take_drop_id)
-
-(* leftover subgoals *)
-         apply(rule_tac word_rsplit_rcat_size)
-               apply(simp (no_asm_simp) add:word_size)
-
-    apply(subgoal_tac "word_rsplit (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)
-= take (32 :: nat) (drop (nat start) full_code)")
-    apply(simp)
-    apply(subgoal_tac
-"(take (nat start) full_code @ take (32::nat) (drop (nat start) full_code) @ drop ((32::nat) + nat start) full_code)
-= full_code") apply(simp)
-    apply(fastforce)
-
-         apply(subgoal_tac "take (32::nat) (drop (nat start) full_code) @  drop ((32::nat) + nat start) full_code = drop (nat start) full_code")
-          apply(clarsimp)
-
-
-           apply(cut_tac n = 32 and m = "nat start" and xs = full_code in List.drop_drop)
-
-         apply(rotate_tac -1) apply(drule_tac sym) apply( simp only: List.append_take_drop_id)
-
-         apply(rule_tac word_rsplit_rcat_size)
-               apply(simp (no_asm_simp) add:word_size)
-
-        apply(frule_tac decode'_tuple_tails_length)
-        apply(clarsimp)
-
-        apply(drule_tac s = "length vs" in HOL.sym)
-    apply(simp )
-
-    apply(subgoal_tac
-"(take (nat start) full_code @ word_rsplit (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word) @ drop (32::nat) (drop (nat start) full_code))
-= full_code")
-         apply(simp)
-
-    apply(subgoal_tac
-"word_rsplit (word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)
-= (take (32::nat) (drop (nat start) full_code))")
-apply(simp)
-    apply(subgoal_tac "take (32::nat) (drop (nat start) full_code) @  drop ((32::nat) + nat start) full_code = drop (nat start) full_code")
-           apply(cut_tac n = 32 and m = "nat start" and xs = full_code in List.drop_drop)
-              apply(rotate_tac -1) apply(drule_tac sym)
-
-              apply( simp (no_asm_simp) only: List.append_take_drop_id)
-           apply(cut_tac n = 32 and m = "nat start" and xs = full_code in List.drop_drop)
-             apply(rotate_tac -1) apply(drule_tac sym)
-             apply( simp (no_asm_simp) only: List.append_take_drop_id)
-
-        apply(rule_tac word_rsplit_rcat_size) apply(simp)
-          apply(simp (no_asm_simp) add: word_size)
-
-    apply(arith)
-
-          apply(simp (no_asm_simp) only:)
-    apply(frule_tac uint_valid_length)
-      apply(arith)
-
-        apply(frule_tac decode'_tuple_tails_length)
-        apply(clarsimp)
-
-     apply(cut_tac w = "(word_rcat (take (32::nat) (drop (nat start) full_code)) :: 256 word)"
-in uint_range_size) apply(simp add:word_size)
-    apply(simp  add: uint_value_valid_def)
-
-    done
-next
+(* Nil *)
   case 14
-  then show ?case
-    apply(clarsimp)
 
-    (* Vfarray *)
-    apply(rule_tac conjI)
-     apply(clarsimp)
-     apply(simp add:farray_value_valid_aux_def)
-     apply(case_tac n; clarsimp)
-      apply(rule_tac x = "[]" in exI)  apply(rule_tac conjI)
-       apply(rule_tac iht_nil)
-      apply(rule_tac Estatic_easier; simp)
-      apply(simp add:tuple_value_valid_aux_def)
-    apply(case_tac tails'; clarsimp)
-     apply(case_tac heads'; clarsimp)
-     apply(case_tac a; clarsimp) apply(case_tac aa; clarsimp)
-      apply(simp split:sum.splits prod.splits)
-     apply(case_tac aa; clarsimp)
- apply(simp split:sum.splits prod.splits)
+  {
+  (* Vfarray *)
+    case 1
+    show ?case
+    proof(cases n)
+      case 0
 
-    (* Vtuple *)
-    apply(rule_tac conjI)
-     apply(clarsimp)
-     apply(simp add:tuple_value_valid_aux_def)
-     apply(case_tac ts; clarsimp)
-      apply(rule_tac x = "[]" in exI)  apply(rule_tac conjI)
-       apply(rule_tac iht_nil)
-      apply(rule_tac Estatic_easier; simp)
-      apply(simp add:tuple_value_valid_aux_def)
-    apply(case_tac tails'; clarsimp)
-     apply(case_tac heads'; clarsimp)
-     apply(case_tac aa; clarsimp) apply(case_tac ab; clarsimp)
-      apply(simp split:sum.splits prod.splits)
-     apply(case_tac ab; clarsimp)
- apply(simp split:sum.splits prod.splits)
+      have C1 : "is_head_and_tail [] [] [] []" using iht_nil by auto
 
+      have C2 : "can_encode_as (Vtuple [] []) (pre1 @ pre2 @ code)
+                      (int (length pre1) + int (length pre2))"
+        by(rule Estatic_easier; auto simp add:tuple_value_valid_aux_def)
 
-    (* Varray *)
-     apply(clarsimp)
-     apply(simp add:array_value_valid_aux_def) apply(clarsimp)
-      apply(rule_tac x = "[]" in exI)  apply(rule_tac conjI)
-       apply(rule_tac iht_nil)
-      apply(rule_tac Estatic_easier; simp)
-      apply(simp add:tuple_value_valid_aux_def)
-    done
+      show ?thesis using 0 1 C1 C2 by(auto simp add:farray_value_valid_aux_def)
+    next
+      case (Suc nat)
 
+      obtain tails'h tails't where Tails' : "tails' = tails'h#tails't"
+        using Suc 1
+        by(cases tails'; auto split:sum.splits prod.splits if_split_asm)
+
+      obtain heads'h heads't where Heads' : "heads' = heads'h#heads't"
+        using Suc 1
+        by(cases tails'; auto split:sum.splits prod.splits if_split_asm)
+
+      show ?thesis
+      proof(cases heads'h)
+        case None
+        then show ?thesis using 1 Suc by(auto split:sum.split_asm prod.split_asm if_split_asm)
+      next
+        case (Some a)
+        then show ?thesis using 1 Suc by(auto split:sum.split_asm prod.split_asm if_split_asm)
+      qed
+    qed
+  next
+  (* Vtuple *)
+    case 2
+    show ?case
+    proof(cases ts)
+      case Nil
+
+      have C1 : "is_head_and_tail [] [] [] []" using iht_nil by auto
+
+      have C2 : "can_encode_as (Vtuple [] []) (pre1 @ pre2 @ code)
+                      (int (length pre1) + int (length pre2))"
+        by(rule Estatic_easier; auto simp add:tuple_value_valid_aux_def)
+
+      then show ?thesis using Nil 2 C1 C2 by(auto simp add:tuple_value_valid_aux_def)
+    next
+      case (Cons tsh tst)
+      obtain tails'h tails't where Tails' : "tails' = tails'h#tails't"
+        using Cons 2
+        by(cases tails'; auto split:sum.split_asm prod.split_asm if_split_asm)
+
+      obtain heads'h heads't where Heads' : "heads' = heads'h#heads't"
+        using Cons 2
+        by(cases tails'; auto split:sum.split_asm prod.split_asm if_split_asm)
+
+      show ?thesis
+      proof(cases heads'h)
+        case None
+        then show ?thesis using 2 Cons by(auto split:sum.split_asm prod.split_asm if_split_asm)
+      next
+        case (Some a)
+        then show ?thesis using 2 Cons by(auto split:sum.split_asm prod.split_asm if_split_asm)
+      qed
+    qed
+  next
+  (* Varray *)
+    case 3
+
+    have C1 : "is_head_and_tail [] [] [] []" using iht_nil by auto
+
+    have C2' : "nat (int (length pre1) + 32 + int (length pre2)) \<le> 
+                  length pre1 + (length (encode_int (int n')) + (length pre2 + length code))"
+      using int_length[of "int n'"]
+      by(auto)
+
+    hence C2 : "can_encode_as (Vtuple [] [])
+                (pre1 @ encode_int (int n') @ pre2 @ code)
+                (int (length pre1) + 32 + int (length pre2))"
+      by(auto intro: Estatic_easier simp add:tuple_value_valid_aux_def int_length 
+              simp del: encode_int.simps)
+
+    then show ?case using 3 C1 C2
+      by(auto simp add: array_value_valid_aux_def)
+  }
 next
-  case (15 t l)
-  then show ?case
+(* Cons *)
+  case (15 vh vt)
+  {
+  (* Vfarray *)
+    case 1
+    show ?case
+    proof(cases tails')
+      case Tnil : Nil
 
-    apply(rule_tac conjI)
-    (* Vfarray *)
-    (* tails did something, let's figure out what. *)
-     apply(clarsimp)
-     apply(rotate_tac 2) apply(drule_tac mythin) apply(drule_tac mythin)
-    apply(clarsimp)
-    apply(case_tac tails'; clarsimp)
-     apply(case_tac n; clarsimp)
-     apply(case_tac n; clarsimp)
-    apply(case_tac heads'; clarsimp)
-    apply(simp add:Let_def split:if_splits sum.splits prod.splits)
-    apply(clarsimp)
-    apply(simp split:if_splits sum.splits prod.splits)
-    apply(clarsimp)
-    apply(drule_tac x = ta in spec) apply(clarsimp)
-    apply(drule_tac x = nat in spec) apply(rotate_tac -1)
-    apply(drule_tac x = pre1 in spec)
-    apply(drule_tac x = "pre2@(take 32 (code))" in spec)
-    apply(drule_tac x = "(drop 32 (code))" in spec)
-    apply(drule_tac x = lista in spec) apply(drule_tac x = list in spec)
-    apply(rotate_tac -1)
-    apply(clarsimp)
+      then have Hnil : "heads' = []" using "1.prems"
+        by(cases heads'; auto)
 
-    apply(subgoal_tac "int (min (length code) (32::nat)) = 32")
-     apply(clarsimp)
+      show ?thesis
+      proof(cases n)
+        case 0
+        then show ?thesis using "1.prems" by(auto)
+      next
+        case (Suc nat)
+        then show ?thesis using "1.prems" Tnil Hnil by(auto)
+      qed
+    next
+      case Tcons : (Cons tails'h tails't)
 
-    apply(subgoal_tac
-"(\<exists>(count''::int) bytes'::int. decode'_dyn_tuple_tails list (replicate nat ta) lista count'' (int (length pre1), pre1 @ pre2 @ code) = Ok (l, bytes'))")
-      apply(clarsimp)
-(*      defer apply(fastforce) *)
+      then obtain heads'h heads't where Hcons : "heads' = heads'h#heads't" using "1.prems"
+        by(cases heads'; auto)
 
-    (* validity *)
-       apply(frule_tac abi_decode'_type_ok)
-      apply(simp add: farray_value_valid_aux_def)
-      apply(rule_tac conjI)
-    apply(drule_tac x = x2 in spec) apply(rotate_tac -1)
-       apply(drule_tac x = "(int (length pre1) + sint (word_rcat (take (32::nat) code) :: 256 word))" in spec)
-       apply(rotate_tac -1)
-       apply(drule_tac x = "pre1 @ pre2 @ code" in spec) apply(clarsimp)
-       apply(rotate_tac -2)
-    apply(frule_tac "encode_correct_converse_valid"; simp)
-(* end validity piece of proof *)
+      obtain n' where N' : "n = Suc n'"
+        using "1.prems" Tcons Hcons 
+        by(cases n; auto split:sum.split_asm prod.split_asm if_split_asm)
 
-      apply(rule_tac x = "(Tsint 256) # head_types" in exI)
-      apply(rule_tac x = "((sint (word_rcat (take (32::nat) code) :: 256 word)), t)#tails" in exI) 
-      apply(clarsimp)
+      show ?thesis
+      proof(cases heads'h)
+        case Hnone : None
 
-      apply(rule_tac conjI)
-       apply(rule_tac iht_dynamic; simp?)
-       apply(frule_tac abi_decode'_type_ok; clarsimp)
+        obtain t'h where Tsome : "tails'h = Some t'h"
+          using "1.prems" Tcons Hcons N' Hnone
+          by(cases tails'h; auto)
 
-    apply(frule_tac ?a1.0 = "(Vtuple head_types heads)" in can_encode_as.cases; simp?)
-           apply(clarsimp) apply(simp add:tuple_value_valid_aux_def)
+        obtain vhbytes where Vhdec :
+          "decode' t (int (length pre1) + decode_sint (take 32 code), pre1 @ pre2 @ code) = 
+              Ok (vh, vhbytes)"
+          using "1.prems" Tcons Hcons N' Hnone Tsome 
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
 
-        apply(clarsimp)
-    apply(cut_tac
-v = "(Vtuple (Tsint (256::nat) # map abi_get_type heads) (Vsint (256::nat) (sint (word_rcat (take (32::nat) code) :: 256 word)) # heads))"
-and pre = "take (length pre1 + length pre2) pre"
-and code = "drop (length pre1 + length pre2) pre @ codea"
-and post = post in
-Estatic; simp?)
+        obtain hsbytes where Hsdec :
+          "decode'_dyn_tuple_heads (replicate n' t) (int (length pre2) + 32) 
+              (int (length pre1), pre1 @ pre2 @ code) =
+         Ok (heads't, tails't, count', hsbytes)" using "1.prems" Tcons Hcons N' Hnone Tsome 
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        obtain tsbytes where Tsdec : 
+          "decode'_dyn_tuple_tails tails't (replicate n' t) heads't (count'' + vhbytes) 
+              (int (length pre1), pre1 @ pre2 @ code) = Ok (vt, tsbytes)"
+          using "1.prems" Tcons Hcons N' Hnone Tsome Vhdec
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have Codelen' : "32 \<le> length code"
+          using "1.prems" Hcons Tcons N' Hnone Tsome 
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        hence Codelen : "int (min (length code) 32) = 32"
+          by auto
+
+        hence Codelen_int : "min (length code) 32 = 32"
+          by(auto)
+
+        have P2' : "pre2 @ code = pre2 @ (take 32 code) @ (drop 32 code)"
+          by(auto)
+
+        have Tsdec' :
+          "decode'_dyn_tuple_tails tails't (replicate n' t) heads't (count'' + vhbytes) 
+              (int (length pre1), pre1 @ (pre2 @ take 32 code) @  drop 32 code) = Ok (vt, tsbytes)"
+          using Tsdec unfolding P2' by auto
+
+        have Hsdec' :
+          "decode'_dyn_tuple_heads (replicate n' t) (int (length (pre2 @ take 32 code)))
+             (int (length pre1), pre1 @ (pre2 @ take 32 code) @ drop 32 code) =
+              Ok (heads't, tails't, count', hsbytes)" 
+          using Hsdec unfolding P2' using Codelen by(auto)
+
+        have Vhenc :
+          "can_encode_as vh (pre1 @ pre2 @ code)
+            (int (length pre1) + decode_sint (take 32 code))"
+          using "1.prems" Tcons Hcons N' Hnone Tsome Vhdec Hsdec Tsdec
+            abi_decode'_type_ok[OF Vhdec]
+            "15.IH"(1)[OF Vhdec]
+          by(auto split:sum.split_asm prod.split_asm if_split_asm )
+
+        obtain heads head_types tails where IHspec :
+          "abi_value_valid (Vfarray t n' vt)"
+          "is_head_and_tail vt heads head_types tails"
+          "can_encode_as (Vtuple head_types heads) (pre1 @ (pre2 @ take 32 code) @ drop 32 code)
+              (int (length pre1) + int (length (pre2 @ take 32 code)))"
+          "(\<And> offset v . (offset, v) \<in> set tails \<Longrightarrow> 
+             can_encode_as v (pre1 @ (pre2 @ take 32 code) @ drop 32 code) 
+                             (int (length pre1) + offset))"
+          "those (map2 ht_combine heads't (map (\<lambda>a. case a of None \<Rightarrow> None 
+                   | Some t \<Rightarrow> Some (t - int (length pre1))) tails't)) = Some heads"
+          "map (\<lambda>x. fst x + int (length pre1)) tails = somes tails't"
+          "ht_wellbehaved tails't (map abi_get_type vt) heads't"
+          using "1.prems" Tcons Hcons N' Hnone Tsome Vhdec Hsdec Tsdec
+          "15.IH"(2)[OF refl _ _ Hsdec' Tsdec']
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have C1 : "abi_value_valid v" using IHspec(1) abi_decode'_type_ok[OF Vhdec]
+          encode_correct_converse_valid[OF Vhenc] "1.prems" N'
+          by(auto simp add:farray_value_valid_aux_def)
+
+        have C2 : "is_head_and_tail (vh # vt) 
+            (Vsint (256::nat) (decode_sint (take (32::nat) code))# heads)
+            (Tsint 256 # head_types)
+            ((decode_sint (take (32::nat) code), vh)#tails)"
+          using "1.prems" IHspec(2) C1
+          by(auto simp add: farray_value_valid_aux_def intro: iht_dynamic)
+
+        have C3 : "can_encode_as (Vtuple (Tsint 256 # head_types) 
+                      (Vsint (256::nat) (decode_sint (take (32::nat) code))# heads)) 
+                      (pre1 @ pre2 @ code)
+        (int (length pre1) + int (length pre2))" using IHspec(3)
+        proof(cases rule: can_encode_as.cases)
+          case (Estatic preX postX codeX)
+          show ?thesis 
+
+          proof(rule Estatic_easier; (simp; fail)?)
+          show 
+            "abi_type_isstatic (abi_get_type (Vtuple (Tsint 256 # head_types) 
+                               (Vsint 256 (decode_sint (take 32 code)) # heads)))"
+            using is_head_and_tail_head_types_elem[OF IHspec(2)]
+            by(auto simp add:list_ex_iff)
+          next
+            show "abi_value_valid (Vtuple (Tsint 256 # head_types)
+                                  (Vsint 256 (decode_sint (take 32 code)) # heads))"
+              using Estatic decode_sint_valid256[of "take 32 code"]
+              by(auto simp add:farray_value_valid_aux_def tuple_value_valid_aux_def)
+          next
+
+            obtain hsenc where Hsenc :
+              "those_err (map encode_static heads) = Ok hsenc"
+              using Estatic by(auto split: sum.split_asm)
+
+            have Len_nat : "(length pre1) + 
+                            (length (pre2 @ take 32 code)) = (length preX)"
+              using Estatic by(auto)
+
+            have Codeshift1 : "drop (length preX) (pre1 @ pre2 @ code) = concat hsenc @ postX"
+              using Estatic(1)  Estatic(5)
+              Len_nat Codelen Hsenc
+              by(auto)
+
+            hence Codeshift2 : "drop (length pre1 + (length pre2 + 32)) (pre1 @ pre2 @ code)
+              = concat hsenc @ postX"
+              using Estatic(1) Estatic(5)
+              Len_nat Codelen Hsenc
+              by(auto)
+
+            hence Codeshift3 : "drop 32 code = concat hsenc @ postX" 
+              using Estatic(1) Estatic(3) Estatic(4) Estatic(5) Hsenc
+              Len_nat Codelen 
+              by(auto)
+
+            have "(word_rsplit (word_rcat (take 32 code) :: 256 word) :: 8 word list)
+                    = take 32 code"
+              by(rule word_rsplit_rcat_size; auto simp add: Codelen_int word_size)
+
+            then show "encode_static (Vtuple (Tsint 256 # head_types) 
+                                (Vsint 256 (decode_sint (take 32 code)) # heads)) =
+                          Ok (take (nat (foldl (+) 32 (map abi_static_size head_types))) code)"
+              using Estatic "1.prems" encode_static_size[OF Estatic(5)] 
+                    sym[OF foldl_plus[of 32 0 "(map abi_static_size head_types)"]]
+                    Int.nat_add_distrib Hsenc Codelen SMT.int_plus Codeshift3
+              by(auto simp add: List.take_add)
+          next
+            show "nat (int (length pre1) + int (length pre2)) + 
+                  nat (abi_static_size (abi_get_type (Vtuple (Tsint 256 # head_types) 
+                                       (Vsint 256 (decode_sint (take 32 code)) # heads))))
+                      \<le> length (pre1 @ pre2 @ code)"
+              using Estatic Codelen encode_static_size[OF Estatic(5)] 
+                    sym[OF foldl_plus[of 32 0 "(map abi_static_size head_types)"]]
+              by(auto)
+          qed
+        next
+          case (Etuple_dyn tX headsX head_typesX tailsX)
+          then show ?thesis using is_head_and_tail_head_types_elem[OF IHspec(2), of tX]
+            by(auto)
+        qed
+
+        have C4 : 
+          "(\<And> offset v.
+             (offset, v) \<in> set ((decode_sint (take (32::nat) code), vh)#tails) \<Longrightarrow>
+             can_encode_as v (pre1 @ pre2 @ code) (int (length pre1) + offset))" 
+          using "1.prems" "15.IH"(1)[OF Vhdec] IHspec(4) abi_decode'_type_ok[OF Vhdec]
+                encode_correct_converse_valid[OF Vhenc] 
+          by(auto)
+
+        have C5 :
+          "those
+            (map2 ht_combine heads'
+              (map (case_option None (\<lambda>t. Some (t - int (length pre1)))) tails')) =
+           Some (Vsint (256::nat) (decode_sint (take (32::nat) code))# heads)"
+          using IHspec "1.prems" Tcons Hcons Hnone Tsome N' "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        have C6 : "map (\<lambda>x. fst x + int (length pre1))  
+                    ((decode_sint (take (32::nat) code), vh)#tails) = somes tails'"
+          using IHspec "1.prems" Tcons Hcons Hnone Tsome N' "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        have C7 : "ht_wellbehaved tails' (abi_get_type vh # map abi_get_type vt) heads'"
+          using IHspec "1.prems" Tcons Hcons Hnone Tsome N' "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        show ?thesis 
+          using C1 C2 C3 C4 C5 C6 C7 by(fastforce)
+      next
+        case Hsome : (Some h'h)
+
+        hence Tnone : "tails'h = None"
+          using "1.prems" Tcons Hcons N' Hsome
+          by(cases tails'h; auto)
+
+        then have False using "1.prems" Hcons Tcons Hsome Tnone N'
+          by(auto split:if_split_asm sum.split_asm)
+
+        thus ?thesis ..
+      qed
+    qed
+  next
+  (* Vtuple *)
+    case 2
+    show ?case 
+    proof(cases tails')
+      case Tnil : Nil
+      then have Hnil : "heads' = []" using "2.prems"
+        by(cases heads'; auto)
+
+      show ?thesis
+      proof(cases ts)
+        case Nil
+        then show ?thesis using "2.prems" by(auto)
+      next
+        case (Cons tsh tst)
+        then show ?thesis using "2.prems" Tnil Hnil by(auto)
+      qed
+    next
+      case Tcons : (Cons tails'h tails't)
+
+      then obtain heads'h heads't where Hcons : "heads' = heads'h#heads't" using "2.prems"
+        by(cases heads'; auto)
+
+      obtain tsh tst where Tscons : "ts = tsh#tst"
+        using "2.prems" Tcons Hcons 
+        by(cases ts; auto split:sum.split_asm prod.split_asm if_split_asm)
+
+      show ?thesis
+      proof(cases heads'h)
+        (* first tuple element is dynamic *)
+        case Hnone : None
+
+        obtain t'h where Tsome : "tails'h = Some t'h"
+          using "2.prems" Tcons Hcons Hnone
+          by(cases tails'h; auto)
+
+        have Tsh_dyn : "abi_type_isdynamic tsh"
+          using "2.prems" Tcons Hcons Tscons Hnone Tsome
+          by(auto split:prod.split_asm if_split_asm sum.split_asm)
+
+        obtain vhbytes where Vhdec :
+          "decode' tsh (int (length pre1) + decode_sint (take 32 code), pre1 @ pre2 @ code) = 
+              Ok (vh, vhbytes)"
+          using "2.prems" Tcons Hcons Tscons Hnone Tsome Tsh_dyn
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        obtain hsbytes where Hsdec :
+          "decode'_dyn_tuple_heads tst (int (length pre2) + 32) 
+              (int (length pre1), pre1 @ pre2 @ code) =
+         Ok (heads't, tails't, count', hsbytes)" using "2.prems" Tcons Hcons Tscons Hnone Tsome 
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        obtain tsbytes where Tsdec : 
+          "decode'_dyn_tuple_tails tails't tst heads't (count'' + vhbytes) 
+              (int (length pre1), pre1 @ pre2 @ code) = Ok (vt, tsbytes)"
+          using "2.prems" Tcons Hcons Tscons Hnone Tsome Vhdec
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have Codelen' : "32 \<le> length code"
+          using "2.prems" Hcons Tcons Tscons Hnone Tsome 
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        hence Codelen : "int (min (length code) 32) = 32"
+          by auto
+
+        hence Codelen_int : "min (length code) 32 = 32"
+          by(auto)
+
+        have P2' : "pre2 @ code = pre2 @ (take 32 code) @ (drop 32 code)"
+          by(auto)
+
+        have Tsdec' :
+          "decode'_dyn_tuple_tails tails't tst heads't (count'' + vhbytes) 
+              (int (length pre1), pre1 @ (pre2 @ take 32 code) @  drop 32 code) = Ok (vt, tsbytes)"
+          using Tsdec unfolding P2' by auto
+
+        have Hsdec' :
+          "decode'_dyn_tuple_heads tst (int (length (pre2 @ take 32 code)))
+             (int (length pre1), pre1 @ (pre2 @ take 32 code) @ drop 32 code) =
+              Ok (heads't, tails't, count', hsbytes)" 
+          using Hsdec unfolding P2' using Codelen by(auto)
+
+        have Vhenc :
+          "can_encode_as vh (pre1 @ pre2 @ code)
+            (int (length pre1) + decode_sint (take 32 code))"
+          using "2.prems" Tcons Hcons Tscons Hnone Tsome Vhdec Hsdec Tsdec
+            abi_decode'_type_ok[OF Vhdec]
+            "15.IH"(1)[OF Vhdec]
+          by(auto split:sum.split_asm prod.split_asm if_split_asm )
+
+        obtain heads head_types tails where IHspec :
+          "abi_value_valid (Vtuple tst vt)"
+          "is_head_and_tail vt heads head_types tails"
+          "can_encode_as (Vtuple head_types heads) (pre1 @ (pre2 @ take 32 code) @ drop 32 code)
+              (int (length pre1) + int (length (pre2 @ take 32 code)))"
+          "(\<And> offset v . (offset, v) \<in> set tails \<Longrightarrow> 
+             can_encode_as v (pre1 @ (pre2 @ take 32 code) @ drop 32 code) 
+                             (int (length pre1) + offset))"
+          "those (map2 ht_combine heads't (map (\<lambda>a. case a of None \<Rightarrow> None 
+                   | Some t \<Rightarrow> Some (t - int (length pre1))) tails't)) = Some heads"
+          "map (\<lambda>x. fst x + int (length pre1)) tails = somes tails't"
+          "ht_wellbehaved tails't (map abi_get_type vt) heads't"
+          using "2.prems" Tcons Hcons Tscons Hnone Tsome Vhdec Hsdec Tsdec
+            "15.IH"(3)[OF refl _  Hsdec' Tsdec']
+          by(auto split:prod.split_asm if_split_asm sum.split_asm)
+
+        have C1 : "abi_value_valid v" using IHspec(1) abi_decode'_type_ok[OF Vhdec]
+          encode_correct_converse_valid[OF Vhenc] "2.prems" Tscons
+          by(auto simp add:tuple_value_valid_aux_def)
+
+        have C2 : "is_head_and_tail (vh # vt) 
+            (Vsint (256::nat) (decode_sint (take (32::nat) code))# heads)
+            (Tsint 256 # head_types)
+            ((decode_sint (take (32::nat) code), vh)#tails)"
+          using "2.prems" IHspec(2) C1 Tsh_dyn Tscons
+          by(auto simp add: tuple_value_valid_aux_def intro: iht_dynamic)
+
+        have C3 : "can_encode_as (Vtuple (Tsint 256 # head_types) 
+                      (Vsint (256::nat) (decode_sint (take (32::nat) code))# heads)) 
+                      (pre1 @ pre2 @ code)
+        (int (length pre1) + int (length pre2))" using IHspec(3)
+        proof(cases rule: can_encode_as.cases)
+          case (Estatic preX postX codeX)
+          show ?thesis 
+
+          proof(rule Estatic_easier; (simp; fail)?)
+          show 
+            "abi_type_isstatic (abi_get_type (Vtuple (Tsint 256 # head_types) 
+                               (Vsint 256 (decode_sint (take 32 code)) # heads)))"
+            using is_head_and_tail_head_types_elem[OF IHspec(2)]
+            by(auto simp add:list_ex_iff)
+          next
+            show "abi_value_valid (Vtuple (Tsint 256 # head_types)
+                                  (Vsint 256 (decode_sint (take 32 code)) # heads))"
+              using Estatic decode_sint_valid256[of "take 32 code"]
+              by(auto simp add:farray_value_valid_aux_def tuple_value_valid_aux_def)
+          next
+
+            obtain hsenc where Hsenc :
+              "those_err (map encode_static heads) = Ok hsenc"
+              using Estatic by(auto split: sum.split_asm)
+
+            have Len_nat : "(length pre1) + 
+                            (length (pre2 @ take 32 code)) = (length preX)"
+              using Estatic by(auto)
+
+            have Codeshift1 : "drop (length preX) (pre1 @ pre2 @ code) = concat hsenc @ postX"
+              using Estatic(1)  Estatic(5)
+              Len_nat Codelen Hsenc
+              by(auto)
+
+            hence Codeshift2 : "drop (length pre1 + (length pre2 + 32)) (pre1 @ pre2 @ code)
+              = concat hsenc @ postX"
+              using Estatic(1) Estatic(5)
+              Len_nat Codelen Hsenc
+              by(auto)
+
+            hence Codeshift3 : "drop 32 code = concat hsenc @ postX" 
+              using Estatic(1) Estatic(3) Estatic(4) Estatic(5) Hsenc
+              Len_nat Codelen 
+              by(auto)
+
+            have "(word_rsplit (word_rcat (take 32 code) :: 256 word) :: 8 word list)
+                    = take 32 code"
+              by(rule word_rsplit_rcat_size; auto simp add: Codelen_int word_size)
+
+            then show "encode_static (Vtuple (Tsint 256 # head_types) 
+                                (Vsint 256 (decode_sint (take 32 code)) # heads)) =
+                          Ok (take (nat (foldl (+) 32 (map abi_static_size head_types))) code)"
+              using Estatic "2.prems" encode_static_size[OF Estatic(5)] 
+                    sym[OF foldl_plus[of 32 0 "(map abi_static_size head_types)"]]
+                    Int.nat_add_distrib Hsenc Codelen SMT.int_plus Codeshift3
+              by(auto simp add: List.take_add)
+          next
+            show "nat (int (length pre1) + int (length pre2)) + 
+                  nat (abi_static_size (abi_get_type (Vtuple (Tsint 256 # head_types) 
+                                       (Vsint 256 (decode_sint (take 32 code)) # heads))))
+                      \<le> length (pre1 @ pre2 @ code)"
+              using Estatic Codelen encode_static_size[OF Estatic(5)] 
+                    sym[OF foldl_plus[of 32 0 "(map abi_static_size head_types)"]]
+              by(auto)
+          qed
+        next
+          case (Etuple_dyn tX headsX head_typesX tailsX)
+          then show ?thesis using is_head_and_tail_head_types_elem[OF IHspec(2), of tX]
+            by(auto)
+        qed
+
+        have C4 : 
+          "(\<And> offset v.
+             (offset, v) \<in> set ((decode_sint (take (32::nat) code), vh)#tails) \<Longrightarrow>
+             can_encode_as v (pre1 @ pre2 @ code) (int (length pre1) + offset))" 
+          using "2.prems" "15.IH"(1)[OF Vhdec] IHspec(4) abi_decode'_type_ok[OF Vhdec]
+                encode_correct_converse_valid[OF Vhenc] 
+          by(auto)
+
+        have C5 :
+          "those
+            (map2 ht_combine heads'
+              (map (case_option None (\<lambda>t. Some (t - int (length pre1)))) tails')) =
+           Some (Vsint (256::nat) (decode_sint (take (32::nat) code))# heads)"
+          using IHspec "2.prems" Tcons Hcons Hnone Tsome Tscons Tsh_dyn "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        have C6 : "map (\<lambda>x. fst x + int (length pre1))  
+                    ((decode_sint (take (32::nat) code), vh)#tails) = somes tails'"
+          using IHspec "2.prems" Tcons Hcons Hnone Tsome Tscons Tsh_dyn "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        have C7 : "ht_wellbehaved tails' (abi_get_type vh # map abi_get_type vt) heads'"
+          using IHspec "2.prems" Tcons Hcons Hnone Tsome Tscons Tsh_dyn "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        show ?thesis 
+          using C1 C2 C3 C4 C5 C6 C7 by(fastforce)
+      next
+        case Hsome : (Some h'h)
+
+        have Tnone : "tails'h = None"
+          using "2.prems" Tcons Hcons Hsome
+          by(cases tails'h; auto)
+
+        have Tsh_static : "abi_type_isstatic tsh"
+          using "2.prems" Tcons Hcons Tscons Hsome Tnone
+          by(auto split:prod.split_asm if_split_asm sum.split_asm)
+
+        obtain vhbytes where Vhdec :
+          "decode' tsh (int (length pre1) + int (length pre2), pre1 @ pre2 @ code) = 
+              Ok (vh, vhbytes)"
+          using "2.prems" Tcons Hcons Tscons Hsome Tnone Tsh_static
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have Tsh_vh : "abi_get_type vh = tsh"
+          using Estatic "2.prems" Hsome Tnone Tsh_static Vhdec
+          abi_decode'_type_ok[OF Vhdec] by(auto)
+
+        obtain hsbytes where Hsdec :
+          "decode'_dyn_tuple_heads tst (int (length pre2) + abi_static_size tsh)
+            (int (length pre1), pre1 @ pre2 @ code) =
+         Ok (heads't, tails't, count', hsbytes)"
+          using "2.prems" Tcons Hcons Tscons Tnone Hsome Tsh_static  abi_static_size_nonneg
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        obtain tsbytes where Tsdec : 
+          "decode'_dyn_tuple_tails tails't tst heads't (count'') 
+              (int (length pre1), pre1 @ pre2 @ code) = Ok (vt, tsbytes)"
+          using "2.prems" Tcons Hcons Tscons Tnone Hsome Vhdec Hsdec
+                          Tsh_static abi_static_size_nonneg
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have Vhenc :
+          "can_encode_as vh (pre1 @ pre2 @ code)
+            (int (length pre1) + int (length pre2))"
+          using "2.prems" Tcons Hcons Tscons Tnone Hsome Vhdec Hsdec Tsdec
+            abi_decode'_type_ok[OF Vhdec]
+            "15.IH"(1)[OF Vhdec]
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have Vh_static : "abi_type_isstatic (abi_get_type vh)"
+          using "2.prems" Tcons Hcons Tscons Tnone Hsome Vhdec Hsdec Tsdec
+            abi_decode'_type_ok[OF Vhdec]
+            "15.IH"(1)[OF Vhdec]
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have Vhenc_static' : 
+          "encode_static vh = Ok (take (nat (abi_static_size tsh)) code) \<and>
+           abi_value_valid vh"
+          using Vhenc Vh_static
+        proof(cases rule: can_encode_as.cases)
+          case (Estatic preX postX codeX)
+
+          have Len_nat : "(length (pre1@ pre2)) = (length preX)"
+            using Estatic by auto
+
+          have Len_h_nat : "nat (abi_static_size (abi_get_type vh)) = (length codeX)"
+            using Estatic abi_static_size_nonneg[of "abi_get_type vh"]
+              encode_static_size[of vh codeX]
+            by(auto)
+
+          hence Codeshift1 : "drop ((length pre1) + (length pre2)) ((pre1 @ pre2) @ code)
+            = codeX @ postX"
+            using Estatic(1) Estatic(5)
+            Len_nat 
+            by(auto)
+
+          hence Codeshift2 : "code = codeX @ postX" 
+            using Estatic(1) Estatic(3) Estatic(4) Estatic(5) 
+            Len_nat unfolding List.drop_append
+            by(auto)
+
+          then show ?thesis using Estatic encode_static_size[of vh codeX]
+              abi_static_size_nonneg[of "tsh"]
+              Len_h_nat Tsh_vh
+            by(auto)
+        next
+          (* NB: remaining cases are all trivial contradictions *)
+          case (Etuple_dyn ts vs t heads head_types tails)
+          then show ?thesis using Vh_static 
+            by(auto simp add:list_all_iff tuple_value_valid_aux_def list_ex_iff)
+        next
+          case (Efarray_dyn t n vs heads head_types tails)
+          then show ?thesis using Vh_static 
+            by(auto simp add:list_all_iff tuple_value_valid_aux_def list_ex_iff)
+        next
+          case (Earray t vs heads head_types tails)
+          then show ?thesis using Vh_static 
+            by(auto simp add:list_all_iff tuple_value_valid_aux_def list_ex_iff)
+        next
+          case (Ebytes l pre post count code)
+          then show ?thesis using Vh_static 
+            by(auto simp add:list_all_iff tuple_value_valid_aux_def list_ex_iff)
+        next
+          case (Estring s l)
+          then show ?thesis using Vh_static 
+            by(auto simp add:list_all_iff tuple_value_valid_aux_def list_ex_iff)
+        qed
+
+        hence Vhenc_static : "encode_static vh = Ok (take (nat (abi_static_size tsh)) code)"
+          by auto
+
+        have Codelen' : "abi_static_size tsh \<le> length code"
+          using encode_static_size[OF Vhenc_static] Tsh_vh Vhenc_static'
+          by(auto)
+
+        hence Codelen_int : "min (length code) (abi_static_size tsh) = (abi_static_size tsh)"
+          by(auto)
+
+        hence Codelen : "(int (min (length code) (nat (abi_static_size tsh))))
+                           = abi_static_size tsh"
+          using abi_static_size_nonneg[of tsh]
+          by auto
+
+        have P2' : "pre2 @ code = pre2 @ (take (nat (abi_static_size tsh)) code) @ 
+                                         (drop (nat (abi_static_size tsh)) code)"
+          by(auto)
+
+        have Tsdec' :
+          "decode'_dyn_tuple_tails tails't tst heads't (count'') 
+              (int (length pre1), pre1 @ (pre2 @ (take (nat (abi_static_size tsh)) code)) @  
+                                  (drop (nat (abi_static_size tsh)) code)) = Ok (vt, tsbytes)"
+          using Tsdec unfolding P2' by auto
+
+        have Hsdec' :
+          "decode'_dyn_tuple_heads tst (
+                                int (length (pre2 @ take (nat (abi_static_size tsh)) code)))
+             (int (length pre1), pre1 @ (pre2 @ (take (nat (abi_static_size tsh)) code)) @  
+                                  (drop (nat (abi_static_size tsh)) code)) =
+              Ok (heads't, tails't, count', hsbytes)" 
+          using Hsdec unfolding P2' using Codelen by(auto)
+
+        obtain heads head_types tails where IHspec :
+          "abi_value_valid (Vtuple tst vt)"
+          "is_head_and_tail vt heads head_types tails"
+          "can_encode_as (Vtuple head_types heads) 
+                         (pre1 @ (pre2 @ (take (nat (abi_static_size tsh)) code))
+                               @ drop (nat (abi_static_size tsh)) code)
+              (int (length pre1) + int (length (pre2 @ take (nat (abi_static_size tsh)) code)))"
+          "(\<And> offset v . (offset, v) \<in> set tails \<Longrightarrow> 
+             can_encode_as v (pre1 @ (pre2 @ take (nat (abi_static_size tsh)) code) 
+                                   @ drop (nat (abi_static_size tsh)) code) 
+                             (int (length pre1) + offset))"
+          "those (map2 ht_combine heads't (map (\<lambda>a. case a of None \<Rightarrow> None 
+                   | Some t \<Rightarrow> Some (t - int (length pre1))) tails't)) = Some heads"
+          "map (\<lambda>x. fst x + int (length pre1)) tails = somes tails't"
+          "ht_wellbehaved tails't (map abi_get_type vt) heads't"
+          using "2.prems" Tcons Hcons Tscons Tnone Hsome Vhdec Hsdec Tsdec
+          "15.IH"(3)[OF refl _ Hsdec' Tsdec']
+          by(auto split:prod.split_asm if_split_asm sum.split_asm)
        
-           apply(simp add:tuple_value_valid_aux_def)
-           apply(cut_tac w= "(word_rcat (take (32::nat) code) :: 256 word)" in sint_range_size)
-    apply(simp add:word_size)
-          apply(simp add:sint_value_valid_def)
-
-         apply(simp split:sum.splits)
-         apply(clarsimp)
-
-    apply(subgoal_tac
-"word_rsplit (word_rcat (take (32::nat) code) :: 256 word) = take 32 code")
-          apply(simp)
-          apply(simp add: append_eq_conv_conj)
-          apply(simp add:add.commute)
-
-         apply(rule_tac word_rsplit_rcat_size)
-         apply(simp add:word_size)
-
-    apply(subgoal_tac
-"(min (length pre) (length pre1 + length pre2)) = (length pre1 + length pre2)")
-         apply(clarsimp)
-
-    apply(subgoal_tac
-"(take (length pre1 + length pre2) pre @ drop (length pre1 + length pre2) pre @ codea @ post)
-=
-pre @ codea @ post")
-          apply(clarsimp)
-         apply(clarsimp)
-        apply(arith)
-
-
-       apply(clarsimp)
-      apply(frule_tac ht = ta in is_head_and_tail_head_types_elem; clarsimp)
-
-     apply(fastforce)
-
-     apply(arith)
-
-
-    apply(rule_tac conjI)
-
-    (* 
-      Tuple
-    *)
-     apply(clarsimp)
-     apply(rotate_tac 1) apply(drule_tac mythin) apply(rotate_tac 1) apply(drule_tac mythin)
-    apply(clarsimp)
-    apply(case_tac tails'; clarsimp)
-     apply(case_tac ts; clarsimp)
-     apply(case_tac ts; clarsimp)
-    apply(case_tac heads'; clarsimp)
-     apply(simp add:Let_def split:if_splits sum.splits prod.splits)
-
-(* static head *)
-    apply(clarsimp)
-    apply(simp split:if_splits sum.splits prod.splits)
-    apply(clarsimp)
-    apply(drule_tac x = lista in spec) apply(clarsimp)
-    apply(rotate_tac -1)
-    apply(drule_tac x = pre1 in spec)
-    apply(drule_tac x = "pre2 @ take (nat (abi_static_size aa)) code" in spec)
-    apply(drule_tac x = "(drop (nat (abi_static_size aa)) (code))" in spec)
-    apply(drule_tac x = listb in spec) apply(drule_tac x = list in spec)
-    apply(rotate_tac -1)
-    apply(clarsimp)
-
-    apply(subgoal_tac
-"int (min (length code) (nat (abi_static_size aa))) = abi_static_size aa") apply(clarsimp)
-
-    apply(subgoal_tac
-"(\<exists>(count'::int) bytes::int.
-           decode'_dyn_tuple_heads lista (int (length pre2) + (abi_static_size aa)) (int (length pre1), pre1 @ pre2 @ code) =
-           Ok (listb, list, count', bytes))")
-         apply(clarsimp)
-
-    apply(subgoal_tac
-"(\<exists>(count''::int) bytes'::int.
-           decode'_dyn_tuple_tails list lista listb count'' (int (length pre1), pre1 @ pre2 @ code) = Ok (l, bytes'))")
-    apply(clarsimp)
-
-(* validity *)
-       apply(frule_tac abi_decode'_type_ok)
-      apply(simp add: tuple_value_valid_aux_def)
-      apply(rule_tac conjI)
-    apply(drule_tac x = x2 in spec) apply(rotate_tac -1)
-       apply(drule_tac x = "int (length pre1) + int (length pre2)" in spec)
-       apply(rotate_tac -1)
-       apply(drule_tac x = "pre1 @ pre2 @ code" in spec) apply(clarsimp)
-       apply(rotate_tac -1)
-    apply(frule_tac "encode_correct_converse_valid"; simp)
-(* end validity piece of proof *)
-
-    apply(frule_tac ?a1.0 = "(Vtuple head_types heads)" in can_encode_as.cases; simp?)
-           apply(clarsimp) apply(simp add:tuple_value_valid_aux_def)
-
-      apply(rule_tac x = "(abi_get_type t) # head_types" in exI)
-      apply(rule_tac x = "tails" in exI) 
-      apply(clarsimp)
-
-          apply(rule_tac conjI)
-           apply(rule_tac iht_static; simp?)
-
-  apply(frule_tac abi_decode'_type_ok; clarsimp)
-
-    apply(cut_tac
-v = "(Vtuple (abi_get_type t # map abi_get_type heads) (t # heads))"
-and pre = "take (length pre1 + length pre2) pre"
-and code = "drop (length pre1 + length pre2) pre @ codea"
-and post = post in
-Estatic; simp?)
-       
-             apply(simp add:tuple_value_valid_aux_def)
-             apply(drule_tac x= x2 in spec)
-    apply(rotate_tac -1)
-             apply(drule_tac x = "int (length pre1) + int (length pre2)" in spec)
-             apply(drule_tac x= "pre @ codea @ post" in spec)
-    apply(subgoal_tac "decode' (abi_get_type t) (int (length pre1) + int (length pre2), pre @ codea @ post) = Ok (t, x2)") apply(clarsimp)
-    apply(rotate_tac -2)
-    apply(frule_tac encode_correct_converse_valid; clarsimp)
-             apply(clarsimp)
-
-         apply(simp split:sum.splits)
-            apply(clarsimp)
-
-    apply(subgoal_tac
-"(length pre1) + ((length pre2) + nat (abi_static_size (abi_get_type t))) = length pre")
-
-             apply(drule_tac x= x2 in spec)
-    apply(rotate_tac -1)
-             apply(drule_tac x = "int (length pre1) + int (length pre2)" in spec)
-             apply(drule_tac x= "pre @ concat x1 @ post" in spec)
-            apply(subgoal_tac "decode' (abi_get_type t) (int (length pre1) + int (length pre2), pre @ concat x1 @ post) = Ok (t, x2)")
-             apply(clarsimp) apply(rotate_tac -2)
-             apply(drule_tac
-pre = "pre1 @ pre2"
-and code = "drop (length (pre1 @ pre2)) pre"
-and post = "concat x1 @ post" in
- encode_static_correct_converse; simp?)
-    apply(rule_tac n = "nat (abi_static_size (abi_get_type t))" and post = code and post' = "concat x1 @ post" in list_partition3)
-    apply(simp)
-    apply(simp)
-
-    apply(clarsimp)
-            apply(arith)
-
-           apply(subgoal_tac "(int (min (length pre) (length pre1 + length pre2))) = (length pre1 + length pre2)")
-            apply(clarsimp)
-    apply(subgoal_tac "
-take (length pre1 + length pre2) pre @ drop (length pre1 + length pre2) pre @ codea @ post
-= pre @ codea @ post")
-    apply(simp only: append.simps)
-            apply(clarsimp)
-    apply(simp add: min_absorb2)
-          apply(clarsimp)
-
-          apply(frule_tac ht = ta in is_head_and_tail_head_types_elem; simp)
-
-         apply(fastforce)
-        apply(fastforce)
-
-       apply(drule_tac x = x2 in spec)
-       apply(drule_tac x = "(int (length pre1) + int (length pre2))" in spec)
-       apply(drule_tac x = " pre1 @ pre2 @ code" in spec)
-  apply(frule_tac abi_decode'_type_ok; clarsimp)
-       apply(rotate_tac -1)
-       apply(drule_tac can_encode_as.cases; simp?) apply(clarsimp)
-        apply(subgoal_tac "code = codea @ post")
-         apply(thin_tac "pre1 @ pre2 @ code = pre @ codea @ post")
-    apply(thin_tac "int (length pre1) + int (length pre2) = int (length pre)")
-         apply(clarsimp)
-         apply(frule_tac encode_static_size; simp)
-    apply(subgoal_tac
-"(length pre1) +  (length pre2) =  (length pre)")
-         apply(clarsimp)
-    apply(cut_tac xs = "pre1 @ pre2"
-and ys = pre
-and us = "code"
-and vs = "codea @ post"
-in append_eq_append_conv) apply(clarsimp)
-    apply(clarsimp)
-
-    apply(arith)
-
-       apply(simp add:list_ex_iff)
-
-      apply(simp add:abi_static_size_nonneg)
-
-(* dynamic head *)
-    apply(clarsimp)
-
-
-    apply(subgoal_tac "int (min (length code) (32::nat)) = 32")
-     apply(clarsimp)
-
-      apply(simp add:tuple_value_valid_aux_def)
-    apply(simp split:sum.splits prod.splits) apply(clarsimp)
-     apply(frule_tac abi_decode'_type_ok) apply(clarsimp)
-     apply(drule_tac x =lista in spec) apply(clarsimp)
-     apply(drule_tac x = pre1 in spec) 
-apply(drule_tac x = "pre2 @ (take (32::nat) code)" in spec) apply(clarsimp)
-    apply(drule_tac x = "(drop 32 (code))" in spec)
-    apply(drule_tac x = listb in spec) apply(drule_tac x = list in spec)
-    apply(rotate_tac -1)
-     apply(clarsimp)
-
-    apply(subgoal_tac "(\<exists>(count'::int) bytes::int. decode'_dyn_tuple_heads lista (int (length pre2) + int (min (length code) (32::nat))) (int (length pre1), pre1 @ pre2 @ code) = Ok (listb, list, count', bytes))")
-    apply(clarsimp)
-      apply(subgoal_tac " (\<exists>(count''::int) bytes'::int. decode'_dyn_tuple_tails list lista listb count'' (int (length pre1), pre1 @ pre2 @ code) = Ok (l, bytes'))")
-       apply(clarsimp)
-
-
-    (* validity *)
-       apply(frule_tac abi_decode'_type_ok)
-      apply(simp add: farray_value_valid_aux_def)
-      apply(rule_tac conjI)
-    apply(drule_tac x = x2 in spec) apply(rotate_tac -1)
-       apply(drule_tac x = "(int (length pre1) + sint (word_rcat (take (32::nat) code) :: 256 word))" in spec)
-       apply(rotate_tac -1)
-       apply(drule_tac x = "pre1 @ pre2 @ code" in spec) apply(clarsimp)
-       apply(rotate_tac -2)
-    apply(frule_tac "encode_correct_converse_valid"; simp)
-(* end validity piece of proof *)
-
-      apply(rule_tac x = "(Tsint 256) # head_types" in exI)
-      apply(rule_tac x = "((sint (word_rcat (take (32::nat) code) :: 256 word)), t)#tails" in exI) 
-      apply(clarsimp)
-
-      apply(rule_tac conjI)
-       apply(rule_tac iht_dynamic; simp?)
-       apply(frule_tac abi_decode'_type_ok; clarsimp)
-
-    apply(frule_tac ?a1.0 = "(Vtuple head_types heads)" in can_encode_as.cases; simp?)
-           apply(clarsimp) apply(simp add:tuple_value_valid_aux_def)
-
-        apply(clarsimp)
-    apply(cut_tac
-v = "(Vtuple (Tsint (256::nat) # map abi_get_type heads) (Vsint (256::nat) (sint (word_rcat (take (32::nat) code) :: 256 word)) # heads))"
-and pre = "take (length pre1 + length pre2) pre"
-and code = "drop (length pre1 + length pre2) pre @ codea"
-and post = post in
-Estatic; simp?)
-       
-           apply(simp add:tuple_value_valid_aux_def)
-           apply(cut_tac w= "(word_rcat (take (32::nat) code) :: 256 word)" in sint_range_size)
-    apply(simp add:word_size)
-          apply(simp add:sint_value_valid_def)
-
-         apply(simp split:sum.splits)
-         apply(clarsimp)
-
-    apply(subgoal_tac
-"word_rsplit (word_rcat (take (32::nat) code) :: 256 word) = take 32 code")
-          apply(simp)
-          apply(simp add: append_eq_conv_conj)
-          apply(simp add:add.commute)
-
-         apply(rule_tac word_rsplit_rcat_size)
-         apply(simp add:word_size)
-
-    apply(subgoal_tac
-"(min (length pre) (length pre1 + length pre2)) = (length pre1 + length pre2)")
-         apply(clarsimp)
-
-    apply(subgoal_tac
-"(take (length pre1 + length pre2) pre @ drop (length pre1 + length pre2) pre @ codea @ post)
-=
-pre @ codea @ post")
-          apply(clarsimp)
-         apply(clarsimp)
-        apply(arith)
-
-
-       apply(clarsimp)
-      apply(frule_tac ht = ta in is_head_and_tail_head_types_elem; clarsimp)
-
-     apply(fastforce)
-
-      apply(clarsimp)
-apply(clarsimp)
-
-     apply(arith)
-
-
-(* Array *)
-    apply(clarify)
-     apply(rotate_tac 1) apply(drule_tac mythin) apply(drule_tac mythin)
-    apply(clarsimp)
-    apply(case_tac tails'; clarsimp)
-    apply(case_tac heads'; clarsimp)
-
-    apply(subgoal_tac " uint_value_valid (256::nat) (int (length l))")
-    apply(subgoal_tac "length (word_rsplit (word_of_int (int (length l)) :: 256 word) :: 8 word list) = (32::nat)")
-     apply(simp add:Let_def split:if_splits sum.splits prod.splits)
-
-(* static elements *)
-    apply(clarsimp)
-    apply(simp split:if_splits sum.splits prod.splits)
-    apply(clarsimp)
-      apply(drule_tac x = ta in spec) apply(clarsimp)
-        apply(rotate_tac -1)
-    apply(drule_tac x = "n'" in spec) apply(clarsimp)
-    apply(drule_tac x = pre1 in spec)
-      apply(drule_tac x = "pre2 @ take (nat (abi_static_size ta)) code" in spec)
-
-      apply(drule_tac x = "(drop (nat (abi_static_size ta)) (code))" in spec)
-    apply(clarsimp)
-    apply(drule_tac x = lista in spec) apply(drule_tac x = list in spec)
-    apply(rotate_tac -1)
-
-    apply(subgoal_tac
-"int (min (length code) (nat (abi_static_size ta))) = abi_static_size ta") apply(clarsimp)
-
-(*
-    apply(frule_tac decode'_tuple_tails_length; clarsimp)
-*)
-    apply(subgoal_tac
-" (\<exists>(count''::int) bytes'::int.
-           decode'_dyn_tuple_tails list (replicate (length l) ta) lista count''
-            (int (length pre1) + (32::int), pre1 @ word_rsplit (word_of_int (int n') :: 256 word) @ pre2 @ code) =
-           Ok (l, bytes'))")            apply(clarsimp)
-
-
-
-(* validity *)
-       apply(frule_tac abi_decode'_type_ok)
-      apply(simp add: array_value_valid_aux_def)
-      apply(rule_tac conjI)
-    apply(drule_tac x = x2 in spec) apply(rotate_tac -1)
-       apply(drule_tac x = "int (length pre1) + 32 + int (length pre2)" in spec)
-       apply(rotate_tac -1)
-       apply(drule_tac x = " pre1 @ word_rsplit (word_of_int (int n') :: 256 word) @ pre2 @ code" in spec) apply(clarsimp)
-       apply(rotate_tac -1)
-    apply(frule_tac "encode_correct_converse_valid"; simp)
-(* end validity piece of proof *)
-
-
-    apply(frule_tac ?a1.0 = "(Vtuple head_types heads)" in can_encode_as.cases; simp?)
-           apply(clarsimp) apply(simp add:tuple_value_valid_aux_def)
-
-
-      apply(rule_tac x = "(abi_get_type t) # head_types" in exI)
-      apply(rule_tac x = "tails" in exI) 
-      apply(clarsimp)
-
-          apply(rule_tac conjI)
-           apply(rule_tac iht_static; simp?)
-
-  apply(frule_tac abi_decode'_type_ok; clarsimp)
-
-    apply(cut_tac
-v = "(Vtuple (abi_get_type t # map abi_get_type heads) (t # heads))"
-and pre = "take (length pre1 + 32 + length pre2) pre"
-and code = "drop (length pre1 + 32 + length pre2) pre @ codea"
-and post = post in
-Estatic; simp?)
-       
-             apply(simp add:tuple_value_valid_aux_def)
-             apply(drule_tac x= x2 in spec)
-    apply(rotate_tac -1)
-             apply(drule_tac x = "int (length pre1) + int 32 + int (length pre2)" in spec)
-             apply(drule_tac x= "pre @ codea @ post" in spec)
-    apply(subgoal_tac "decode' (abi_get_type t) (int (length pre1) + int 32 + int (length pre2), pre @ codea @ post) = Ok (t, x2)") apply(clarsimp)
-    apply(rotate_tac -2)
-    apply(frule_tac encode_correct_converse_valid; clarsimp)
-             apply(clarsimp)
-
-         apply(simp split:sum.splits)
-            apply(clarsimp)
-
-    apply(subgoal_tac
-"(length pre1) + 32 + ((length pre2) + nat (abi_static_size (abi_get_type t))) = length pre")
-
-             apply(drule_tac x= x2 in spec)
-    apply(rotate_tac -1)
-             apply(drule_tac x = "int (length pre1) + 32 + int (length pre2)" in spec)
-             apply(drule_tac x= "pre @ concat x1 @ post" in spec)
-            apply(subgoal_tac "decode' (abi_get_type t) (int (length pre1) + 32 + int (length pre2), pre @ concat x1 @ post) = Ok (t, x2)")
-             apply(clarsimp) apply(rotate_tac -2)
-             apply(drule_tac
-pre = "pre1 @ word_rsplit (word_of_int (int n') :: 256 word) @ pre2"
-and code = "drop (length (pre1 @ word_rsplit (word_of_int (int n') :: 256 word) @  pre2)) pre"
-and post = "concat x1 @ post" in
- encode_static_correct_converse; simp?)
-
-    apply(cut_tac ?l1.0 = "pre1 @ word_rsplit (word_of_int (int n') :: 256 word)"
-and ?l2.0 = "pre2"
-and l = pre
-and post = code
-and post' = "concat x1 @ post"
-and n = "nat (abi_static_size (abi_get_type t))"
-in list_partition3)
-
-    apply(simp)
-               apply(simp)
-              apply(simp)
-    apply(subgoal_tac "length pre1 + (32::nat) + length pre2 =
-length pre1 + ((32::nat) + length pre2)")
-    apply(clarsimp)
-            apply(arith)
-    apply(subgoal_tac "length pre1 + (32::nat) + length pre2 =
-length pre1 + ((32::nat) + length pre2)")
-              apply(clarsimp)
-
-
-    apply(cut_tac ?l1.0 = "pre1 @ word_rsplit (word_of_int (int n') :: 256 word)"
-and ?l2.0 = "pre2"
-and l = pre
-and post = code
-and post' = "concat x1 @ post"
-and n = "nat (abi_static_size (abi_get_type t))"
-in list_partition3)
-
-    apply(simp)
-               apply(simp)
-              apply(simp)
-    apply(subgoal_tac " 
-length pre1 + ((32::nat) + length pre2) = length pre1 + (32::nat) + length pre2")
-    apply(simp only:)
-            apply(arith)
-    apply(subgoal_tac "length pre1 + (32::nat) + length pre2 =
-length pre1 + ((32::nat) + length pre2)")
-    apply(clarsimp)
-            apply(arith)
-
-            apply(clarsimp)
-
-           apply(arith)
-
-           apply(subgoal_tac "(int (min (length pre) (length pre1 + length pre2))) = (length pre1 + length pre2)")
-            apply(clarsimp)
-    apply(subgoal_tac "
-take (length pre1 + 32 + length pre2) pre @ drop (length pre1 + 32 + length pre2) pre @ codea @ post
-= pre @ codea @ post")
-    apply(simp only: append.simps)
-            apply(clarsimp)
-    apply(simp add: min_absorb2)
-          apply(clarsimp)
-          apply(arith)
-
-    apply(clarsimp)
-          apply(frule_tac ht = ta in is_head_and_tail_head_types_elem; simp)
-
-         apply(fastforce)
-
-       apply(drule_tac x = x2 in spec)
-       apply(drule_tac x = "(int (length pre1) + 32 + int (length pre2))" in spec)
-       apply(drule_tac x = " pre1 @ word_rsplit (word_of_int (int n') :: 256 word) @ pre2 @ code" in spec)
-  apply(frule_tac abi_decode'_type_ok; clarsimp)
-       apply(rotate_tac -1)
-       apply(drule_tac can_encode_as.cases; simp?) apply(clarsimp)
-        apply(subgoal_tac "code = codea @ post")
-         apply(thin_tac "pre1 @ word_rsplit (word_of_int (int n') :: 256 word) @  pre2 @ code = pre @ codea @ post")
-    apply(thin_tac "int (length pre1) + 32 + int (length pre2) = int (length pre)")
-         apply(clarsimp)
-         apply(frule_tac encode_static_size; simp)
-    apply(subgoal_tac
-"(length pre1) + 32 +  (length pre2) =  (length pre)")
-         apply(clarsimp)
-    apply(cut_tac xs = "pre1 @ word_rsplit (word_of_int (int n') :: 256 word) @ pre2"
-and ys = pre
-and us = "code"
-and vs = "codea @ post"
-in append_eq_append_conv) apply(clarsimp)
-    apply(clarsimp)
-
-    apply(arith)
-
-       apply(simp add:list_ex_iff)
-
-      apply(simp add:abi_static_size_nonneg)
-
-
-(*
-    apply(simp add: uint_value_valid_def)
-
-      apply(simp add:abi_static_size_nonneg)
-*)
-
-(* dynamic *)
-    apply(clarsimp)
-
-
-    apply(subgoal_tac "int (min (length code) (32::nat)) = 32")
-     apply(clarsimp)
-
-      apply(simp add:array_value_valid_aux_def)
-    apply(simp split:sum.splits prod.splits) apply(clarsimp)
-     apply(frule_tac abi_decode'_type_ok) apply(clarsimp)
-       apply(drule_tac x ="abi_get_type t" in spec) apply(clarsimp)
-    apply(drule_tac x = n' in spec) apply(clarsimp)
-     apply(drule_tac x = "pre1" in spec) 
-     apply(drule_tac x = "pre2 @ (take (32::nat) code)" in spec) apply(clarsimp)
-(*     apply(drule_tac x = count in spec) apply(clarsimp)
-    apply(subgoal_tac "uint_value_valid (256::nat) (int (length l))") apply(clarsimp) *)
-    apply(drule_tac x = "(drop 32 (code))" in spec) apply(clarsimp)
-
-
-    apply(subgoal_tac "(\<exists>(count''::int) bytes'::int.
-           decode'_dyn_tuple_tails list (replicate (length l) (abi_get_type t)) lista count''
-            (int (length pre1) + (32::int), pre1 @ word_rsplit (word_of_int (int n') :: 256 word) @ pre2 @ code) =
-           Ok (l, bytes'))")     apply(clarsimp)
-
-    (* validity *)
-       apply(frule_tac abi_decode'_type_ok)
-      apply(simp add: farray_value_valid_aux_def)
-      apply(rule_tac conjI)
-    apply(drule_tac x = x2 in spec) apply(rotate_tac -1)
-       apply(drule_tac x = "(int (length pre1) + 32 + sint (word_rcat (take (32::nat) code) :: 256 word))" in spec)
-       apply(rotate_tac -1)
-       apply(drule_tac x = "pre1 @ (word_rsplit (word_of_int (int n') :: 256 word)) @ pre2 @ code" in spec) apply(clarsimp)
-       apply(rotate_tac -2)
-    apply(frule_tac "encode_correct_converse_valid"; simp)
-(* end validity piece of proof *)
-
-      apply(rule_tac x = "(Tsint 256) # head_types" in exI)
-      apply(rule_tac x = "((sint (word_rcat (take (32::nat) code) :: 256 word)), t)#tails" in exI) 
-      apply(clarsimp)
-
-      apply(rule_tac conjI)
-       apply(rule_tac iht_dynamic; simp?)
-       apply(frule_tac abi_decode'_type_ok; clarsimp)
-
-    apply(frule_tac ?a1.0 = "(Vtuple head_types heads)" in can_encode_as.cases; simp?)
-           apply(clarsimp) apply(simp add:tuple_value_valid_aux_def)
-
-        apply(clarsimp)
-    apply(cut_tac
-v = "(Vtuple (Tsint (256::nat) # map abi_get_type heads) (Vsint (256::nat) (sint (word_rcat (take (32::nat) code) :: 256 word)) # heads))"
-and pre = "take (length pre1 + 32 + length pre2) pre"
-and code = "drop (length pre1 + 32 + length pre2) pre @ codea"
-and post = post in
-Estatic; simp?)
-       
-          apply(simp add:tuple_value_valid_aux_def)
-           apply(cut_tac w= "(word_rcat (take (32::nat) code) :: 256 word)" in sint_range_size)
-    apply(simp add:word_size)
-          apply(simp add:sint_value_valid_def)
-
-         apply(simp split:sum.splits)
-         apply(clarsimp)
-
-    apply(subgoal_tac
-"word_rsplit (word_rcat (take (32::nat) code) :: 256 word) = take 32 code")
-          apply(simp)
-          apply(simp add: append_eq_conv_conj)
-          apply(simp add:add.commute)
-
-         apply(rule_tac word_rsplit_rcat_size)
-         apply(simp add:word_size)
-
-    apply(subgoal_tac
-"(min (length pre) (length pre1 + 32 + length pre2)) = (length pre1 + 32 + length pre2)")
-         apply(clarsimp)
-
-    apply(subgoal_tac
-"(take (length pre1 + 32 + length pre2) pre @ drop (length pre1 + 32 + length pre2) pre @ codea @ post)
-=
-pre @ codea @ post")
-          apply(clarsimp)
-         apply(clarsimp)
-        apply(arith)
-
-
-       apply(clarsimp)
-      apply(frule_tac ht = ta in is_head_and_tail_head_types_elem; clarsimp)
-
-      apply(fastforce)
-
-    apply(simp add:uint_value_valid_def)
-
-     apply(clarsimp)
-
-
-     apply(simp add:uint_valid_length)
-
-    apply(simp add:uint_value_valid_def)
-    done
-qed
-
-lemma abi_decode_succeed_converse_clause1 :
-  assumes H1 : "decode' t (start, full_code) = Ok (v, len)"
-  assumes H2 : "abi_type_valid t"
-  assumes H3 : "abi_get_type v = t"
-  shows  "can_encode_as v full_code (start)"
-proof(-)
-
-  have "decode' t (start, full_code) = Ok (v::abi_value, len) \<Longrightarrow> abi_type_valid t \<Longrightarrow> abi_get_type v = t \<Longrightarrow> can_encode_as v full_code start"
-    using conjE[OF abi_decode_succeed_converse_gen[of v "[]"]] by(clarify; fast)
-
-  thus ?thesis using H1 H2 H3 by auto
+        have C1 : "abi_value_valid v" using IHspec(1) abi_decode'_type_ok[OF Vhdec]
+          encode_correct_converse_valid[OF Vhenc] "2.prems" Tscons
+          by(auto simp add:tuple_value_valid_aux_def)
+
+        have C2 : "is_head_and_tail (vh # vt) 
+            (vh# heads)
+            (tsh # head_types)
+            (tails)"
+          using "2.prems" IHspec(2) C1 Tsh_static Tscons
+          by(auto simp add: tuple_value_valid_aux_def intro: iht_static)
+
+        have C3 : "can_encode_as (Vtuple (tsh # head_types) 
+                      (vh# heads)) 
+                      (pre1 @ pre2 @ code)
+        (int (length pre1) + int (length pre2))" using IHspec(3)
+        proof(cases rule: can_encode_as.cases)
+          case (Estatic preX postX codeX)
+          show ?thesis 
+
+          proof(rule Estatic_easier; (simp; fail)?)
+          show 
+            "abi_type_isstatic (abi_get_type (Vtuple (tsh # head_types) (vh # heads)))"
+            using is_head_and_tail_head_types_elem[OF IHspec(2)] Tsh_static
+            by(auto simp add:list_ex_iff)
+          next
+            show "abi_value_valid (Vtuple (tsh # head_types) (vh # heads))"
+              using Estatic C1 "2.prems" Tscons
+              by(auto simp add:tuple_value_valid_aux_def)
+          next
+            obtain hsenc where Hsenc :
+              "those_err (map encode_static heads) = Ok hsenc"
+              using Estatic by(auto split: sum.split_asm)
+
+            have Len_nat : "(length pre1) + 
+                            (length (pre2 @  take (nat (abi_static_size tsh)) code)) 
+                            = (length preX)"
+              using Estatic by(auto)
+
+            have Codeshift1 : "drop (length preX) (pre1 @ pre2 @ code) = concat hsenc @ postX"
+              using Estatic(1)  Estatic(5)
+              Len_nat Codelen Hsenc
+              by(auto)
+
+            hence Codeshift2 : "drop (length pre1 + (length pre2 + nat (abi_static_size tsh))) 
+                                (pre1 @ pre2 @ code) = concat hsenc @ postX"
+              using Estatic(1) Estatic(5)
+              Len_nat Codelen Hsenc
+              by(auto)
+
+            hence Codeshift3 : "drop (nat (abi_static_size tsh)) code = concat hsenc @ postX" 
+              using Estatic(1) Estatic(3) Estatic(4) Estatic(5) Hsenc
+              Len_nat Codelen 
+              by(auto)
+
+            then show "encode_static (Vtuple (tsh # head_types) (vh # heads)) =
+                          Ok (take (nat (foldl (+) (abi_static_size tsh)
+                                        (map abi_static_size head_types))) code)"
+              using Estatic Vhenc_static "2.prems" encode_static_size[OF Estatic(5)] 
+                    sym[OF foldl_plus[of "(abi_static_size tsh)" 0 
+                                         "(map abi_static_size head_types)"]]
+                    Int.nat_add_distrib Hsenc Codelen SMT.int_plus Codeshift3
+              by(auto simp add: List.take_add )
+          next
+            show "nat (int (length pre1) + int (length pre2)) + 
+                  nat (abi_static_size (abi_get_type (Vtuple (tsh # head_types) (vh # heads))))
+                      \<le> length (pre1 @ pre2 @ code)"
+              using Estatic Codelen encode_static_size[OF Estatic(5)] 
+                    sym[OF foldl_plus[of "(abi_static_size tsh)" 0 
+                                         "(map abi_static_size head_types)"]]
+              by(auto)
+          qed
+        next
+          case (Etuple_dyn tX headsX head_typesX tailsX)
+          then show ?thesis using is_head_and_tail_head_types_elem[OF IHspec(2), of tX]
+            by(auto)
+        qed
+
+        have C4 : 
+          "(\<And> offset v.
+             (offset, v) \<in> set (tails) \<Longrightarrow>
+             can_encode_as v (pre1 @ pre2 @ code) (int (length pre1) + offset))" 
+          using "2.prems" "15.IH"(1)[OF Vhdec] IHspec(4) abi_decode'_type_ok[OF Vhdec]
+                encode_correct_converse_valid[OF Vhenc] 
+          by(auto)
+
+        have C5 :
+          "those
+            (map2 ht_combine heads'
+              (map (case_option None (\<lambda>t. Some (t - int (length pre1)))) tails')) =
+           Some (vh# heads)"
+          using IHspec "2.prems" Tcons Hcons Tnone Hsome Tscons Tsh_static "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        have C6 : "map (\<lambda>x. fst x + int (length pre1))  
+                    (tails) = somes tails'"
+          using IHspec "2.prems" Tcons Hcons Tnone Hsome Tscons Tsh_static "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        have C7 : "ht_wellbehaved tails' (abi_get_type vh # map abi_get_type vt) heads'"
+          using IHspec "2.prems" Tcons Hcons Tnone Hsome Tscons Tsh_static "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        show ?thesis 
+          using C1 C2 C3 C4 C5 C6 C7 by(fastforce)
+      qed
+    qed
+  next
+  (* Varray*)
+    case 3
+    show ?case
+    proof(cases tails')
+      case Tnil : Nil
+      then have Hnil : "heads' = []" using "3.prems"
+        by(cases heads'; auto)
+
+      show ?thesis using "3.prems"
+      proof(cases n)
+        case 0
+        then show ?thesis using "3.prems" by(auto)
+      next
+        case (Suc np)
+        then show ?thesis using "3.prems" Tnil Hnil by(auto)
+      qed
+    next
+      case Tcons : (Cons tails'h tails't)
+
+      then obtain heads'h heads't where Hcons : "heads' = heads'h#heads't" using "3.prems"
+        by(cases heads'; auto)
+
+      obtain np where Np : "n = Suc np"
+        using "3.prems" Tcons Hcons 
+        by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+      show ?thesis
+      proof(cases heads'h)
+        (* array of dynamic elements *)
+        case Hnone : None
+
+        obtain t'h where Tsome : "tails'h = Some t'h"
+          using "3.prems" Tcons Hcons Hnone
+          by(cases tails'h; auto)
+
+        have T_dyn : "abi_type_isdynamic t"
+          using "3.prems" Tcons Hcons Np Hnone Tsome
+          by(auto split:prod.split_asm if_split_asm sum.split_asm)
+
+        obtain vhbytes where Vhdec :
+          "decode' t (int (length pre1) + 32 + decode_sint (take 32 code),
+              pre1 @ encode_int (int n') @ pre2 @ code) = 
+              Ok (vh, vhbytes)"
+          using "3.prems" Tcons Hcons Np Hnone Tsome T_dyn
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have T_vh : "abi_get_type vh = t"
+          using Estatic "3.prems" Tsome Hnone T_dyn Vhdec
+          abi_decode'_type_ok[OF Vhdec] by(auto)
+
+        obtain hsbytes where Hsdec :
+          "decode'_dyn_tuple_heads (replicate (length vt) t) (int (length pre2) + 32) 
+              (int (length pre1) + 32, pre1 @ encode_int (int n') @ pre2 @ code) =
+             Ok (heads't, tails't, count', hsbytes)"
+          using "3.prems" Tcons Hcons Np Hnone Tsome T_dyn
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        obtain tsbytes where Tsdec : 
+          "decode'_dyn_tuple_tails tails't (replicate (length vt) t) heads't (count'' + vhbytes) 
+              (int (length pre1) + 32, pre1 @ encode_int (int n') @ pre2 @ code) = Ok (vt, tsbytes)"
+          using "3.prems" Tcons Hcons Np Hnone Tsome Vhdec T_dyn
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have Codelen' : "32 \<le> length code"
+          using "3.prems" Hcons Tcons Np Hnone Tsome T_dyn
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        hence Codelen : "int (min (length code) 32) = 32"
+          by auto
+
+        hence Codelen_int : "min (length code) 32 = 32"
+          by(auto)
+
+        have P2' : "pre2 @ code = pre2 @ (take 32 code) @ (drop 32 code)"
+          by(auto)
+
+        have Tsdec' :
+          "decode'_dyn_tuple_tails tails't (replicate (length vt) t) heads't (count'' + vhbytes) 
+              (int (length pre1) + 32, pre1 @ encode_int (int n') @ 
+                                       (pre2 @ take 32 code) @ drop 32 code) = Ok (vt, tsbytes)"
+          using Tsdec unfolding P2' by auto
+
+        have Hsdec' :
+          "decode'_dyn_tuple_heads (replicate (length vt) t) (int (length (pre2 @ take 32 code)))
+             (int (length pre1) + 32, pre1 @ encode_int (int n') @  
+                                      (pre2 @ take 32 code) @ drop 32 code) =
+              Ok (heads't, tails't, count', hsbytes)" 
+          using Hsdec unfolding P2' using Codelen by(auto)
+
+        have Vhenc :
+          "can_encode_as vh (pre1 @ encode_int (int n') @  pre2 @ code)
+            (int (length pre1) + 32 + decode_sint (take 32 code))"
+          using "3.prems" Tcons Hcons Np Hnone Tsome Vhdec Hsdec Tsdec
+            abi_decode'_type_ok[OF Vhdec]
+            "15.IH"(1)[OF Vhdec]
+          by(auto split:sum.split_asm prod.split_asm if_split_asm )
+
+        have Codelen' : "32 \<le> length code"
+          using "3.prems" Hcons Tcons Np Hnone Tsome T_dyn
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        hence Codelen : "int (min (length code) 32) = 32"
+          by auto
+
+        hence Codelen_int : "min (length code) 32 = 32"
+          by(auto)
+
+        have P2' : "pre2 @ code = pre2 @ (take 32 code) @ (drop 32 code)"
+          by(auto)
+
+        have Tsdec' :
+          "decode'_dyn_tuple_tails tails't (replicate (length vt) t) heads't (count'' + vhbytes) 
+              (int (length (pre1 @ encode_int (int n'))), pre1 @ encode_int (int n') @ 
+              (pre2 @ take 32 code) @ drop 32 code) = Ok (vt, tsbytes)"
+          using Tsdec int_length unfolding P2' by auto
+
+        have Hsdec' :
+          "decode'_dyn_tuple_heads (replicate (length vt) t) (int (length (pre2 @ take 32 code)))
+             (int (length (pre1 @ encode_int (int n'))), pre1 @ encode_int (int n') @ 
+             (pre2 @ take 32 code) @ drop 32 code) =
+              Ok (heads't, tails't, count', hsbytes)" 
+          using Hsdec int_length unfolding P2' using Codelen by(auto)
+
+        have Vhenc :
+          "can_encode_as vh (pre1 @ encode_int (int n') @ pre2 @ code)
+            (int (length (pre1 @ encode_int (int n'))) + decode_sint (take 32 code))"
+          using "3.prems" Tcons Hcons Hnone Tsome Vhdec Hsdec Tsdec T_dyn Np
+            abi_decode'_type_ok[OF Vhdec]
+            "15.IH"(1)[OF Vhdec]
+          by(auto split:sum.split_asm prod.split_asm if_split_asm )
+
+        have Vt_len_valid : "uint_value_valid 256 (int (length vt))"
+          using "3.prems"
+          by(auto simp add: uint_value_valid_def)
+
+        obtain heads head_types tails where IHspec :
+          "abi_value_valid (Varray t vt)"
+          "is_head_and_tail vt heads head_types tails"
+          "can_encode_as (Vtuple head_types heads) 
+                         (pre1 @ encode_int (int n') @ (pre2 @ take 32 code) @ drop 32 code)
+                         (int (length pre1) + 32 + int (length (pre2 @ take 32 code)))"
+          "(\<And> offset v.
+              (offset, v) \<in> set tails \<Longrightarrow>
+              can_encode_as v (pre1 @ encode_int (int n') @(pre2 @ take 32 code) @ drop 32 code) 
+                              (int (length pre1) + 32 + offset))"
+          "those
+           (map2 ht_combine heads't
+            (map (\<lambda>a. case a of None \<Rightarrow> None 
+                            | Some t \<Rightarrow> Some (t - int (length pre1) - 32)) tails't)) =
+              Some heads"
+          "map (\<lambda>x. fst x + int (length pre1) + 32) tails = somes tails't"
+          "ht_wellbehaved tails't (map abi_get_type vt) heads't"
+          using "3.prems" Tcons Hcons Np Hnone Tsome Vhdec Hsdec Tsdec T_dyn
+                "15.IH"(4)[OF refl _ _ Vt_len_valid _ refl _ refl Hsdec' Tsdec']
+                int_length[of "int n'"]
+          by(auto split:prod.split_asm if_split_asm sum.split_asm)
+
+        have C1 : "abi_value_valid v" using IHspec(1) abi_decode'_type_ok[OF Vhdec]
+          encode_correct_converse_valid[OF Vhenc] "3.prems" 
+          by(auto simp add:array_value_valid_aux_def )
+
+        have C2 : "is_head_and_tail (vh # vt) 
+            (Vsint (256::nat) (decode_sint (take (32::nat) code))# heads)
+            (Tsint 256 # head_types)
+            ((decode_sint (take (32::nat) code), vh)#tails)"
+          using "3.prems" IHspec(2) C1 T_dyn Np
+          by(auto simp add: array_value_valid_aux_def intro: iht_dynamic)
+
+        have C3 : "can_encode_as (Vtuple (Tsint 256 # head_types) 
+                      (Vsint (256::nat) (decode_sint (take (32::nat) code))# heads)) 
+                      (pre1 @ encode_int (int n') @  pre2 @ code)
+        (int (length pre1) + 32 + int (length pre2))" using IHspec(3)
+        proof(cases rule: can_encode_as.cases)
+          case (Estatic preX postX codeX)
+          show ?thesis 
+
+          proof(rule Estatic_easier; (fast; fail)?)
+          show 
+            "abi_type_isstatic (abi_get_type (Vtuple (Tsint 256 # head_types) 
+                               (Vsint 256 (decode_sint (take 32 code)) # heads)))"
+            using is_head_and_tail_head_types_elem[OF IHspec(2)]
+            by(auto simp add:list_ex_iff)
+          next
+            show "abi_value_valid (Vtuple (Tsint 256 # head_types)
+                                  (Vsint 256 (decode_sint (take 32 code)) # heads))"
+              using Estatic decode_sint_valid256[of "take 32 code"]
+              by(auto simp add:array_value_valid_aux_def tuple_value_valid_aux_def)
+          next
+
+            obtain hsenc where Hsenc :
+              "those_err (map encode_static heads) = Ok hsenc"
+              using Estatic by(auto split: sum.split_asm)
+
+            have Len_nat : "(length pre1) + 32 +
+                            (length (pre2 @ take 32 code)) = (length preX)"
+              using Estatic by(auto)
+
+            have Codeshift1 : "drop (length preX) (pre1 @ encode_int (int n') @ 
+                                                   pre2 @ code) = concat hsenc @ postX"
+              using Estatic(1)  Estatic(5)
+              Len_nat Codelen Hsenc
+              by(auto)
+
+            hence Codeshift2 : "drop (length pre1 + 32 + (length pre2 + 32))
+                                     (pre1 @ encode_int (int n') @ pre2 @ code)
+              = concat hsenc @ postX"
+              using Estatic(1) Estatic(5)
+              Len_nat Codelen Hsenc
+              by(auto)
+
+            hence Codeshift3 : "drop 32 code = concat hsenc @ postX" 
+              using Estatic(1) Estatic(3) Estatic(4) Estatic(5) Hsenc
+              Len_nat Codelen int_length
+              by(auto)
+
+            have "(word_rsplit (word_rcat (take 32 code) :: 256 word) :: 8 word list)
+                    = take 32 code"
+              by(rule word_rsplit_rcat_size; auto simp add: Codelen_int word_size)
+
+            then show "encode_static (Vtuple (Tsint 256 # head_types)
+                                      (Vsint 256 (decode_sint (take 32 code)) # heads)) =
+                           Ok (take (nat (abi_static_size (abi_get_type 
+                                      (Vtuple (Tsint 256 # head_types) 
+                                        (Vsint 256 (decode_sint (take 32 code)) # heads)))))
+                                     (drop (nat (int (length pre1) + 32 + int (length pre2))) 
+                                           (pre1 @ encode_int (int n') @ pre2 @ code)))"
+              using Estatic "3.prems" encode_static_size[OF Estatic(5)] 
+                    sym[OF foldl_plus[of 32 0 "(map abi_static_size head_types)"]]
+                    Int.nat_add_distrib Hsenc Codelen SMT.int_plus Codeshift3
+              by(auto simp add: List.take_add)
+          next
+            show "0 \<le> int (length pre1) + 32 + int (length pre2)" by auto
+          next
+            show "nat (int (length pre1) + 32 + int (length pre2)) + 
+                  nat (abi_static_size (abi_get_type (Vtuple (Tsint 256 # head_types) 
+                                       (Vsint 256 (decode_sint (take 32 code)) # heads))))
+                      \<le> length (pre1 @ encode_int (int n') @ pre2 @ code)"
+              using Estatic Codelen encode_static_size[OF Estatic(5)] 
+                    sym[OF foldl_plus[of 32 0 "(map abi_static_size head_types)"]]
+              by(auto)
+          qed
+        next
+          case (Etuple_dyn tX headsX head_typesX tailsX)
+          then show ?thesis using is_head_and_tail_head_types_elem[OF IHspec(2), of tX]
+            by(auto)
+        qed
+
+        have C4 : 
+          "(\<And> offset v.
+             (offset, v) \<in> set ((decode_sint (take (32::nat) code), vh)#tails) \<Longrightarrow>
+             can_encode_as v (pre1 @ encode_int (int n') 
+                                   @ pre2 @ code) (int (length pre1) + 32 +  offset))" 
+          using "3.prems" "15.IH"(1)[OF Vhdec] IHspec(4) abi_decode'_type_ok[OF Vhdec]
+                encode_correct_converse_valid[OF Vhenc] 
+          by(auto)
+
+        have C5 :
+          "those
+            (map2 ht_combine heads'
+              (map (case_option None (\<lambda>t. Some (t - int (length pre1) - 32))) tails')) =
+           Some (Vsint (256::nat) (decode_sint (take (32::nat) code))# heads)"
+          using IHspec "3.prems" Tcons Hcons Hnone Tsome Np T_dyn "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        have C6 : "map (\<lambda>x. fst x + int (length pre1) + 32)  
+                    ((decode_sint (take (32::nat) code), vh)#tails) = somes tails'"
+          using IHspec "3.prems" Tcons Hcons Hnone Tsome Np T_dyn "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        have C7 : "ht_wellbehaved tails' (abi_get_type vh # map abi_get_type vt) heads'"
+          using IHspec "3.prems" Tcons Hcons Hnone Tsome Np T_dyn "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        show ?thesis 
+          using C1 C2 C3 C4 C5 C6 C7 unfolding "3.prems"(8)
+          by(fastforce)
+      next
+        case Hsome : (Some h'h)
+
+        have Tnone : "tails'h = None"
+          using "3.prems" Tcons Hcons Hsome
+          by(cases tails'h; auto)
+
+        have T_static : "abi_type_isstatic t"
+          using "3.prems" Tcons Hcons Np Hsome Tnone
+          by(auto split:prod.split_asm if_split_asm sum.split_asm)
+
+        obtain vhbytes where Vhdec :
+          "decode' t (int (length pre1) + 32 + int (length pre2),
+              pre1 @ encode_int (int n') @ pre2 @ code) = 
+              Ok (vh, vhbytes)"
+          using "3.prems" Tcons Hcons Np Hsome Tnone T_static
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have T_vh : "abi_get_type vh = t"
+          using Estatic "3.prems" Tnone Hsome T_static Vhdec
+          abi_decode'_type_ok[OF Vhdec] by(auto)
+
+        obtain hsbytes where Hsdec :
+          "decode'_dyn_tuple_heads (replicate (length vt) t) (int (length pre2) + abi_static_size t) 
+              (int (length pre1) + 32, pre1 @ encode_int (int n') @ pre2 @ code) =
+             Ok (heads't, tails't, count', hsbytes)"
+          using "3.prems" Tcons Hcons Np Hsome Tnone T_static T_vh abi_static_size_nonneg
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        obtain tsbytes where Tsdec : 
+          "decode'_dyn_tuple_tails tails't (replicate (length vt) t) heads't (count'') 
+              (int (length pre1) + 32, pre1 @ encode_int (int n') @ pre2 @ code) = Ok (vt, tsbytes)"
+          using "3.prems" Tcons Hcons Np Hsome Tnone Vhdec T_static
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have Vhenc :
+          "can_encode_as vh (pre1 @ encode_int (int n') @  pre2 @ code)
+            (int (length pre1) + 32 + int (length pre2))"
+          using "3.prems" Tcons Hcons Np Tnone Hsome Vhdec Hsdec Tsdec
+            abi_decode'_type_ok[OF Vhdec]
+            "15.IH"(1)[OF Vhdec]
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have Vh_static : "abi_type_isstatic (abi_get_type vh)"
+          using "3.prems" Tcons Hcons Np Tnone Hsome Vhdec Hsdec Tsdec
+            abi_decode'_type_ok[OF Vhdec]
+            "15.IH"(1)[OF Vhdec]
+          by(auto split:sum.split_asm prod.split_asm if_split_asm)
+
+        have Vhenc_static' : 
+          "encode_static vh = Ok (take (nat (abi_static_size t)) code) \<and>
+           abi_value_valid vh"
+          using Vhenc Vh_static
+        proof(cases rule: can_encode_as.cases)
+          case (Estatic preX postX codeX)
+
+          have Len_nat : "(length (pre1@   encode_int (int n') @ pre2)) = (length preX)"
+            using Estatic int_length by auto
+
+          have Len_h_nat : "nat (abi_static_size (abi_get_type vh)) = (length codeX)"
+            using Estatic abi_static_size_nonneg[of "abi_get_type vh"]
+              encode_static_size[of vh codeX]
+            by(auto)
+
+          hence Codeshift1 : "drop ((length pre1) + 32 + (length pre2)) 
+                                   ((pre1 @ encode_int (int n') @ pre2) @ code)
+            = codeX @ postX"
+            using Estatic(1) Estatic(5) int_length[of "int n'"]
+            Len_nat 
+            by(auto)
+
+          hence Codeshift2 : "code = codeX @ postX" 
+            using Estatic(1) Estatic(3) Estatic(4) Estatic(5) 
+            Len_nat int_length[of "int n'"]
+            unfolding List.drop_append
+            by(auto)
+
+          then show ?thesis using Estatic encode_static_size[of vh codeX]
+              Len_h_nat T_vh
+            by(auto)
+        next
+          (* NB: remaining cases are all trivial contradictions *)
+          case (Etuple_dyn ts vs t heads head_types tails)
+          then show ?thesis using Vh_static 
+            by(auto simp add:list_all_iff tuple_value_valid_aux_def list_ex_iff)
+        next
+          case (Efarray_dyn t n vs heads head_types tails)
+          then show ?thesis using Vh_static 
+            by(auto simp add:list_all_iff tuple_value_valid_aux_def list_ex_iff)
+        next
+          case (Earray t vs heads head_types tails)
+          then show ?thesis using Vh_static 
+            by(auto simp add:list_all_iff tuple_value_valid_aux_def list_ex_iff)
+        next
+          case (Ebytes l pre post count code)
+          then show ?thesis using Vh_static 
+            by(auto simp add:list_all_iff tuple_value_valid_aux_def list_ex_iff)
+        next
+          case (Estring s l)
+          then show ?thesis using Vh_static 
+            by(auto simp add:list_all_iff tuple_value_valid_aux_def list_ex_iff)
+        qed
+
+        hence Vhenc_static : "encode_static vh = Ok (take (nat (abi_static_size t)) code)"
+          by auto
+
+        have Codelen' : "abi_static_size t \<le> length code"
+          using encode_static_size[OF Vhenc_static] T_vh Vhenc_static'
+          by(auto)
+
+        hence Codelen_int : "min (length code) (abi_static_size t) = (abi_static_size t)"
+          by(auto)
+
+        hence Codelen : "(int (min (length code) (nat (abi_static_size t))))
+                           = abi_static_size t"
+          using abi_static_size_nonneg[of t]
+          by auto
+
+        have P2' : "pre2 @ code = pre2 @ (take (nat (abi_static_size t)) code) @ 
+                                         (drop (nat (abi_static_size t)) code)"
+          by(auto)
+
+        have Tsdec' :
+          "decode'_dyn_tuple_tails tails't (replicate (length vt) t) heads't (count'') 
+              (int (length (pre1 @ encode_int (int n'))), pre1 @ encode_int (int n') @ 
+                                  (pre2 @ (take (nat (abi_static_size t)) code)) @  
+                                  (drop (nat (abi_static_size t)) code)) = Ok (vt, tsbytes)"
+          using Tsdec unfolding P2' using int_length  by auto
+
+        have Hsdec' :
+          "decode'_dyn_tuple_heads (replicate (length vt) t) (
+                                int (length (pre2 @ take (nat (abi_static_size t)) code)))
+             (int (length (pre1 @ encode_int (int n'))), pre1 @ encode_int (int n') @ 
+                                  (pre2 @ (take (nat (abi_static_size t)) code)) @  
+                                  (drop (nat (abi_static_size t)) code)) =
+              Ok (heads't, tails't, count', hsbytes)" 
+          using Hsdec unfolding P2' using int_length Codelen  by(auto)
+
+        have Vt_len_valid : "uint_value_valid 256 (int (length vt))"
+          using "3.prems"
+          by(auto simp add: uint_value_valid_def)
+
+        obtain heads head_types tails where IHspec :
+          "abi_value_valid (Varray t vt)"
+          "is_head_and_tail vt heads head_types tails"
+          "can_encode_as (Vtuple head_types heads) 
+                         (pre1 @ encode_int (int n') @ 
+                           (pre2 @ take (nat (abi_static_size t)) code) @ 
+                             drop (nat (abi_static_size t)) code)
+                         (int (length pre1) + 32 +  
+                          int (length (pre2 @ take (nat (abi_static_size t)) code)))"
+          "(\<And> offset v.
+              (offset, v) \<in> set tails \<Longrightarrow>
+              can_encode_as v (pre1 @ encode_int (int n') @ 
+                                (pre2 @ take (nat (abi_static_size t)) code) @ 
+                                  drop (nat (abi_static_size t)) code) 
+                              (int (length pre1) + 32 + offset))"
+          "those
+           (map2 ht_combine heads't
+            (map (\<lambda>a. case a of None \<Rightarrow> None 
+                            | Some t \<Rightarrow> Some (t - int (length pre1) - 32)) tails't)) =
+              Some heads"
+          "map (\<lambda>x. fst x + int (length pre1) + 32) tails = somes tails't"
+          "ht_wellbehaved tails't (map abi_get_type vt) heads't"
+          using "3.prems" Tcons Hcons Np Tnone Hsome Vhdec Hsdec Tsdec T_static
+                "15.IH"(4)[OF refl _ _ Vt_len_valid _ refl _ refl Hsdec' Tsdec']
+                int_length[of "int n'"]
+          by(auto split:prod.split_asm if_split_asm sum.split_asm)
+
+
+        have C1 : "abi_value_valid v" using IHspec(1) abi_decode'_type_ok[OF Vhdec]
+          encode_correct_converse_valid[OF Vhenc] "3.prems" 
+          by(auto simp add:array_value_valid_aux_def )
+
+        have C2 : "is_head_and_tail (vh # vt) 
+            (vh# heads)
+            (t# head_types)
+            (tails)"
+          using "3.prems" IHspec(2) C1 T_static Np
+          by(auto simp add: array_value_valid_aux_def intro: iht_static)
+
+        have C3 : "can_encode_as (Vtuple (t # head_types) 
+                      (vh# heads)) 
+                      (pre1 @ encode_int (int n') @  pre2 @ code)
+        (int (length pre1) + 32 + int (length pre2))" using IHspec(3)
+        proof(cases rule: can_encode_as.cases)
+          case (Estatic preX postX codeX)
+          show ?thesis 
+
+          proof(rule Estatic_easier; (fast; fail)?)
+          show 
+            "abi_type_isstatic (abi_get_type (Vtuple (t # head_types) (vh # heads)))"
+            using is_head_and_tail_head_types_elem[OF IHspec(2)] T_static
+            by(auto simp add:list_ex_iff)
+          next
+            show "abi_value_valid (Vtuple (t # head_types)
+                                  (vh # heads))"
+              using Estatic C1 "3.prems" Np
+              by(auto simp add:array_value_valid_aux_def tuple_value_valid_aux_def)
+          next
+
+            obtain hsenc where Hsenc :
+              "those_err (map encode_static heads) = Ok hsenc"
+              using Estatic by(auto split: sum.split_asm)
+
+            have Len_nat : "(length pre1) + 32 +
+                            (length (pre2 @ take (nat (abi_static_size t)) code)) = (length preX)"
+              using Estatic by(auto)
+
+            have Codeshift1 : "drop (length preX) (pre1 @ encode_int (int n') @ 
+                                                   pre2 @ code) = concat hsenc @ postX"
+              using Estatic(1)  Estatic(5)
+              Len_nat Codelen Hsenc
+              by(auto)
+
+            hence Codeshift2 : "drop (length pre1 + 32 + (length pre2 + (nat (abi_static_size t))))
+                                     (pre1 @ encode_int (int n') @ pre2 @ code)
+              = concat hsenc @ postX"
+              using Estatic(1) Estatic(5)
+              Len_nat Codelen Hsenc
+              by(auto)
+
+            hence Codeshift3 : "drop (nat (abi_static_size t)) code = concat hsenc @ postX" 
+              using Estatic(1) Estatic(3) Estatic(4) Estatic(5) Hsenc
+              Len_nat Codelen int_length
+              by(auto)
+
+            then show "encode_static (Vtuple (t # head_types)
+                                      (vh # heads)) =
+                           Ok (take (nat (abi_static_size (abi_get_type 
+                                      (Vtuple (t # head_types) 
+                                        (vh # heads)))))
+                                     (drop (nat (int (length pre1) + 32 + int (length pre2))) 
+                                           (pre1 @ encode_int (int n') @ pre2 @ code)))"
+              using Estatic "3.prems" encode_static_size[OF Estatic(5)] 
+                    Vhenc_static
+                    sym[OF foldl_plus[of "(abi_static_size t)"
+                                      0 "(map abi_static_size head_types)"]]
+                    Int.nat_add_distrib Hsenc Codelen SMT.int_plus Codeshift3
+              by(auto simp add: List.take_add)
+          next
+            show "0 \<le> int (length pre1) + 32 + int (length pre2)" by auto
+          next
+            show "nat (int (length pre1) + 32 + int (length pre2)) + 
+                  nat (abi_static_size (abi_get_type (Vtuple (t # head_types) 
+                                       (vh # heads))))
+                      \<le> length (pre1 @ encode_int (int n') @ pre2 @ code)"
+              using Estatic Codelen encode_static_size[OF Estatic(5)] 
+                    sym[OF foldl_plus[of "(abi_static_size t)"
+                                      0 "(map abi_static_size head_types)"]]
+              by(auto)
+          qed
+        next
+          case (Etuple_dyn tX headsX head_typesX tailsX)
+          then show ?thesis using is_head_and_tail_head_types_elem[OF IHspec(2), of tX]
+            by(auto)
+        qed
+
+        have C4 : 
+          "(\<And> offset v.
+             (offset, v) \<in> set tails \<Longrightarrow>
+             can_encode_as v (pre1 @ encode_int (int n') 
+                                   @ pre2 @ code) (int (length pre1) + 32 +  offset))" 
+          using "3.prems" "15.IH"(1)[OF Vhdec] IHspec(4) abi_decode'_type_ok[OF Vhdec]
+                encode_correct_converse_valid[OF Vhenc] 
+          by(auto)
+
+        have C5 :
+          "those
+            (map2 ht_combine heads'
+              (map (case_option None (\<lambda>t. Some (t - int (length pre1) - 32))) tails')) =
+           Some (vh# heads)"
+          using IHspec "3.prems" Tcons Hcons Hsome Tnone Np T_static "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        have C6 : "map (\<lambda>x. fst x + int (length pre1) + 32)  
+                    (tails) = somes tails'"
+          using IHspec "3.prems" Tcons Hcons Hsome Tnone Np T_static "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        have C7 : "ht_wellbehaved tails' (abi_get_type vh # map abi_get_type vt) heads'"
+          using IHspec "3.prems" Tcons Hcons Hsome Tnone Np T_static "15.IH"(1)[OF Vhdec]
+            abi_decode'_type_ok[OF Vhdec] Vhdec
+            encode_correct_converse_valid[OF Vhenc] by(auto split:sum.split_asm if_split_asm)
+
+        show ?thesis 
+          using C1 C2 C3 C4 C5 C6 C7 unfolding "3.prems"(8)
+          by(fastforce)
+      qed
+    qed
+  }
 qed
 
 lemma abi_decode_correct_converse :
@@ -5030,7 +5580,7 @@ proof(-)
 
   have 3 : "abi_get_type v = t" using abi_decode'_type_ok[OF 2] by auto
 
-  show ?thesis using abi_decode_succeed_converse_clause1[OF 2 0 3] by assumption
+  show ?thesis using abi_decode_succeed_converse_gen(1)[OF 2 0 3] by assumption
 qed
-*)
+
 end

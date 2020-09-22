@@ -37,7 +37,7 @@ fun decode_fixed :: "nat \<Rightarrow> 8 word list \<Rightarrow> rat" where
   (let i = decode_sint l in (Rat.of_int i / (10 ^ n)))"
 
 (* bytes, fbytes, and strings will be padded to multiples of
-   256 bytes. skip_padding skips this padding. *)
+   32 bytes. skip_padding skips this padding. *)
 fun skip_padding :: "nat \<Rightarrow> nat" where
 "skip_padding n =
   (case divmod_nat n 32 of
