@@ -14,6 +14,8 @@ public:
 	ABICoder& operator=(ABICoder const&) = delete;
 	std::string decode(std::string const& _type, std::vector<unsigned char> const& _data);
 	std::string decode(std::string const& _type, std::string const& _data);
+
+	std::string encode(std::string const& _type, std::string const& _data);
 };
 
 }

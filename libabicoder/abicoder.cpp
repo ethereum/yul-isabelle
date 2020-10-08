@@ -22,6 +22,21 @@ char toHexNibble(unsigned char x)
 	else return 'A' + x - 10;
 }
 
+std::string ABICoder::encode(std::string const& _type, std::string const& _data)
+{
+	Objptr type = abicoder_alloc(_type.size());
+	std::copy(_type.begin(), _type.end(), reinterpret_cast<char*>(type));
+	std::string dataWithoutWhitespace;
+	for (auto c: _data) {
+		if (!isspace(c))
+			dataWithoutWhitespace += c;
+	}
+	Objptr data = abicoder_alloc(dataWithoutWhitespace.size());
+	std::copy(dataWithoutWhitespace.begin(), dataWithoutWhitespace.end(), reinterpret_cast<char*>(data));
+	Objptr result = abicoder_encode(type, data);
+	return std::string(reinterpret_cast<const char*>(result), abicoder_size(result));
+}
+
 std::string ABICoder::decode(std::string const& _type, std::string const& _data)
 {
 	Objptr type = abicoder_alloc(_type.size());

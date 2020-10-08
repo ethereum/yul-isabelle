@@ -2,36 +2,36 @@ theory Export
  imports AbiDecode AbiEncode "HOL.String" "HOL-Library.IArray" "HOL.Code_Numeral"
 begin
 
-datatype TypeToken = LParen | RParen | LBrack | RBrack | Comma | Elem string
+datatype Token = LParen | RParen | LBrack | RBrack | Comma | Elem string
 
-primrec typeTokenExplode :: "string \<Rightarrow> TypeToken list" where
-  "typeTokenExplode (x#tail) = Elem [x]#typeTokenExplode tail"
-| "typeTokenExplode [] = []"
+primrec tokenExplode :: "string \<Rightarrow> Token list" where
+  "tokenExplode (x#tail) = Elem [x]#tokenExplode tail"
+| "tokenExplode [] = []"
 
-fun typeTokenScanParens :: "TypeToken list \<Rightarrow> TypeToken list" where
-  "typeTokenScanParens (Elem ''(''#tail) = LParen#typeTokenScanParens tail"
-| "typeTokenScanParens (Elem '')''#tail) = RParen#typeTokenScanParens tail"
-| "typeTokenScanParens (z#tail) = z#typeTokenScanParens tail"
-| "typeTokenScanParens [] = []"
+fun tokenScanParens :: "Token list \<Rightarrow> Token list" where
+  "tokenScanParens (Elem ''(''#tail) = LParen#tokenScanParens tail"
+| "tokenScanParens (Elem '')''#tail) = RParen#tokenScanParens tail"
+| "tokenScanParens (z#tail) = z#tokenScanParens tail"
+| "tokenScanParens [] = []"
 
-fun typeTokenScanBrackets :: "TypeToken list \<Rightarrow> TypeToken list" where
-  "typeTokenScanBrackets (Elem ''[''#tail) = LBrack#typeTokenScanBrackets tail"
-| "typeTokenScanBrackets (Elem '']''#tail) = RBrack#typeTokenScanBrackets tail"
-| "typeTokenScanBrackets (z#tail) = z#typeTokenScanBrackets tail"
-| "typeTokenScanBrackets [] = []"
+fun tokenScanBrackets :: "Token list \<Rightarrow> Token list" where
+  "tokenScanBrackets (Elem ''[''#tail) = LBrack#tokenScanBrackets tail"
+| "tokenScanBrackets (Elem '']''#tail) = RBrack#tokenScanBrackets tail"
+| "tokenScanBrackets (z#tail) = z#tokenScanBrackets tail"
+| "tokenScanBrackets [] = []"
 
-fun typeTokenScanCommas :: "TypeToken list \<Rightarrow> TypeToken list" where
-  "typeTokenScanCommas (Elem '',''#tail) = Comma#typeTokenScanCommas tail"
-| "typeTokenScanCommas (z#tail) = z#typeTokenScanCommas tail"
-| "typeTokenScanCommas [] = []"
+fun tokenScanCommas :: "Token list \<Rightarrow> Token list" where
+  "tokenScanCommas (Elem '',''#tail) = Comma#tokenScanCommas tail"
+| "tokenScanCommas (z#tail) = z#tokenScanCommas tail"
+| "tokenScanCommas [] = []"
 
-fun typeTokenCombine :: "TypeToken list \<Rightarrow> TypeToken list" where
-  "typeTokenCombine (Elem a#Elem b#tail) = typeTokenCombine (Elem (a@b)#tail)"
-| "typeTokenCombine (y#tail) = y#typeTokenCombine tail"
-| "typeTokenCombine [] = []"
+fun tokenCombine :: "Token list \<Rightarrow> Token list" where
+  "tokenCombine (Elem a#Elem b#tail) = tokenCombine (Elem (a@b)#tail)"
+| "tokenCombine (y#tail) = y#tokenCombine tail"
+| "tokenCombine [] = []"
 
-definition scanTypeTokens :: "string \<Rightarrow> TypeToken list" where
-  "scanTypeTokens \<equiv> typeTokenCombine o typeTokenScanCommas o typeTokenScanBrackets o typeTokenScanParens o typeTokenExplode"
+definition scanTokens :: "string \<Rightarrow> Token list" where
+  "scanTokens \<equiv> tokenCombine o tokenScanCommas o tokenScanBrackets o tokenScanParens o tokenExplode"
 
 definition is_digit :: "char \<Rightarrow> bool" where
   "is_digit \<equiv> \<lambda> c . ((of_char c)::nat) \<ge> ((of_char (CHR ''0''))) \<and> ((of_char c)::nat) \<le> ((of_char (CHR ''9'')))"
@@ -69,7 +69,7 @@ definition ParseBaseType :: "string \<Rightarrow> abi_type option" where
 
 datatype typeParserState = tPS_primary abi_type | tPS_array abi_type "nat option" | tPS_tuple "abi_type list"
 
-fun typeParser :: "TypeToken list \<Rightarrow> typeParserState list \<Rightarrow> abi_type option" where
+fun typeParser :: "Token list \<Rightarrow> typeParserState list \<Rightarrow> abi_type option" where
   "typeParser (LParen#tail) st = typeParser tail (tPS_tuple []#st)"
 | "typeParser (Elem x#tail) (tPS_array t None#st) = Option.bind (parseNat x) (\<lambda> n . typeParser tail (tPS_array t (Some n)#st))"
 | "typeParser (Elem x#tail) [] = Option.bind (ParseBaseType x) (\<lambda> type . typeParser tail (tPS_primary type#[]))"
@@ -82,7 +82,7 @@ fun typeParser :: "TypeToken list \<Rightarrow> typeParserState list \<Rightarro
 | "typeParser _ _ = None"
 
 definition parseType :: "string \<Rightarrow> abi_type option" where
-  "parseType \<equiv> \<lambda> x . typeParser (scanTypeTokens x) []"
+  "parseType \<equiv> \<lambda> x . typeParser (scanTokens x) []"
 
 value "parseType ''(uint256[2][1],(uint8,uint9),uint256)''"
 
@@ -106,7 +106,7 @@ fun parseWords :: "string \<Rightarrow> 8 word list option" where
 
 datatype valueParseTree = arrayValue "valueParseTree list" | tupleValue "valueParseTree list" | primaryValue string
 datatype valueParserState = vPS_primary valueParseTree | vPS_arrtuple bool "valueParseTree list"
-fun valueParser :: "TypeToken list \<Rightarrow> valueParserState list \<Rightarrow> valueParseTree option" where
+fun valueParser :: "Token list \<Rightarrow> valueParserState list \<Rightarrow> valueParseTree option" where
   "valueParser (Elem x#[]) [] = Some (primaryValue x)"
 | "valueParser (Elem x#tail) (vPS_arrtuple w ar#st) = valueParser tail ((vPS_primary (primaryValue x))#vPS_arrtuple w ar#st)"
 | "valueParser (LBrack#tail) (st) = valueParser tail (vPS_arrtuple False []#st)"
@@ -122,12 +122,18 @@ definition parseU256 :: "string \<Rightarrow> 256 word option" where
   "parseU256 \<equiv> \<lambda> str. (case parseWords str of Some w \<Rightarrow> (if length w = 32 then Some (word_rcat w) else None) | _ \<Rightarrow> None)"
 
 function (sequential) typedValueParser :: "abi_type \<Rightarrow> valueParseTree \<Rightarrow> abi_value option" where
+(* TODO: nicer primary value parsing *)
   "typedValueParser (Tuint n) (primaryValue v) = map_option (\<lambda> w . Vuint n (uint w)) (parseU256 v)"
 | "typedValueParser (Tsint n) (primaryValue v) = map_option (\<lambda> w . Vsint n (sint w)) (parseU256 v)"
 | "typedValueParser Taddr (primaryValue v) = map_option (\<lambda> w . Vaddr (uint w)) (parseU256 v)"
+| "typedValueParser Tbool (primaryValue v) = (if v = ''true'' then Some (Vbool True) else if v = ''false'' then Some (Vbool False) else None)"
+| "typedValueParser (Tfbytes n) (primaryValue v) = Option.bind (parseWords v) (\<lambda> ws . if length ws = n then Some (Vfbytes n ws) else None)"
+(* TODO: function *)
 | "typedValueParser (Tfarray t n) (arrayValue vs) = (if (length vs = n) then map_option (\<lambda> vs . Vfarray t n vs) (those (map (\<lambda> v . typedValueParser t v) vs))  else None)"
-| "typedValueParser (Tarray t) (arrayValue vs) = (map_option (\<lambda> vs . Varray t vs) (those (map (\<lambda> v . typedValueParser t v) vs)))"
 | "typedValueParser (Ttuple ts) (tupleValue vs) = (if (length vs = length ts) then map_option (\<lambda> vs . Vtuple ts vs) (those (map2 (\<lambda> t v . typedValueParser t v) ts vs)) else None)"
+| "typedValueParser Tbytes (primaryValue v) = map_option Vbytes (parseWords v)"
+| "typedValueParser Tstring (primaryValue v) = map_option Vbytes (parseWords v)"
+| "typedValueParser (Tarray t) (arrayValue vs) = (map_option (\<lambda> vs . Varray t vs) (those (map (\<lambda> v . typedValueParser t v) vs)))"
 | "typedValueParser _ _ = None"
   by pat_completeness auto
 
@@ -153,25 +159,11 @@ termination proof -
        (auto simp: less_SucI set_zip_rightD le_imp_less_Suc)
 qed
 
-value "Option.bind (parseType ''int256[]'') (\<lambda> t . Option.bind (valueParser (scanTypeTokens ''[0000000000000000000000000000000000000000000000000000000000000010,0000000000000000000000000000000000000000000000000000000000000011]'') []) (\<lambda> v . typedValueParser t v))"
-
 definition parseTypedValue :: "abi_type \<Rightarrow> string \<Rightarrow> abi_value option" where
-  "parseTypedValue \<equiv> \<lambda>type str . Option.bind (valueParser (scanTypeTokens str) []) (\<lambda> vs . typedValueParser type vs)"
+  "parseTypedValue \<equiv> \<lambda>type str . Option.bind (valueParser (scanTokens str) []) (\<lambda> vs . typedValueParser type vs)"
 
+value "Option.bind (parseType ''int256[]'') (\<lambda> t. parseTypedValue t ''[0000000000000000000000000000000000000000000000000000000000000010,0000000000000000000000000000000000000000000000000000000000000011]'')"
 value "Option.bind (parseType ''int256[0]'') (\<lambda> t. parseTypedValue t ''[]'')"
-
-(*
-  "valueParser (LParen#tail) st = valueParser tail (tupleValue []#st)"
-| "valueParser (Elem x#[]) [] = Some (primaryValue x)"
-| "valueParser (Elem x#tail) (arrayValue vs#st) = valueParser"
-| "valueParser (Elem x#tail) (tPS_tuple t#ts) = Option.bind (ParseBaseType x) (\<lambda> type . typeParser tail (tPS_primary type#tPS_tuple t#ts))"
-| "valueParser (LBrack#tail) (tPS_primary x#st) = typeParser tail (tPS_array x None#st)"
-| "valueParser (RBrack#tail) (tPS_array x nopt#st) = typeParser tail (tPS_primary (case nopt of Some n \<Rightarrow> Tfarray x n | _ \<Rightarrow> Tarray x)#st)"
-| "valueParser (RParen#tail) (tPS_primary t#tPS_tuple ts#st) = typeParser tail (tPS_primary (Ttuple (List.rev (t#ts)))#st)"
-| "valueParser (Comma#tail) (tPS_primary t#tPS_tuple ts#st) = typeParser tail (tPS_tuple (t#ts)#st)"
-| "valueParser [] [tPS_primary x] = Some x"
-| "valueParser _ _ = None"
-*)
 
 fun writeHexNibble :: "4 word \<Rightarrow> char" where
   "writeHexNibble x = (if x < 10 then char_of (of_char (CHR ''0'') + uint x) else char_of (of_char (CHR ''A'') + uint x - 10))"
@@ -235,6 +227,20 @@ definition Decode :: "String.literal \<Rightarrow> String.literal \<Rightarrow> 
     | _ \<Rightarrow> String.implode ''ERR: Cannot parse type.''
 "
 
-export_code Decode in SML module_name ABICoder file_prefix abicoder
+definition Encode :: "String.literal \<Rightarrow> String.literal \<Rightarrow> String.literal" where
+  "Encode \<equiv> \<lambda> type value .
+    case parseType (literal.explode type) of Some type \<Rightarrow>
+    (
+      case parseTypedValue type (literal.explode value) of Some value \<Rightarrow>
+      (
+        case encode value of (Ok value) \<Rightarrow> String.implode (''OK: ''@writeHex value)
+        | Err msg \<Rightarrow> String.implode (''ERR: ''@msg)
+      )
+      | _ \<Rightarrow> String.implode ''ERR: Cannot parse data.''
+    )
+    | _ \<Rightarrow> String.implode ''ERR: Cannot parse type.''
+"
+
+export_code Encode Decode in SML module_name ABICoder file_prefix abicoder
 
 end

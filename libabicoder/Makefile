@@ -3,7 +3,7 @@ theories := $(wildcard ../*.thy)
 all: test
 
 export/abicoder.ML: $(theories) ../ROOT
-	isabelle build -o quick_and_dirty -D ..
+	isabelle build -D ..
 	isabelle export -O export -d .. -x "*:**" -p 2 SolidityAbi
 
 abicoder.a: export/abicoder.ML abicoder.mlb mlton_export.sml
