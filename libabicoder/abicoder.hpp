@@ -9,7 +9,8 @@ namespace abicoder {
 class ABICoder
 {
 public:
-	ABICoder();
+	/** @a heapSize Heap size to be used by the ML generated code in KB. Defaults to 0 which chooses the default amount. */
+	ABICoder(size_t heapSize = 0);
 	ABICoder(ABICoder const&) = delete;
 	~ABICoder();
 	ABICoder& operator=(ABICoder const&) = delete;

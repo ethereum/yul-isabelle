@@ -3,7 +3,7 @@
 
 int main(int argc, const char** argv)
 {
-	abicoder::ABICoder coder;
+	abicoder::ABICoder coder(1024*512);
 
 	if (argc == 4 && std::string(argv[1]) == "dec")
 	{

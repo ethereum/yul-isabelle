@@ -5,10 +5,18 @@ extern "C" {
 
 using namespace abicoder;
 
-ABICoder::ABICoder()
+ABICoder::ABICoder(size_t heapSize)
 {
-	static const char *argv0 = "";
-	abicoder_open(0, &argv0);
+	std::string heapSizeStr;
+	std::vector<const char*> argv{""};
+	if (heapSize) {
+		argv.emplace_back("@MLton");
+		argv.emplace_back("fixed-heap");
+		heapSizeStr = std::to_string(heapSize) + 'k';
+		argv.emplace_back(heapSizeStr.c_str());
+		argv.emplace_back("--");
+	}
+	abicoder_open(argv.size(), argv.data());
 }
 
 ABICoder::~ABICoder()
