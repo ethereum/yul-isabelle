@@ -6,19 +6,25 @@ export/abicoder.ML: $(theories) ../ROOT
 	isabelle build -D ..
 	isabelle export -O export -d .. -x "*:**" -p 2 SolidityAbi
 
-abicoder.a: export/abicoder.ML abicoder.mlb mlton_export.sml
+abicoder.o: export/abicoder.ML abicoder.mlb mlton_export.sml
 	mlton -format archive -default-ann 'allowFFI true' -default-ann "redundantMatch ignore" -export-header export/abicoder.h abicoder.mlb
+	ar x abicoder.a
+	mv abicoder.a.o abicoder.o
+	rm abicoder.a
 
-export/abicoder.h: abicoder.a
+export/abicoder.h: abicoder.o
 
 test.o: test.cpp abicoder.hpp
 	g++ -std=c++17 -c -I . -o test.o test.cpp
 
-abicoder.o: abicoder.cpp abicoder.hpp export/abicoder.h
-	g++ -std=c++17 -c abicoder.cpp -o abicoder.o
+abicoderpp.o: abicoder.cpp abicoder.hpp export/abicoder.h
+	g++ -std=c++17 -c abicoder.cpp -o abicoderpp.o
 
-test: test.o abicoder.a abicoder.o
-	g++ -o test test.o abicoder.o abicoder.a -lgmp
+libabicoder.a: abicoder.o abicoderpp.o
+	ar -crs libabicoder.a abicoder.o abicoderpp.o
+
+test: test.o libabicoder.a
+	g++ -o test -L . test.o -labicoder -lgmp
 
 clean:
-	rm -rf export abicoder.a test.o test abicoder.o
+	rm -rf export libabicoder.a test.o test abicoder.o abicoderpp.o
