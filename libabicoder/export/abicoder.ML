@@ -10,907 +10,32 @@ structure ABICoder : sig
   val encode : string -> string -> string
 end = struct
 
+datatype int = Int_of_integer of IntInf.int;
+
 datatype num = One | Bit0 of num | Bit1 of num;
 
-fun equal_num (Bit0 x2) (Bit1 x3) = false
-  | equal_num (Bit1 x3) (Bit0 x2) = false
-  | equal_num One (Bit1 x3) = false
-  | equal_num (Bit1 x3) One = false
-  | equal_num One (Bit0 x2) = false
-  | equal_num (Bit0 x2) One = false
-  | equal_num (Bit1 x3) (Bit1 y3) = equal_num x3 y3
-  | equal_num (Bit0 x2) (Bit0 y2) = equal_num x2 y2
-  | equal_num One One = true;
-
-datatype int = Zero_int | Pos of num | Neg of num;
-
-fun equal_inta (Neg k) (Neg l) = equal_num k l
-  | equal_inta (Neg k) (Pos l) = false
-  | equal_inta (Neg k) Zero_int = false
-  | equal_inta (Pos k) (Neg l) = false
-  | equal_inta (Pos k) (Pos l) = equal_num k l
-  | equal_inta (Pos k) Zero_int = false
-  | equal_inta Zero_int (Neg l) = false
-  | equal_inta Zero_int (Pos l) = false
-  | equal_inta Zero_int Zero_int = true;
-
-type 'a equal = {equal : 'a -> 'a -> bool};
-val equal = #equal : 'a equal -> 'a -> 'a -> bool;
-
-val equal_int = {equal = equal_inta} : int equal;
-
-fun plus_num (Bit1 m) (Bit1 n) = Bit0 (plus_num (plus_num m n) One)
-  | plus_num (Bit1 m) (Bit0 n) = Bit1 (plus_num m n)
-  | plus_num (Bit1 m) One = Bit0 (plus_num m One)
-  | plus_num (Bit0 m) (Bit1 n) = Bit1 (plus_num m n)
-  | plus_num (Bit0 m) (Bit0 n) = Bit0 (plus_num m n)
-  | plus_num (Bit0 m) One = Bit1 m
-  | plus_num One (Bit1 n) = Bit0 (plus_num n One)
-  | plus_num One (Bit0 n) = Bit1 n
-  | plus_num One One = Bit0 One;
-
-fun times_num (Bit1 m) (Bit1 n) =
-  Bit1 (plus_num (plus_num m n) (Bit0 (times_num m n)))
-  | times_num (Bit1 m) (Bit0 n) = Bit0 (times_num (Bit1 m) n)
-  | times_num (Bit0 m) (Bit1 n) = Bit0 (times_num m (Bit1 n))
-  | times_num (Bit0 m) (Bit0 n) = Bit0 (Bit0 (times_num m n))
-  | times_num One n = n
-  | times_num m One = m;
-
-fun times_inta (Neg m) (Neg n) = Pos (times_num m n)
-  | times_inta (Neg m) (Pos n) = Neg (times_num m n)
-  | times_inta (Pos m) (Neg n) = Neg (times_num m n)
-  | times_inta (Pos m) (Pos n) = Pos (times_num m n)
-  | times_inta Zero_int l = Zero_int
-  | times_inta k Zero_int = Zero_int;
-
-type 'a times = {times : 'a -> 'a -> 'a};
-val times = #times : 'a times -> 'a -> 'a -> 'a;
-
-type 'a dvd = {times_dvd : 'a times};
-val times_dvd = #times_dvd : 'a dvd -> 'a times;
-
-val times_int = {times = times_inta} : int times;
-
-val dvd_int = {times_dvd = times_int} : int dvd;
-
-val one_inta : int = Pos One;
+val one_inta : int = Int_of_integer (1 : IntInf.int);
 
 type 'a one = {one : 'a};
 val one = #one : 'a one -> 'a;
 
 val one_int = {one = one_inta} : int one;
 
-fun uminus_int (Neg m) = Pos m
-  | uminus_int (Pos m) = Neg m
-  | uminus_int Zero_int = Zero_int;
+fun integer_of_int (Int_of_integer k) = k;
 
-fun bitM One = One
-  | bitM (Bit0 n) = Bit1 (bitM n)
-  | bitM (Bit1 n) = Bit1 (Bit0 n);
+fun times_inta k l =
+  Int_of_integer (IntInf.* (integer_of_int k, integer_of_int l));
 
-fun dup (Neg n) = Neg (Bit0 n)
-  | dup (Pos n) = Pos (Bit0 n)
-  | dup Zero_int = Zero_int;
-
-fun plus_inta (Neg m) (Neg n) = Neg (plus_num m n)
-  | plus_inta (Neg m) (Pos n) = sub n m
-  | plus_inta (Pos m) (Neg n) = sub m n
-  | plus_inta (Pos m) (Pos n) = Pos (plus_num m n)
-  | plus_inta Zero_int l = l
-  | plus_inta k Zero_int = k
-and sub (Bit0 m) (Bit1 n) = minus_inta (dup (sub m n)) one_inta
-  | sub (Bit1 m) (Bit0 n) = plus_inta (dup (sub m n)) one_inta
-  | sub (Bit1 m) (Bit1 n) = dup (sub m n)
-  | sub (Bit0 m) (Bit0 n) = dup (sub m n)
-  | sub One (Bit1 n) = Neg (Bit0 n)
-  | sub One (Bit0 n) = Neg (bitM n)
-  | sub (Bit1 m) One = Pos (Bit0 m)
-  | sub (Bit0 m) One = Pos (bitM m)
-  | sub One One = Zero_int
-and minus_inta (Neg m) (Neg n) = sub n m
-  | minus_inta (Neg m) (Pos n) = Neg (plus_num m n)
-  | minus_inta (Pos m) (Neg n) = Pos (plus_num m n)
-  | minus_inta (Pos m) (Pos n) = sub m n
-  | minus_inta Zero_int l = uminus_int l
-  | minus_inta k Zero_int = k;
-
-type 'a plus = {plus : 'a -> 'a -> 'a};
-val plus = #plus : 'a plus -> 'a -> 'a -> 'a;
-
-val plus_int = {plus = plus_inta} : int plus;
-
-type 'a zero = {zero : 'a};
-val zero = #zero : 'a zero -> 'a;
-
-val zero_int = {zero = Zero_int} : int zero;
-
-type 'a semigroup_add = {plus_semigroup_add : 'a plus};
-val plus_semigroup_add = #plus_semigroup_add : 'a semigroup_add -> 'a plus;
-
-type 'a numeral =
-  {one_numeral : 'a one, semigroup_add_numeral : 'a semigroup_add};
-val one_numeral = #one_numeral : 'a numeral -> 'a one;
-val semigroup_add_numeral = #semigroup_add_numeral :
-  'a numeral -> 'a semigroup_add;
-
-val semigroup_add_int = {plus_semigroup_add = plus_int} : int semigroup_add;
-
-val numeral_int =
-  {one_numeral = one_int, semigroup_add_numeral = semigroup_add_int} :
-  int numeral;
+type 'a times = {times : 'a -> 'a -> 'a};
+val times = #times : 'a times -> 'a -> 'a -> 'a;
 
 type 'a power = {one_power : 'a one, times_power : 'a times};
 val one_power = #one_power : 'a power -> 'a one;
 val times_power = #times_power : 'a power -> 'a times;
 
+val times_int = {times = times_inta} : int times;
+
 val power_int = {one_power = one_int, times_power = times_int} : int power;
-
-type 'a minus = {minus : 'a -> 'a -> 'a};
-val minus = #minus : 'a minus -> 'a -> 'a -> 'a;
-
-val minus_int = {minus = minus_inta} : int minus;
-
-fun less_eq_num (Bit1 m) (Bit0 n) = less_num m n
-  | less_eq_num (Bit1 m) (Bit1 n) = less_eq_num m n
-  | less_eq_num (Bit0 m) (Bit1 n) = less_eq_num m n
-  | less_eq_num (Bit0 m) (Bit0 n) = less_eq_num m n
-  | less_eq_num (Bit1 m) One = false
-  | less_eq_num (Bit0 m) One = false
-  | less_eq_num One n = true
-and less_num (Bit1 m) (Bit0 n) = less_num m n
-  | less_num (Bit1 m) (Bit1 n) = less_num m n
-  | less_num (Bit0 m) (Bit1 n) = less_eq_num m n
-  | less_num (Bit0 m) (Bit0 n) = less_num m n
-  | less_num One (Bit1 n) = true
-  | less_num One (Bit0 n) = true
-  | less_num m One = false;
-
-fun less_eq_int (Neg k) (Neg l) = less_eq_num l k
-  | less_eq_int (Neg k) (Pos l) = true
-  | less_eq_int (Neg k) Zero_int = true
-  | less_eq_int (Pos k) (Neg l) = false
-  | less_eq_int (Pos k) (Pos l) = less_eq_num k l
-  | less_eq_int (Pos k) Zero_int = false
-  | less_eq_int Zero_int (Neg l) = false
-  | less_eq_int Zero_int (Pos l) = true
-  | less_eq_int Zero_int Zero_int = true;
-
-fun divmod_step_int l (q, r) =
-  (if less_eq_int (Pos l) r
-    then (plus_inta (times_inta (Pos (Bit0 One)) q) one_inta,
-           minus_inta r (Pos l))
-    else (times_inta (Pos (Bit0 One)) q, r));
-
-fun divmod_int (Bit1 m) (Bit1 n) =
-  (if less_num m n then (Zero_int, Pos (Bit1 m))
-    else divmod_step_int (Bit1 n) (divmod_int (Bit1 m) (Bit0 (Bit1 n))))
-  | divmod_int (Bit0 m) (Bit1 n) =
-    (if less_eq_num m n then (Zero_int, Pos (Bit0 m))
-      else divmod_step_int (Bit1 n) (divmod_int (Bit0 m) (Bit0 (Bit1 n))))
-  | divmod_int (Bit1 m) (Bit0 n) =
-    let
-      val (q, r) = divmod_int m n;
-    in
-      (q, plus_inta (times_inta (Pos (Bit0 One)) r) one_inta)
-    end
-  | divmod_int (Bit0 m) (Bit0 n) = let
-                                     val (q, r) = divmod_int m n;
-                                   in
-                                     (q, times_inta (Pos (Bit0 One)) r)
-                                   end
-  | divmod_int One (Bit1 n) = (Zero_int, Pos One)
-  | divmod_int One (Bit0 n) = (Zero_int, Pos One)
-  | divmod_int (Bit1 m) One = (Pos (Bit1 m), Zero_int)
-  | divmod_int (Bit0 m) One = (Pos (Bit0 m), Zero_int)
-  | divmod_int One One = (Pos One, Zero_int);
-
-fun fst (x1, x2) = x1;
-
-type 'a zero_neq_one = {one_zero_neq_one : 'a one, zero_zero_neq_one : 'a zero};
-val one_zero_neq_one = #one_zero_neq_one : 'a zero_neq_one -> 'a one;
-val zero_zero_neq_one = #zero_zero_neq_one : 'a zero_neq_one -> 'a zero;
-
-fun of_bool A_ true = one (one_zero_neq_one A_)
-  | of_bool A_ false = zero (zero_zero_neq_one A_);
-
-val zero_neq_one_int =
-  {one_zero_neq_one = one_int, zero_zero_neq_one = zero_int} : int zero_neq_one;
-
-fun adjust_div (q, r) =
-  plus_inta q (of_bool zero_neq_one_int (not (equal_inta r Zero_int)));
-
-fun divide_inta (Neg m) (Neg n) = fst (divmod_int m n)
-  | divide_inta (Pos m) (Neg n) = uminus_int (adjust_div (divmod_int m n))
-  | divide_inta (Neg m) (Pos n) = uminus_int (adjust_div (divmod_int m n))
-  | divide_inta (Pos m) (Pos n) = fst (divmod_int m n)
-  | divide_inta k (Neg One) = uminus_int k
-  | divide_inta k (Pos One) = k
-  | divide_inta Zero_int k = Zero_int
-  | divide_inta k Zero_int = Zero_int;
-
-type 'a divide = {divide : 'a -> 'a -> 'a};
-val divide = #divide : 'a divide -> 'a -> 'a -> 'a;
-
-val divide_int = {divide = divide_inta} : int divide;
-
-fun snd (x1, x2) = x2;
-
-fun adjust_mod l r =
-  (if equal_inta r Zero_int then Zero_int else minus_inta l r);
-
-fun modulo_inta (Neg m) (Neg n) = uminus_int (snd (divmod_int m n))
-  | modulo_inta (Pos m) (Neg n) =
-    uminus_int (adjust_mod (Pos n) (snd (divmod_int m n)))
-  | modulo_inta (Neg m) (Pos n) = adjust_mod (Pos n) (snd (divmod_int m n))
-  | modulo_inta (Pos m) (Pos n) = snd (divmod_int m n)
-  | modulo_inta k (Neg One) = Zero_int
-  | modulo_inta k (Pos One) = Zero_int
-  | modulo_inta Zero_int k = Zero_int
-  | modulo_inta k Zero_int = k;
-
-type 'a modulo =
-  {divide_modulo : 'a divide, dvd_modulo : 'a dvd, modulo : 'a -> 'a -> 'a};
-val divide_modulo = #divide_modulo : 'a modulo -> 'a divide;
-val dvd_modulo = #dvd_modulo : 'a modulo -> 'a dvd;
-val modulo = #modulo : 'a modulo -> 'a -> 'a -> 'a;
-
-val modulo_int =
-  {divide_modulo = divide_int, dvd_modulo = dvd_int, modulo = modulo_inta} :
-  int modulo;
-
-type 'a ab_semigroup_add = {semigroup_add_ab_semigroup_add : 'a semigroup_add};
-val semigroup_add_ab_semigroup_add = #semigroup_add_ab_semigroup_add :
-  'a ab_semigroup_add -> 'a semigroup_add;
-
-type 'a monoid_add =
-  {semigroup_add_monoid_add : 'a semigroup_add, zero_monoid_add : 'a zero};
-val semigroup_add_monoid_add = #semigroup_add_monoid_add :
-  'a monoid_add -> 'a semigroup_add;
-val zero_monoid_add = #zero_monoid_add : 'a monoid_add -> 'a zero;
-
-type 'a comm_monoid_add =
-  {ab_semigroup_add_comm_monoid_add : 'a ab_semigroup_add,
-    monoid_add_comm_monoid_add : 'a monoid_add};
-val ab_semigroup_add_comm_monoid_add = #ab_semigroup_add_comm_monoid_add :
-  'a comm_monoid_add -> 'a ab_semigroup_add;
-val monoid_add_comm_monoid_add = #monoid_add_comm_monoid_add :
-  'a comm_monoid_add -> 'a monoid_add;
-
-type 'a mult_zero = {times_mult_zero : 'a times, zero_mult_zero : 'a zero};
-val times_mult_zero = #times_mult_zero : 'a mult_zero -> 'a times;
-val zero_mult_zero = #zero_mult_zero : 'a mult_zero -> 'a zero;
-
-type 'a semigroup_mult = {times_semigroup_mult : 'a times};
-val times_semigroup_mult = #times_semigroup_mult :
-  'a semigroup_mult -> 'a times;
-
-type 'a semiring =
-  {ab_semigroup_add_semiring : 'a ab_semigroup_add,
-    semigroup_mult_semiring : 'a semigroup_mult};
-val ab_semigroup_add_semiring = #ab_semigroup_add_semiring :
-  'a semiring -> 'a ab_semigroup_add;
-val semigroup_mult_semiring = #semigroup_mult_semiring :
-  'a semiring -> 'a semigroup_mult;
-
-type 'a semiring_0 =
-  {comm_monoid_add_semiring_0 : 'a comm_monoid_add,
-    mult_zero_semiring_0 : 'a mult_zero, semiring_semiring_0 : 'a semiring};
-val comm_monoid_add_semiring_0 = #comm_monoid_add_semiring_0 :
-  'a semiring_0 -> 'a comm_monoid_add;
-val mult_zero_semiring_0 = #mult_zero_semiring_0 :
-  'a semiring_0 -> 'a mult_zero;
-val semiring_semiring_0 = #semiring_semiring_0 : 'a semiring_0 -> 'a semiring;
-
-type 'a semiring_no_zero_divisors =
-  {semiring_0_semiring_no_zero_divisors : 'a semiring_0};
-val semiring_0_semiring_no_zero_divisors = #semiring_0_semiring_no_zero_divisors
-  : 'a semiring_no_zero_divisors -> 'a semiring_0;
-
-type 'a monoid_mult =
-  {semigroup_mult_monoid_mult : 'a semigroup_mult,
-    power_monoid_mult : 'a power};
-val semigroup_mult_monoid_mult = #semigroup_mult_monoid_mult :
-  'a monoid_mult -> 'a semigroup_mult;
-val power_monoid_mult = #power_monoid_mult : 'a monoid_mult -> 'a power;
-
-type 'a semiring_numeral =
-  {monoid_mult_semiring_numeral : 'a monoid_mult,
-    numeral_semiring_numeral : 'a numeral,
-    semiring_semiring_numeral : 'a semiring};
-val monoid_mult_semiring_numeral = #monoid_mult_semiring_numeral :
-  'a semiring_numeral -> 'a monoid_mult;
-val numeral_semiring_numeral = #numeral_semiring_numeral :
-  'a semiring_numeral -> 'a numeral;
-val semiring_semiring_numeral = #semiring_semiring_numeral :
-  'a semiring_numeral -> 'a semiring;
-
-type 'a semiring_1 =
-  {semiring_numeral_semiring_1 : 'a semiring_numeral,
-    semiring_0_semiring_1 : 'a semiring_0,
-    zero_neq_one_semiring_1 : 'a zero_neq_one};
-val semiring_numeral_semiring_1 = #semiring_numeral_semiring_1 :
-  'a semiring_1 -> 'a semiring_numeral;
-val semiring_0_semiring_1 = #semiring_0_semiring_1 :
-  'a semiring_1 -> 'a semiring_0;
-val zero_neq_one_semiring_1 = #zero_neq_one_semiring_1 :
-  'a semiring_1 -> 'a zero_neq_one;
-
-type 'a semiring_1_no_zero_divisors =
-  {semiring_1_semiring_1_no_zero_divisors : 'a semiring_1,
-    semiring_no_zero_divisors_semiring_1_no_zero_divisors :
-      'a semiring_no_zero_divisors};
-val semiring_1_semiring_1_no_zero_divisors =
-  #semiring_1_semiring_1_no_zero_divisors :
-  'a semiring_1_no_zero_divisors -> 'a semiring_1;
-val semiring_no_zero_divisors_semiring_1_no_zero_divisors =
-  #semiring_no_zero_divisors_semiring_1_no_zero_divisors :
-  'a semiring_1_no_zero_divisors -> 'a semiring_no_zero_divisors;
-
-type 'a cancel_semigroup_add =
-  {semigroup_add_cancel_semigroup_add : 'a semigroup_add};
-val semigroup_add_cancel_semigroup_add = #semigroup_add_cancel_semigroup_add :
-  'a cancel_semigroup_add -> 'a semigroup_add;
-
-type 'a cancel_ab_semigroup_add =
-  {ab_semigroup_add_cancel_ab_semigroup_add : 'a ab_semigroup_add,
-    cancel_semigroup_add_cancel_ab_semigroup_add : 'a cancel_semigroup_add,
-    minus_cancel_ab_semigroup_add : 'a minus};
-val ab_semigroup_add_cancel_ab_semigroup_add =
-  #ab_semigroup_add_cancel_ab_semigroup_add :
-  'a cancel_ab_semigroup_add -> 'a ab_semigroup_add;
-val cancel_semigroup_add_cancel_ab_semigroup_add =
-  #cancel_semigroup_add_cancel_ab_semigroup_add :
-  'a cancel_ab_semigroup_add -> 'a cancel_semigroup_add;
-val minus_cancel_ab_semigroup_add = #minus_cancel_ab_semigroup_add :
-  'a cancel_ab_semigroup_add -> 'a minus;
-
-type 'a cancel_comm_monoid_add =
-  {cancel_ab_semigroup_add_cancel_comm_monoid_add : 'a cancel_ab_semigroup_add,
-    comm_monoid_add_cancel_comm_monoid_add : 'a comm_monoid_add};
-val cancel_ab_semigroup_add_cancel_comm_monoid_add =
-  #cancel_ab_semigroup_add_cancel_comm_monoid_add :
-  'a cancel_comm_monoid_add -> 'a cancel_ab_semigroup_add;
-val comm_monoid_add_cancel_comm_monoid_add =
-  #comm_monoid_add_cancel_comm_monoid_add :
-  'a cancel_comm_monoid_add -> 'a comm_monoid_add;
-
-type 'a semiring_0_cancel =
-  {cancel_comm_monoid_add_semiring_0_cancel : 'a cancel_comm_monoid_add,
-    semiring_0_semiring_0_cancel : 'a semiring_0};
-val cancel_comm_monoid_add_semiring_0_cancel =
-  #cancel_comm_monoid_add_semiring_0_cancel :
-  'a semiring_0_cancel -> 'a cancel_comm_monoid_add;
-val semiring_0_semiring_0_cancel = #semiring_0_semiring_0_cancel :
-  'a semiring_0_cancel -> 'a semiring_0;
-
-type 'a ab_semigroup_mult =
-  {semigroup_mult_ab_semigroup_mult : 'a semigroup_mult};
-val semigroup_mult_ab_semigroup_mult = #semigroup_mult_ab_semigroup_mult :
-  'a ab_semigroup_mult -> 'a semigroup_mult;
-
-type 'a comm_semiring =
-  {ab_semigroup_mult_comm_semiring : 'a ab_semigroup_mult,
-    semiring_comm_semiring : 'a semiring};
-val ab_semigroup_mult_comm_semiring = #ab_semigroup_mult_comm_semiring :
-  'a comm_semiring -> 'a ab_semigroup_mult;
-val semiring_comm_semiring = #semiring_comm_semiring :
-  'a comm_semiring -> 'a semiring;
-
-type 'a comm_semiring_0 =
-  {comm_semiring_comm_semiring_0 : 'a comm_semiring,
-    semiring_0_comm_semiring_0 : 'a semiring_0};
-val comm_semiring_comm_semiring_0 = #comm_semiring_comm_semiring_0 :
-  'a comm_semiring_0 -> 'a comm_semiring;
-val semiring_0_comm_semiring_0 = #semiring_0_comm_semiring_0 :
-  'a comm_semiring_0 -> 'a semiring_0;
-
-type 'a comm_semiring_0_cancel =
-  {comm_semiring_0_comm_semiring_0_cancel : 'a comm_semiring_0,
-    semiring_0_cancel_comm_semiring_0_cancel : 'a semiring_0_cancel};
-val comm_semiring_0_comm_semiring_0_cancel =
-  #comm_semiring_0_comm_semiring_0_cancel :
-  'a comm_semiring_0_cancel -> 'a comm_semiring_0;
-val semiring_0_cancel_comm_semiring_0_cancel =
-  #semiring_0_cancel_comm_semiring_0_cancel :
-  'a comm_semiring_0_cancel -> 'a semiring_0_cancel;
-
-type 'a semiring_1_cancel =
-  {semiring_0_cancel_semiring_1_cancel : 'a semiring_0_cancel,
-    semiring_1_semiring_1_cancel : 'a semiring_1};
-val semiring_0_cancel_semiring_1_cancel = #semiring_0_cancel_semiring_1_cancel :
-  'a semiring_1_cancel -> 'a semiring_0_cancel;
-val semiring_1_semiring_1_cancel = #semiring_1_semiring_1_cancel :
-  'a semiring_1_cancel -> 'a semiring_1;
-
-type 'a comm_monoid_mult =
-  {ab_semigroup_mult_comm_monoid_mult : 'a ab_semigroup_mult,
-    monoid_mult_comm_monoid_mult : 'a monoid_mult,
-    dvd_comm_monoid_mult : 'a dvd};
-val ab_semigroup_mult_comm_monoid_mult = #ab_semigroup_mult_comm_monoid_mult :
-  'a comm_monoid_mult -> 'a ab_semigroup_mult;
-val monoid_mult_comm_monoid_mult = #monoid_mult_comm_monoid_mult :
-  'a comm_monoid_mult -> 'a monoid_mult;
-val dvd_comm_monoid_mult = #dvd_comm_monoid_mult :
-  'a comm_monoid_mult -> 'a dvd;
-
-type 'a comm_semiring_1 =
-  {comm_monoid_mult_comm_semiring_1 : 'a comm_monoid_mult,
-    comm_semiring_0_comm_semiring_1 : 'a comm_semiring_0,
-    semiring_1_comm_semiring_1 : 'a semiring_1};
-val comm_monoid_mult_comm_semiring_1 = #comm_monoid_mult_comm_semiring_1 :
-  'a comm_semiring_1 -> 'a comm_monoid_mult;
-val comm_semiring_0_comm_semiring_1 = #comm_semiring_0_comm_semiring_1 :
-  'a comm_semiring_1 -> 'a comm_semiring_0;
-val semiring_1_comm_semiring_1 = #semiring_1_comm_semiring_1 :
-  'a comm_semiring_1 -> 'a semiring_1;
-
-type 'a comm_semiring_1_cancel =
-  {comm_semiring_0_cancel_comm_semiring_1_cancel : 'a comm_semiring_0_cancel,
-    comm_semiring_1_comm_semiring_1_cancel : 'a comm_semiring_1,
-    semiring_1_cancel_comm_semiring_1_cancel : 'a semiring_1_cancel};
-val comm_semiring_0_cancel_comm_semiring_1_cancel =
-  #comm_semiring_0_cancel_comm_semiring_1_cancel :
-  'a comm_semiring_1_cancel -> 'a comm_semiring_0_cancel;
-val comm_semiring_1_comm_semiring_1_cancel =
-  #comm_semiring_1_comm_semiring_1_cancel :
-  'a comm_semiring_1_cancel -> 'a comm_semiring_1;
-val semiring_1_cancel_comm_semiring_1_cancel =
-  #semiring_1_cancel_comm_semiring_1_cancel :
-  'a comm_semiring_1_cancel -> 'a semiring_1_cancel;
-
-type 'a semidom =
-  {comm_semiring_1_cancel_semidom : 'a comm_semiring_1_cancel,
-    semiring_1_no_zero_divisors_semidom : 'a semiring_1_no_zero_divisors};
-val comm_semiring_1_cancel_semidom = #comm_semiring_1_cancel_semidom :
-  'a semidom -> 'a comm_semiring_1_cancel;
-val semiring_1_no_zero_divisors_semidom = #semiring_1_no_zero_divisors_semidom :
-  'a semidom -> 'a semiring_1_no_zero_divisors;
-
-val ab_semigroup_add_int = {semigroup_add_ab_semigroup_add = semigroup_add_int}
-  : int ab_semigroup_add;
-
-val monoid_add_int =
-  {semigroup_add_monoid_add = semigroup_add_int, zero_monoid_add = zero_int} :
-  int monoid_add;
-
-val comm_monoid_add_int =
-  {ab_semigroup_add_comm_monoid_add = ab_semigroup_add_int,
-    monoid_add_comm_monoid_add = monoid_add_int}
-  : int comm_monoid_add;
-
-val mult_zero_int = {times_mult_zero = times_int, zero_mult_zero = zero_int} :
-  int mult_zero;
-
-val semigroup_mult_int = {times_semigroup_mult = times_int} :
-  int semigroup_mult;
-
-val semiring_int =
-  {ab_semigroup_add_semiring = ab_semigroup_add_int,
-    semigroup_mult_semiring = semigroup_mult_int}
-  : int semiring;
-
-val semiring_0_int =
-  {comm_monoid_add_semiring_0 = comm_monoid_add_int,
-    mult_zero_semiring_0 = mult_zero_int, semiring_semiring_0 = semiring_int}
-  : int semiring_0;
-
-val semiring_no_zero_divisors_int =
-  {semiring_0_semiring_no_zero_divisors = semiring_0_int} :
-  int semiring_no_zero_divisors;
-
-val monoid_mult_int =
-  {semigroup_mult_monoid_mult = semigroup_mult_int,
-    power_monoid_mult = power_int}
-  : int monoid_mult;
-
-val semiring_numeral_int =
-  {monoid_mult_semiring_numeral = monoid_mult_int,
-    numeral_semiring_numeral = numeral_int,
-    semiring_semiring_numeral = semiring_int}
-  : int semiring_numeral;
-
-val semiring_1_int =
-  {semiring_numeral_semiring_1 = semiring_numeral_int,
-    semiring_0_semiring_1 = semiring_0_int,
-    zero_neq_one_semiring_1 = zero_neq_one_int}
-  : int semiring_1;
-
-val semiring_1_no_zero_divisors_int =
-  {semiring_1_semiring_1_no_zero_divisors = semiring_1_int,
-    semiring_no_zero_divisors_semiring_1_no_zero_divisors =
-      semiring_no_zero_divisors_int}
-  : int semiring_1_no_zero_divisors;
-
-val cancel_semigroup_add_int =
-  {semigroup_add_cancel_semigroup_add = semigroup_add_int} :
-  int cancel_semigroup_add;
-
-val cancel_ab_semigroup_add_int =
-  {ab_semigroup_add_cancel_ab_semigroup_add = ab_semigroup_add_int,
-    cancel_semigroup_add_cancel_ab_semigroup_add = cancel_semigroup_add_int,
-    minus_cancel_ab_semigroup_add = minus_int}
-  : int cancel_ab_semigroup_add;
-
-val cancel_comm_monoid_add_int =
-  {cancel_ab_semigroup_add_cancel_comm_monoid_add = cancel_ab_semigroup_add_int,
-    comm_monoid_add_cancel_comm_monoid_add = comm_monoid_add_int}
-  : int cancel_comm_monoid_add;
-
-val semiring_0_cancel_int =
-  {cancel_comm_monoid_add_semiring_0_cancel = cancel_comm_monoid_add_int,
-    semiring_0_semiring_0_cancel = semiring_0_int}
-  : int semiring_0_cancel;
-
-val ab_semigroup_mult_int =
-  {semigroup_mult_ab_semigroup_mult = semigroup_mult_int} :
-  int ab_semigroup_mult;
-
-val comm_semiring_int =
-  {ab_semigroup_mult_comm_semiring = ab_semigroup_mult_int,
-    semiring_comm_semiring = semiring_int}
-  : int comm_semiring;
-
-val comm_semiring_0_int =
-  {comm_semiring_comm_semiring_0 = comm_semiring_int,
-    semiring_0_comm_semiring_0 = semiring_0_int}
-  : int comm_semiring_0;
-
-val comm_semiring_0_cancel_int =
-  {comm_semiring_0_comm_semiring_0_cancel = comm_semiring_0_int,
-    semiring_0_cancel_comm_semiring_0_cancel = semiring_0_cancel_int}
-  : int comm_semiring_0_cancel;
-
-val semiring_1_cancel_int =
-  {semiring_0_cancel_semiring_1_cancel = semiring_0_cancel_int,
-    semiring_1_semiring_1_cancel = semiring_1_int}
-  : int semiring_1_cancel;
-
-val comm_monoid_mult_int =
-  {ab_semigroup_mult_comm_monoid_mult = ab_semigroup_mult_int,
-    monoid_mult_comm_monoid_mult = monoid_mult_int,
-    dvd_comm_monoid_mult = dvd_int}
-  : int comm_monoid_mult;
-
-val comm_semiring_1_int =
-  {comm_monoid_mult_comm_semiring_1 = comm_monoid_mult_int,
-    comm_semiring_0_comm_semiring_1 = comm_semiring_0_int,
-    semiring_1_comm_semiring_1 = semiring_1_int}
-  : int comm_semiring_1;
-
-val comm_semiring_1_cancel_int =
-  {comm_semiring_0_cancel_comm_semiring_1_cancel = comm_semiring_0_cancel_int,
-    comm_semiring_1_comm_semiring_1_cancel = comm_semiring_1_int,
-    semiring_1_cancel_comm_semiring_1_cancel = semiring_1_cancel_int}
-  : int comm_semiring_1_cancel;
-
-val semidom_int =
-  {comm_semiring_1_cancel_semidom = comm_semiring_1_cancel_int,
-    semiring_1_no_zero_divisors_semidom = semiring_1_no_zero_divisors_int}
-  : int semidom;
-
-type 'a semiring_char_0 = {semiring_1_semiring_char_0 : 'a semiring_1};
-val semiring_1_semiring_char_0 = #semiring_1_semiring_char_0 :
-  'a semiring_char_0 -> 'a semiring_1;
-
-val semiring_char_0_int = {semiring_1_semiring_char_0 = semiring_1_int} :
-  int semiring_char_0;
-
-type 'a semiring_modulo =
-  {comm_semiring_1_cancel_semiring_modulo : 'a comm_semiring_1_cancel,
-    modulo_semiring_modulo : 'a modulo};
-val comm_semiring_1_cancel_semiring_modulo =
-  #comm_semiring_1_cancel_semiring_modulo :
-  'a semiring_modulo -> 'a comm_semiring_1_cancel;
-val modulo_semiring_modulo = #modulo_semiring_modulo :
-  'a semiring_modulo -> 'a modulo;
-
-type 'a semiring_parity =
-  {semiring_modulo_semiring_parity : 'a semiring_modulo};
-val semiring_modulo_semiring_parity = #semiring_modulo_semiring_parity :
-  'a semiring_parity -> 'a semiring_modulo;
-
-type 'a semiring_bits = {semiring_parity_semiring_bits : 'a semiring_parity};
-val semiring_parity_semiring_bits = #semiring_parity_semiring_bits :
-  'a semiring_bits -> 'a semiring_parity;
-
-val semiring_modulo_int =
-  {comm_semiring_1_cancel_semiring_modulo = comm_semiring_1_cancel_int,
-    modulo_semiring_modulo = modulo_int}
-  : int semiring_modulo;
-
-val semiring_parity_int =
-  {semiring_modulo_semiring_parity = semiring_modulo_int} : int semiring_parity;
-
-val semiring_bits_int = {semiring_parity_semiring_bits = semiring_parity_int} :
-  int semiring_bits;
-
-type 'a semiring_no_zero_divisors_cancel =
-  {semiring_no_zero_divisors_semiring_no_zero_divisors_cancel :
-     'a semiring_no_zero_divisors};
-val semiring_no_zero_divisors_semiring_no_zero_divisors_cancel =
-  #semiring_no_zero_divisors_semiring_no_zero_divisors_cancel :
-  'a semiring_no_zero_divisors_cancel -> 'a semiring_no_zero_divisors;
-
-type 'a semidom_divide =
-  {divide_semidom_divide : 'a divide, semidom_semidom_divide : 'a semidom,
-    semiring_no_zero_divisors_cancel_semidom_divide :
-      'a semiring_no_zero_divisors_cancel};
-val divide_semidom_divide = #divide_semidom_divide :
-  'a semidom_divide -> 'a divide;
-val semidom_semidom_divide = #semidom_semidom_divide :
-  'a semidom_divide -> 'a semidom;
-val semiring_no_zero_divisors_cancel_semidom_divide =
-  #semiring_no_zero_divisors_cancel_semidom_divide :
-  'a semidom_divide -> 'a semiring_no_zero_divisors_cancel;
-
-val semiring_no_zero_divisors_cancel_int =
-  {semiring_no_zero_divisors_semiring_no_zero_divisors_cancel =
-     semiring_no_zero_divisors_int}
-  : int semiring_no_zero_divisors_cancel;
-
-val semidom_divide_int =
-  {divide_semidom_divide = divide_int, semidom_semidom_divide = semidom_int,
-    semiring_no_zero_divisors_cancel_semidom_divide =
-      semiring_no_zero_divisors_cancel_int}
-  : int semidom_divide;
-
-type 'a algebraic_semidom =
-  {semidom_divide_algebraic_semidom : 'a semidom_divide};
-val semidom_divide_algebraic_semidom = #semidom_divide_algebraic_semidom :
-  'a algebraic_semidom -> 'a semidom_divide;
-
-type 'a semidom_modulo =
-  {algebraic_semidom_semidom_modulo : 'a algebraic_semidom,
-    semiring_modulo_semidom_modulo : 'a semiring_modulo};
-val algebraic_semidom_semidom_modulo = #algebraic_semidom_semidom_modulo :
-  'a semidom_modulo -> 'a algebraic_semidom;
-val semiring_modulo_semidom_modulo = #semiring_modulo_semidom_modulo :
-  'a semidom_modulo -> 'a semiring_modulo;
-
-val algebraic_semidom_int =
-  {semidom_divide_algebraic_semidom = semidom_divide_int} :
-  int algebraic_semidom;
-
-val semidom_modulo_int =
-  {algebraic_semidom_semidom_modulo = algebraic_semidom_int,
-    semiring_modulo_semidom_modulo = semiring_modulo_int}
-  : int semidom_modulo;
-
-datatype nat = Zero_nat | Suc of nat;
-
-fun power A_ a Zero_nat = one (one_power A_)
-  | power A_ a (Suc n) = times (times_power A_) a (power A_ a n);
-
-fun push_bit_int n k = times_inta k (power power_int (Pos (Bit0 One)) n);
-
-fun drop_bit_int n k = divide_inta k (power power_int (Pos (Bit0 One)) n);
-
-type 'a semiring_bit_shifts =
-  {semiring_bits_semiring_bit_shifts : 'a semiring_bits,
-    push_bit : nat -> 'a -> 'a, drop_bit : nat -> 'a -> 'a};
-val semiring_bits_semiring_bit_shifts = #semiring_bits_semiring_bit_shifts :
-  'a semiring_bit_shifts -> 'a semiring_bits;
-val push_bit = #push_bit : 'a semiring_bit_shifts -> nat -> 'a -> 'a;
-val drop_bit = #drop_bit : 'a semiring_bit_shifts -> nat -> 'a -> 'a;
-
-val semiring_bit_shifts_int =
-  {semiring_bits_semiring_bit_shifts = semiring_bits_int,
-    push_bit = push_bit_int, drop_bit = drop_bit_int}
-  : int semiring_bit_shifts;
-
-fun less_int (Neg k) (Neg l) = less_num l k
-  | less_int (Neg k) (Pos l) = true
-  | less_int (Neg k) Zero_int = true
-  | less_int (Pos k) (Neg l) = false
-  | less_int (Pos k) (Pos l) = less_num k l
-  | less_int (Pos k) Zero_int = false
-  | less_int Zero_int (Neg l) = false
-  | less_int Zero_int (Pos l) = true
-  | less_int Zero_int Zero_int = false;
-
-fun abs_int i = (if less_int i Zero_int then uminus_int i else i);
-
-fun plus_nata (Suc m) n = plus_nata m (Suc n)
-  | plus_nata Zero_nat n = n;
-
-val one_nata : nat = Suc Zero_nat;
-
-fun nat_of_num (Bit1 n) = let
-                            val m = nat_of_num n;
-                          in
-                            Suc (plus_nata m m)
-                          end
-  | nat_of_num (Bit0 n) = let
-                            val m = nat_of_num n;
-                          in
-                            plus_nata m m
-                          end
-  | nat_of_num One = one_nata;
-
-fun nat (Pos k) = nat_of_num k
-  | nat Zero_int = Zero_nat
-  | nat (Neg k) = Zero_nat;
-
-fun euclidean_size_int x = (nat o abs_int) x;
-
-type 'a euclidean_semiring =
-  {semidom_modulo_euclidean_semiring : 'a semidom_modulo,
-    euclidean_size : 'a -> nat};
-val semidom_modulo_euclidean_semiring = #semidom_modulo_euclidean_semiring :
-  'a euclidean_semiring -> 'a semidom_modulo;
-val euclidean_size = #euclidean_size : 'a euclidean_semiring -> 'a -> nat;
-
-val euclidean_semiring_int =
-  {semidom_modulo_euclidean_semiring = semidom_modulo_int,
-    euclidean_size = euclidean_size_int}
-  : int euclidean_semiring;
-
-type 'a euclidean_semiring_cancel =
-  {euclidean_semiring_euclidean_semiring_cancel : 'a euclidean_semiring};
-val euclidean_semiring_euclidean_semiring_cancel =
-  #euclidean_semiring_euclidean_semiring_cancel :
-  'a euclidean_semiring_cancel -> 'a euclidean_semiring;
-
-val euclidean_semiring_cancel_int =
-  {euclidean_semiring_euclidean_semiring_cancel = euclidean_semiring_int} :
-  int euclidean_semiring_cancel;
-
-fun division_segment_int k =
-  (if less_eq_int Zero_int k then one_inta else uminus_int one_inta);
-
-type 'a unique_euclidean_semiring =
-  {euclidean_semiring_cancel_unique_euclidean_semiring :
-     'a euclidean_semiring_cancel,
-    division_segment : 'a -> 'a};
-val euclidean_semiring_cancel_unique_euclidean_semiring =
-  #euclidean_semiring_cancel_unique_euclidean_semiring :
-  'a unique_euclidean_semiring -> 'a euclidean_semiring_cancel;
-val division_segment = #division_segment :
-  'a unique_euclidean_semiring -> 'a -> 'a;
-
-val unique_euclidean_semiring_int =
-  {euclidean_semiring_cancel_unique_euclidean_semiring =
-     euclidean_semiring_cancel_int,
-    division_segment = division_segment_int}
-  : int unique_euclidean_semiring;
-
-type 'a unique_euclidean_semiring_with_nat =
-  {unique_euclidean_semiring_unique_euclidean_semiring_with_nat :
-     'a unique_euclidean_semiring,
-    semiring_char_0_unique_euclidean_semiring_with_nat : 'a semiring_char_0,
-    semiring_parity_unique_euclidean_semiring_with_nat : 'a semiring_parity};
-val unique_euclidean_semiring_unique_euclidean_semiring_with_nat =
-  #unique_euclidean_semiring_unique_euclidean_semiring_with_nat :
-  'a unique_euclidean_semiring_with_nat -> 'a unique_euclidean_semiring;
-val semiring_char_0_unique_euclidean_semiring_with_nat =
-  #semiring_char_0_unique_euclidean_semiring_with_nat :
-  'a unique_euclidean_semiring_with_nat -> 'a semiring_char_0;
-val semiring_parity_unique_euclidean_semiring_with_nat =
-  #semiring_parity_unique_euclidean_semiring_with_nat :
-  'a unique_euclidean_semiring_with_nat -> 'a semiring_parity;
-
-type 'a unique_euclidean_semiring_with_bit_shifts =
-  {unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts
-     : 'a unique_euclidean_semiring_with_nat,
-    semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts :
-      'a semiring_bit_shifts};
-val unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts
-  = #unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts
-  : 'a unique_euclidean_semiring_with_bit_shifts ->
-      'a unique_euclidean_semiring_with_nat;
-val semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts =
-  #semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts :
-  'a unique_euclidean_semiring_with_bit_shifts -> 'a semiring_bit_shifts;
-
-val unique_euclidean_semiring_with_nat_int =
-  {unique_euclidean_semiring_unique_euclidean_semiring_with_nat =
-     unique_euclidean_semiring_int,
-    semiring_char_0_unique_euclidean_semiring_with_nat = semiring_char_0_int,
-    semiring_parity_unique_euclidean_semiring_with_nat = semiring_parity_int}
-  : int unique_euclidean_semiring_with_nat;
-
-val unique_euclidean_semiring_with_bit_shifts_int =
-  {unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts
-     = unique_euclidean_semiring_with_nat_int,
-    semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts =
-      semiring_bit_shifts_int}
-  : int unique_euclidean_semiring_with_bit_shifts;
-
-fun times_nata Zero_nat n = Zero_nat
-  | times_nata (Suc m) n = plus_nata n (times_nata m n);
-
-val times_nat = {times = times_nata} : nat times;
-
-val dvd_nat = {times_dvd = times_nat} : nat dvd;
-
-val one_nat = {one = one_nata} : nat one;
-
-val plus_nat = {plus = plus_nata} : nat plus;
-
-val zero_nat = {zero = Zero_nat} : nat zero;
-
-val semigroup_add_nat = {plus_semigroup_add = plus_nat} : nat semigroup_add;
-
-val numeral_nat =
-  {one_numeral = one_nat, semigroup_add_numeral = semigroup_add_nat} :
-  nat numeral;
-
-val power_nat = {one_power = one_nat, times_power = times_nat} : nat power;
-
-val ab_semigroup_add_nat = {semigroup_add_ab_semigroup_add = semigroup_add_nat}
-  : nat ab_semigroup_add;
-
-val semigroup_mult_nat = {times_semigroup_mult = times_nat} :
-  nat semigroup_mult;
-
-val semiring_nat =
-  {ab_semigroup_add_semiring = ab_semigroup_add_nat,
-    semigroup_mult_semiring = semigroup_mult_nat}
-  : nat semiring;
-
-val mult_zero_nat = {times_mult_zero = times_nat, zero_mult_zero = zero_nat} :
-  nat mult_zero;
-
-val monoid_add_nat =
-  {semigroup_add_monoid_add = semigroup_add_nat, zero_monoid_add = zero_nat} :
-  nat monoid_add;
-
-val comm_monoid_add_nat =
-  {ab_semigroup_add_comm_monoid_add = ab_semigroup_add_nat,
-    monoid_add_comm_monoid_add = monoid_add_nat}
-  : nat comm_monoid_add;
-
-val semiring_0_nat =
-  {comm_monoid_add_semiring_0 = comm_monoid_add_nat,
-    mult_zero_semiring_0 = mult_zero_nat, semiring_semiring_0 = semiring_nat}
-  : nat semiring_0;
-
-val monoid_mult_nat =
-  {semigroup_mult_monoid_mult = semigroup_mult_nat,
-    power_monoid_mult = power_nat}
-  : nat monoid_mult;
-
-val semiring_numeral_nat =
-  {monoid_mult_semiring_numeral = monoid_mult_nat,
-    numeral_semiring_numeral = numeral_nat,
-    semiring_semiring_numeral = semiring_nat}
-  : nat semiring_numeral;
-
-val zero_neq_one_nat =
-  {one_zero_neq_one = one_nat, zero_zero_neq_one = zero_nat} : nat zero_neq_one;
-
-val semiring_1_nat =
-  {semiring_numeral_semiring_1 = semiring_numeral_nat,
-    semiring_0_semiring_1 = semiring_0_nat,
-    zero_neq_one_semiring_1 = zero_neq_one_nat}
-  : nat semiring_1;
-
-val ab_semigroup_mult_nat =
-  {semigroup_mult_ab_semigroup_mult = semigroup_mult_nat} :
-  nat ab_semigroup_mult;
-
-val comm_semiring_nat =
-  {ab_semigroup_mult_comm_semiring = ab_semigroup_mult_nat,
-    semiring_comm_semiring = semiring_nat}
-  : nat comm_semiring;
-
-val comm_semiring_0_nat =
-  {comm_semiring_comm_semiring_0 = comm_semiring_nat,
-    semiring_0_comm_semiring_0 = semiring_0_nat}
-  : nat comm_semiring_0;
-
-val comm_monoid_mult_nat =
-  {ab_semigroup_mult_comm_monoid_mult = ab_semigroup_mult_nat,
-    monoid_mult_comm_monoid_mult = monoid_mult_nat,
-    dvd_comm_monoid_mult = dvd_nat}
-  : nat comm_monoid_mult;
-
-val comm_semiring_1_nat =
-  {comm_monoid_mult_comm_semiring_1 = comm_monoid_mult_nat,
-    comm_semiring_0_comm_semiring_1 = comm_semiring_0_nat,
-    semiring_1_comm_semiring_1 = semiring_1_nat}
-  : nat comm_semiring_1;
 
 datatype rat = Frct of (int * int);
 
@@ -920,23 +45,78 @@ val one_rat = {one = one_rata} : rat one;
 
 fun quotient_of (Frct x) = x;
 
-fun gcd_int k l =
-  abs_int
-    (if equal_inta l Zero_int then k
-      else gcd_int l (modulo_inta (abs_int k) (abs_int l)));
+fun apsnd f (x, y) = (x, f y);
+
+fun divmod_integer k l =
+  (if ((k : IntInf.int) = (0 : IntInf.int))
+    then ((0 : IntInf.int), (0 : IntInf.int))
+    else (if IntInf.< ((0 : IntInf.int), l)
+           then (if IntInf.< ((0 : IntInf.int), k)
+                  then IntInf.divMod (IntInf.abs k, IntInf.abs l)
+                  else let
+                         val (r, s) =
+                           IntInf.divMod (IntInf.abs k, IntInf.abs l);
+                       in
+                         (if ((s : IntInf.int) = (0 : IntInf.int))
+                           then (IntInf.~ r, (0 : IntInf.int))
+                           else (IntInf.- (IntInf.~ r, (1 : IntInf.int)),
+                                  IntInf.- (l, s)))
+                       end)
+           else (if ((l : IntInf.int) = (0 : IntInf.int))
+                  then ((0 : IntInf.int), k)
+                  else apsnd IntInf.~
+                         (if IntInf.< (k, (0 : IntInf.int))
+                           then IntInf.divMod (IntInf.abs k, IntInf.abs l)
+                           else let
+                                  val (r, s) =
+                                    IntInf.divMod (IntInf.abs k, IntInf.abs l);
+                                in
+                                  (if ((s : IntInf.int) = (0 : IntInf.int))
+                                    then (IntInf.~ r, (0 : IntInf.int))
+                                    else (IntInf.- (IntInf.~
+              r, (1 : IntInf.int)),
+   IntInf.- (IntInf.~ l, s)))
+                                end))));
+
+fun fst (x1, x2) = x1;
+
+fun divide_integer k l = fst (divmod_integer k l);
+
+fun divide_int k l =
+  Int_of_integer (divide_integer (integer_of_int k) (integer_of_int l));
+
+fun uminus_int k = Int_of_integer (IntInf.~ (integer_of_int k));
+
+fun equal_int k l = (((integer_of_int k) : IntInf.int) = (integer_of_int l));
+
+val zero_int : int = Int_of_integer (0 : IntInf.int);
+
+fun less_int k l = IntInf.< (integer_of_int k, integer_of_int l);
+
+fun snd (x1, x2) = x2;
+
+fun modulo_integer k l = snd (divmod_integer k l);
+
+fun gcd_integer k l =
+  IntInf.abs
+    (if ((l : IntInf.int) = (0 : IntInf.int)) then k
+      else gcd_integer l (modulo_integer (IntInf.abs k) (IntInf.abs l)));
+
+fun gcd_int (Int_of_integer x) (Int_of_integer y) =
+  Int_of_integer (gcd_integer x y);
 
 fun normalize p =
-  (if less_int Zero_int (snd p)
+  (if less_int zero_int (snd p)
     then let
            val a = gcd_int (fst p) (snd p);
          in
-           (divide_inta (fst p) a, divide_inta (snd p) a)
+           (divide_int (fst p) a, divide_int (snd p) a)
          end
-    else (if equal_inta (snd p) Zero_int then (Zero_int, one_inta)
+    else (if equal_int (snd p) zero_int then (zero_int, one_inta)
            else let
                   val a = uminus_int (gcd_int (fst p) (snd p));
                 in
-                  (divide_inta (fst p) a, divide_inta (snd p) a)
+                  (divide_int (fst p) a, divide_int (snd p) a)
                 end));
 
 fun times_rata p q = Frct let
@@ -952,6 +132,9 @@ val times_rat = {times = times_rata} : rat times;
 
 val power_rat = {one_power = one_rat, times_power = times_rat} : rat power;
 
+type 'a equal = {equal : 'a -> 'a -> bool};
+val equal = #equal : 'a equal -> 'a -> 'a -> bool;
+
 fun eq A_ a b = equal A_ a b;
 
 fun equal_lista A_ [] (x21 :: x22) = false
@@ -962,6 +145,8 @@ fun equal_lista A_ [] (x21 :: x22) = false
 
 fun equal_list A_ = {equal = equal_lista A_} : ('a list) equal;
 
+datatype nat = Nat of IntInf.int;
+
 datatype 'a itself = Type;
 
 type 'a len0 = {len_of : 'a itself -> nat};
@@ -971,7 +156,7 @@ datatype 'a word = Word of int;
 
 fun uint A_ (Word x) = x;
 
-fun equal_worda A_ k l = equal_inta (uint A_ k) (uint A_ l);
+fun equal_worda A_ k l = equal_int (uint A_ k) (uint A_ l);
 
 fun equal_word A_ = {equal = equal_worda A_} : 'a word equal;
 
@@ -994,10 +179,9 @@ fun equal_chara (Chara (x1, x2, x3, x4, x5, x6, x7, x8))
 
 val equal_char = {equal = equal_chara} : char equal;
 
-fun equal_nat Zero_nat (Suc x2) = false
-  | equal_nat (Suc x2) Zero_nat = false
-  | equal_nat (Suc x2) (Suc y2) = equal_nat x2 y2
-  | equal_nat Zero_nat Zero_nat = true;
+fun integer_of_nat (Nat x) = x;
+
+fun equal_nat m n = (((integer_of_nat m) : IntInf.int) = (integer_of_nat n));
 
 datatype abi_type = Tuint of nat | Tsint of nat | Taddr | Tbool |
   Tfixed of nat * nat | Tufixed of nat * nat | Tfbytes of nat | Tfunction |
@@ -1180,11 +364,27 @@ and equal_abi_typea Tstring (Tarray x13) = false
   | equal_abi_typea Taddr Taddr = true;
 val equal_abi_type = equal_abi_type ();
 
+fun times_nat m n = Nat (IntInf.* (integer_of_nat m, integer_of_nat n));
+
+type 'a ord = {less_eq : 'a -> 'a -> bool, less : 'a -> 'a -> bool};
+val less_eq = #less_eq : 'a ord -> 'a -> 'a -> bool;
+val less = #less : 'a ord -> 'a -> 'a -> bool;
+
+fun max A_ a b = (if less_eq A_ a b then b else a);
+
+val ord_integer =
+  {less_eq = (fn a => fn b => IntInf.<= (a, b)),
+    less = (fn a => fn b => IntInf.< (a, b))}
+  : IntInf.int ord;
+
+fun nat_of_integer k = Nat (max ord_integer (0 : IntInf.int) k);
+
 type 'a finite = {};
 
 datatype 'a bit0 = Abs_bit0 of int;
 
-fun len_of_bit0 A_ uu = times_nata (nat_of_num (Bit0 One)) (len_of A_ Type);
+fun len_of_bit0 A_ uu =
+  times_nat (nat_of_integer (2 : IntInf.int)) (len_of A_ Type);
 
 type 'a len = {len0_len : 'a len0};
 val len0_len = #len0_len : 'a len -> 'a len0;
@@ -1193,16 +393,21 @@ fun len0_bit0 A_ = {len_of = len_of_bit0 A_} : 'a bit0 len0;
 
 fun len_bit0 A_ = {len0_len = len0_bit0 (len0_len A_)} : 'a bit0 len;
 
+fun plus_nat m n = Nat (IntInf.+ (integer_of_nat m, integer_of_nat n));
+
+val one_nat : nat = Nat (1 : IntInf.int);
+
 datatype 'a bit1 = Abs_bit1 of int;
 
 fun len_of_bit1 A_ uu =
-  plus_nata (times_nata (nat_of_num (Bit0 One)) (len_of A_ Type)) one_nata;
+  plus_nat (times_nat (nat_of_integer (2 : IntInf.int)) (len_of A_ Type))
+    one_nat;
 
 fun len0_bit1 A_ = {len_of = len_of_bit1 A_} : 'a bit1 len0;
 
 datatype num1 = One_num1;
 
-fun len_of_num1 uu = one_nata;
+fun len_of_num1 uu = one_nat;
 
 val len0_num1 = {len_of = len_of_num1} : num1 len0;
 
@@ -1212,7 +417,14 @@ val one_integera : IntInf.int = (1 : IntInf.int);
 
 val one_integer = {one = one_integera} : IntInf.int one;
 
+type 'a zero = {zero : 'a};
+val zero = #zero : 'a zero -> 'a;
+
 val zero_integer = {zero = (0 : IntInf.int)} : IntInf.int zero;
+
+type 'a zero_neq_one = {one_zero_neq_one : 'a one, zero_zero_neq_one : 'a zero};
+val one_zero_neq_one = #one_zero_neq_one : 'a zero_neq_one -> 'a one;
+val zero_zero_neq_one = #zero_zero_neq_one : 'a zero_neq_one -> 'a zero;
 
 val zero_neq_one_integer =
   {one_zero_neq_one = one_integer, zero_zero_neq_one = zero_integer} :
@@ -1241,6 +453,10 @@ datatype valueParserState = VPS_primary of valueParseTree |
 
 fun id x = (fn xa => xa) x;
 
+fun nat k = Nat (max ord_integer (0 : IntInf.int) (integer_of_int k));
+
+fun suc n = plus_nat n one_nat;
+
 fun fold f (x :: xs) s = fold f xs (f x s)
   | fold f [] s = s;
 
@@ -1250,31 +466,43 @@ fun zip (x :: xs) (y :: ys) = (x, y) :: zip xs ys
   | zip xs [] = []
   | zip [] ys = [];
 
+fun minus_nat m n =
+  Nat (max ord_integer (0 : IntInf.int)
+        (IntInf.- (integer_of_nat m, integer_of_nat n)));
+
+val zero_nat : nat = Nat (0 : IntInf.int);
+
 fun drop n [] = []
-  | drop n (x :: xs) = (case n of Zero_nat => x :: xs | Suc m => drop m xs);
+  | drop n (x :: xs) =
+    (if equal_nat n zero_nat then x :: xs else drop (minus_nat n one_nat) xs);
 
 fun null [] = true
   | null (x :: xs) = false;
 
 fun take n [] = []
-  | take n (x :: xs) = (case n of Zero_nat => [] | Suc m => x :: take m xs);
+  | take n (x :: xs) =
+    (if equal_nat n zero_nat then [] else x :: take (minus_nat n one_nat) xs);
 
-fun minus_nat (Suc m) (Suc n) = minus_nat m n
-  | minus_nat Zero_nat n = Zero_nat
-  | minus_nat m Zero_nat = m;
+fun bin_rest w = divide_int w (Int_of_integer (2 : IntInf.int));
 
-fun bin_rest w = divide_inta w (Pos (Bit0 One));
+fun modulo_int k l =
+  Int_of_integer (modulo_integer (integer_of_int k) (integer_of_int l));
 
-fun bin_last w = equal_inta (modulo_inta w (Pos (Bit0 One))) one_inta;
+fun bin_last w =
+  equal_int (modulo_int w (Int_of_integer (2 : IntInf.int))) one_inta;
 
-fun bit k b = plus_inta (plus_inta (if b then one_inta else Zero_int) k) k;
+fun plus_int k l =
+  Int_of_integer (IntInf.+ (integer_of_int k, integer_of_int l));
 
-fun sbintrunc Zero_nat bin =
-  (if bin_last bin then uminus_int one_inta else Zero_int)
-  | sbintrunc (Suc n) bin = bit (sbintrunc n (bin_rest bin)) (bin_last bin);
+fun bit k b = plus_int (plus_int (if b then one_inta else zero_int) k) k;
+
+fun sbintrunc n bin =
+  (if equal_nat n zero_nat
+    then (if bin_last bin then uminus_int one_inta else zero_int)
+    else bit (sbintrunc (minus_nat n one_nat) (bin_rest bin)) (bin_last bin));
 
 fun sint A_ w =
-  sbintrunc (minus_nat (len_of (len0_len A_) Type) one_nata)
+  sbintrunc (minus_nat (len_of (len0_len A_) Type) one_nat)
     (uint (len0_len A_) w);
 
 fun foldl f a [] = a
@@ -1290,13 +518,18 @@ fun those [] = SOME []
   | those (x :: xs) =
     (case x of NONE => NONE | SOME y => map_option (fn a => y :: a) (those xs));
 
-fun funpow Zero_nat f = id
-  | funpow (Suc n) f = f o funpow n f;
+fun funpow n f =
+  (if equal_nat n zero_nat then id else f o funpow (minus_nat n one_nat) f);
 
 fun of_int a = Frct (a, one_inta);
 
+fun power A_ a n =
+  (if equal_nat n zero_nat then one (one_power A_)
+    else times (times_power A_) a (power A_ a (minus_nat n one_nat)));
+
 fun word_of_int A_ k =
-  Word (modulo_inta k (power power_int (Pos (Bit0 One)) (len_of A_ Type)));
+  Word (modulo_int k
+         (power power_int (Int_of_integer (2 : IntInf.int)) (len_of A_ Type)));
 
 fun ucast A_ B_ w = word_of_int B_ (uint A_ w);
 
@@ -1307,55 +540,58 @@ fun concat xss = foldr (fn a => fn b => a @ b) xss [];
 fun bind NONE f = NONE
   | bind (SOME x) f = f x;
 
-fun less_nat m (Suc n) = less_eq_nat m n
-  | less_nat n Zero_nat = false
-and less_eq_nat (Suc m) n = less_nat m n
-  | less_eq_nat Zero_nat n = true;
+fun less_nat m n = IntInf.< (integer_of_nat m, integer_of_nat n);
+
+fun map_prod f g (a, b) = (f a, g b);
 
 fun divmod_nat m n =
-  (if equal_nat n Zero_nat orelse less_nat m n then (Zero_nat, m)
-    else let
-           val a = divmod_nat (minus_nat m n) n;
-           val (q, aa) = a;
-         in
-           (Suc q, aa)
-         end);
+  let
+    val k = integer_of_nat m;
+    val l = integer_of_nat n;
+  in
+    map_prod nat_of_integer nat_of_integer
+      (if ((k : IntInf.int) = (0 : IntInf.int))
+        then ((0 : IntInf.int), (0 : IntInf.int))
+        else (if ((l : IntInf.int) = (0 : IntInf.int))
+               then ((0 : IntInf.int), k)
+               else IntInf.divMod (IntInf.abs k, IntInf.abs l)))
+  end;
 
 fun decwrite1 c =
-  (if equal_nat c Zero_nat
+  (if equal_nat c zero_nat
     then Chara (false, false, false, false, true, true, false, false)
-    else (if equal_nat c one_nata
+    else (if equal_nat c one_nat
            then Chara (true, false, false, false, true, true, false, false)
-           else (if equal_nat c (nat_of_num (Bit0 One))
+           else (if equal_nat c (nat_of_integer (2 : IntInf.int))
                   then Chara (false, true, false, false, true, true, false,
                                false)
-                  else (if equal_nat c (nat_of_num (Bit1 One))
+                  else (if equal_nat c (nat_of_integer (3 : IntInf.int))
                          then Chara (true, true, false, false, true, true,
                                       false, false)
-                         else (if equal_nat c (nat_of_num (Bit0 (Bit0 One)))
+                         else (if equal_nat c (nat_of_integer (4 : IntInf.int))
                                 then Chara (false, false, true, false, true,
      true, false, false)
                                 else (if equal_nat c
-   (nat_of_num (Bit1 (Bit0 One)))
+   (nat_of_integer (5 : IntInf.int))
                                        then Chara
       (true, false, true, false, true, true, false, false)
                                        else (if equal_nat c
-          (nat_of_num (Bit0 (Bit1 One)))
+          (nat_of_integer (6 : IntInf.int))
       then Chara (false, true, true, false, true, true, false, false)
-      else (if equal_nat c (nat_of_num (Bit1 (Bit1 One)))
+      else (if equal_nat c (nat_of_integer (7 : IntInf.int))
              then Chara (true, true, true, false, true, true, false, false)
-             else (if equal_nat c (nat_of_num (Bit0 (Bit0 (Bit0 One))))
+             else (if equal_nat c (nat_of_integer (8 : IntInf.int))
                     then Chara (false, false, false, true, true, true, false,
                                  false)
-                    else (if equal_nat c (nat_of_num (Bit1 (Bit0 (Bit0 One))))
+                    else (if equal_nat c (nat_of_integer (9 : IntInf.int))
                            then Chara (true, false, false, true, true, true,
 false, false)
                            else (raise Fail "undefined")))))))))));
 
 fun decwritea n =
-  (if less_nat n (nat_of_num (Bit0 (Bit1 (Bit0 One)))) then [decwrite1 n]
+  (if less_nat n (nat_of_integer (10 : IntInf.int)) then [decwrite1 n]
     else let
-           val (d, m) = divmod_nat n (nat_of_num (Bit0 (Bit1 (Bit0 One))));
+           val (d, m) = divmod_nat n (nat_of_integer (10 : IntInf.int));
          in
            decwrite1 m :: decwritea d
          end);
@@ -1372,111 +608,81 @@ fun those_err [] = Inl []
 
 fun shiftr1 A_ w = word_of_int A_ (bin_rest (uint A_ w));
 
-fun numeral A_ (Bit1 n) =
-  let
-    val m = numeral A_ n;
-  in
-    plus ((plus_semigroup_add o semigroup_add_numeral) A_)
-      (plus ((plus_semigroup_add o semigroup_add_numeral) A_) m m)
-      (one (one_numeral A_))
-  end
-  | numeral A_ (Bit0 n) =
-    let
-      val m = numeral A_ n;
-    in
-      plus ((plus_semigroup_add o semigroup_add_numeral) A_) m m
-    end
-  | numeral A_ One = one (one_numeral A_);
+fun less_eq_nat m n = IntInf.<= (integer_of_nat m, integer_of_nat n);
 
-fun digit7 (Chara (x1, x2, x3, x4, x5, x6, x7, x8)) = x8;
+fun minus_int k l =
+  Int_of_integer (IntInf.- (integer_of_int k, integer_of_int l));
 
-fun digit6 (Chara (x1, x2, x3, x4, x5, x6, x7, x8)) = x7;
+fun of_bool A_ true = one (one_zero_neq_one A_)
+  | of_bool A_ false = zero (zero_zero_neq_one A_);
 
-fun digit5 (Chara (x1, x2, x3, x4, x5, x6, x7, x8)) = x6;
+fun integer_of_char (Chara (b0, b1, b2, b3, b4, b5, b6, b7)) =
+  IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (of_bool
+                        zero_neq_one_integer
+                        b7, (2 : IntInf.int)), of_bool zero_neq_one_integer
+         b6), (2 : IntInf.int)), of_bool zero_neq_one_integer
+                                   b5), (2 : IntInf.int)), of_bool
+                     zero_neq_one_integer
+                     b4), (2 : IntInf.int)), of_bool zero_neq_one_integer
+       b3), (2 : IntInf.int)), of_bool zero_neq_one_integer
+                                 b2), (2 : IntInf.int)), of_bool
+                   zero_neq_one_integer
+                   b1), (2 : IntInf.int)), of_bool zero_neq_one_integer b0);
 
-fun digit4 (Chara (x1, x2, x3, x4, x5, x6, x7, x8)) = x5;
+fun nat_of_char c = Nat (integer_of_char c);
 
-fun digit3 (Chara (x1, x2, x3, x4, x5, x6, x7, x8)) = x4;
-
-fun digit2 (Chara (x1, x2, x3, x4, x5, x6, x7, x8)) = x3;
-
-fun digit1 (Chara (x1, x2, x3, x4, x5, x6, x7, x8)) = x2;
-
-fun digit0 (Chara (x1, x2, x3, x4, x5, x6, x7, x8)) = x1;
-
-fun of_char A_ c =
-  foldr (fn b => fn k =>
-          plus ((plus_semigroup_add o semigroup_add_numeral o
-                  numeral_semiring_numeral o semiring_numeral_semiring_1 o
-                  semiring_1_comm_semiring_1)
-                 A_)
-            (of_bool ((zero_neq_one_semiring_1 o semiring_1_comm_semiring_1) A_)
-              b)
-            (times
-              ((times_dvd o dvd_comm_monoid_mult o
-                 comm_monoid_mult_comm_semiring_1)
-                A_)
-              k (numeral
-                  ((numeral_semiring_numeral o semiring_numeral_semiring_1 o
-                     semiring_1_comm_semiring_1)
-                    A_)
-                  (Bit0 One))))
-    [digit0 c, digit1 c, digit2 c, digit3 c, digit4 c, digit5 c, digit6 c,
-      digit7 c]
-    (zero ((zero_mult_zero o mult_zero_semiring_0 o semiring_0_semiring_1 o
-             semiring_1_comm_semiring_1)
-            A_));
+fun int_of_char x = (Int_of_integer o integer_of_char) x;
 
 fun is_digit x =
   (fn c =>
     less_eq_nat
-      (of_char comm_semiring_1_nat
+      (nat_of_char
         (Chara (false, false, false, false, true, true, false, false)))
-      (of_char comm_semiring_1_nat c) andalso
-      less_eq_nat (of_char comm_semiring_1_nat c)
-        (of_char comm_semiring_1_nat
+      (nat_of_char c) andalso
+      less_eq_nat (nat_of_char c)
+        (nat_of_char
           (Chara (true, false, false, true, true, true, false, false))))
     x;
 
 fun parseHexDigit x =
   (if is_digit x
-    then SOME (minus_inta (of_char comm_semiring_1_int x)
-                (of_char comm_semiring_1_int
+    then SOME (minus_int (int_of_char x)
+                (int_of_char
                   (Chara
                     (false, false, false, false, true, true, false, false))))
     else (if less_eq_nat
-               (of_char comm_semiring_1_nat
+               (nat_of_char
                  (Chara (true, false, false, false, false, false, true, false)))
-               (of_char comm_semiring_1_nat x) andalso
-               less_eq_nat (of_char comm_semiring_1_nat x)
-                 (of_char comm_semiring_1_nat
+               (nat_of_char x) andalso
+               less_eq_nat (nat_of_char x)
+                 (nat_of_char
                    (Chara
                      (false, true, true, false, false, false, true, false)))
-           then SOME (plus_inta
-                       (minus_inta (of_char comm_semiring_1_int x)
-                         (of_char comm_semiring_1_int
+           then SOME (plus_int
+                       (minus_int (int_of_char x)
+                         (int_of_char
                            (Chara
                              (true, false, false, false, false, false, true,
                                false))))
-                       (Pos (Bit0 (Bit1 (Bit0 One)))))
+                       (Int_of_integer (10 : IntInf.int)))
            else (if less_eq_nat
-                      (of_char comm_semiring_1_nat
+                      (nat_of_char
                         (Chara
                           (true, false, false, false, false, true, true,
                             false)))
-                      (of_char comm_semiring_1_nat x) andalso
-                      less_eq_nat (of_char comm_semiring_1_nat x)
-                        (of_char comm_semiring_1_nat
+                      (nat_of_char x) andalso
+                      less_eq_nat (nat_of_char x)
+                        (nat_of_char
                           (Chara
                             (false, true, true, false, false, true, true,
                               false)))
-                  then SOME (plus_inta
-                              (minus_inta (of_char comm_semiring_1_int x)
-                                (of_char comm_semiring_1_int
+                  then SOME (plus_int
+                              (minus_int (int_of_char x)
+                                (int_of_char
                                   (Chara
                                     (true, false, false, false, false, true,
                                       true, false))))
-                              (Pos (Bit0 (Bit1 (Bit0 One)))))
+                              (Int_of_integer (10 : IntInf.int)))
                   else NONE)));
 
 fun parseWord x =
@@ -1485,7 +691,7 @@ fun parseWord x =
       | (SOME _, NONE) => NONE
       | (SOME xb, SOME ya) =>
         SOME (word_of_int (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
-               (plus_inta (times_inta xb (Pos (Bit0 (Bit0 (Bit0 (Bit0 One))))))
+               (plus_int (times_inta xb (Int_of_integer (16 : IntInf.int)))
                  ya))))
     x;
 
@@ -1569,15 +775,16 @@ fun explode s =
        o String.explode)
       s);
 
-fun bin_split Zero_nat w = (w, Zero_int)
-  | bin_split (Suc n) w = let
-                            val (w1, w2) = bin_split n (bin_rest w);
-                          in
-                            (w1, bit w2 (bin_last w))
-                          end;
+fun bin_split n w =
+  (if equal_nat n zero_nat then (w, zero_int)
+    else let
+           val (w1, w2) = bin_split (minus_nat n one_nat) (bin_rest w);
+         in
+           (w1, bit w2 (bin_last w))
+         end);
 
 fun bin_rsplit_aux n m c bs =
-  (if equal_nat m Zero_nat orelse equal_nat n Zero_nat then bs
+  (if equal_nat m zero_nat orelse equal_nat n zero_nat then bs
     else let
            val a = bin_split n c;
            val (aa, b) = a;
@@ -1591,157 +798,28 @@ fun word_rsplit A_ B_ w =
   map (word_of_int (len0_len B_))
     (bin_rsplit (len_of (len0_len B_) Type) (len_of A_ Type, uint A_ w));
 
-fun dvd (A1_, A2_) a b =
-  eq A1_
-    (modulo ((modulo_semiring_modulo o semiring_modulo_semidom_modulo) A2_) b a)
-    (zero ((zero_mult_zero o mult_zero_semiring_0 o semiring_0_semiring_1 o
-             semiring_1_comm_semiring_1 o
-             comm_semiring_1_comm_semiring_1_cancel o
-             comm_semiring_1_cancel_semidom o semidom_semidom_divide o
-             semidom_divide_algebraic_semidom o
-             algebraic_semidom_semidom_modulo)
-            A2_));
-
-fun bita (A1_, A2_, A3_) a n =
-  not (dvd (A1_, A3_)
-        (numeral
-          ((numeral_semiring_numeral o semiring_numeral_semiring_1 o
-             semiring_1_comm_semiring_1 o
-             comm_semiring_1_comm_semiring_1_cancel o
-             comm_semiring_1_cancel_semiring_modulo o
-             semiring_modulo_semiring_parity o semiring_parity_semiring_bits)
-            A2_)
-          (Bit0 One))
-        (divide
-          ((divide_modulo o modulo_semiring_modulo o
-             semiring_modulo_semiring_parity o semiring_parity_semiring_bits)
-            A2_)
-          a (power
-              ((power_monoid_mult o monoid_mult_semiring_numeral o
-                 semiring_numeral_semiring_1 o semiring_1_comm_semiring_1 o
-                 comm_semiring_1_comm_semiring_1_cancel o
-                 comm_semiring_1_cancel_semiring_modulo o
-                 semiring_modulo_semiring_parity o
-                 semiring_parity_semiring_bits)
-                A2_)
-              (numeral
-                ((numeral_semiring_numeral o semiring_numeral_semiring_1 o
-                   semiring_1_comm_semiring_1 o
-                   comm_semiring_1_comm_semiring_1_cancel o
-                   comm_semiring_1_cancel_semiring_modulo o
-                   semiring_modulo_semiring_parity o
-                   semiring_parity_semiring_bits)
-                  A2_)
-                (Bit0 One))
-              n)));
-
-fun char_of (A1_, A2_) n =
-  Chara (not (dvd (A1_, (semidom_modulo_euclidean_semiring o
-                          euclidean_semiring_euclidean_semiring_cancel o
-                          euclidean_semiring_cancel_unique_euclidean_semiring o
-                          unique_euclidean_semiring_unique_euclidean_semiring_with_nat o
-                          unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts)
-                          A2_)
-               (numeral
-                 ((numeral_semiring_numeral o semiring_numeral_semiring_1 o
-                    semiring_1_semiring_char_0 o
-                    semiring_char_0_unique_euclidean_semiring_with_nat o
-                    unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts)
-                   A2_)
-                 (Bit0 One))
-               n),
-          bita (A1_, (semiring_bits_semiring_bit_shifts o
-                       semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts)
-                       A2_,
-                 (semidom_modulo_euclidean_semiring o
-                   euclidean_semiring_euclidean_semiring_cancel o
-                   euclidean_semiring_cancel_unique_euclidean_semiring o
-                   unique_euclidean_semiring_unique_euclidean_semiring_with_nat o
-                   unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts)
-                   A2_)
-            n one_nata,
-          bita (A1_, (semiring_bits_semiring_bit_shifts o
-                       semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts)
-                       A2_,
-                 (semidom_modulo_euclidean_semiring o
-                   euclidean_semiring_euclidean_semiring_cancel o
-                   euclidean_semiring_cancel_unique_euclidean_semiring o
-                   unique_euclidean_semiring_unique_euclidean_semiring_with_nat o
-                   unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts)
-                   A2_)
-            n (nat_of_num (Bit0 One)),
-          bita (A1_, (semiring_bits_semiring_bit_shifts o
-                       semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts)
-                       A2_,
-                 (semidom_modulo_euclidean_semiring o
-                   euclidean_semiring_euclidean_semiring_cancel o
-                   euclidean_semiring_cancel_unique_euclidean_semiring o
-                   unique_euclidean_semiring_unique_euclidean_semiring_with_nat o
-                   unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts)
-                   A2_)
-            n (nat_of_num (Bit1 One)),
-          bita (A1_, (semiring_bits_semiring_bit_shifts o
-                       semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts)
-                       A2_,
-                 (semidom_modulo_euclidean_semiring o
-                   euclidean_semiring_euclidean_semiring_cancel o
-                   euclidean_semiring_cancel_unique_euclidean_semiring o
-                   unique_euclidean_semiring_unique_euclidean_semiring_with_nat o
-                   unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts)
-                   A2_)
-            n (nat_of_num (Bit0 (Bit0 One))),
-          bita (A1_, (semiring_bits_semiring_bit_shifts o
-                       semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts)
-                       A2_,
-                 (semidom_modulo_euclidean_semiring o
-                   euclidean_semiring_euclidean_semiring_cancel o
-                   euclidean_semiring_cancel_unique_euclidean_semiring o
-                   unique_euclidean_semiring_unique_euclidean_semiring_with_nat o
-                   unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts)
-                   A2_)
-            n (nat_of_num (Bit1 (Bit0 One))),
-          bita (A1_, (semiring_bits_semiring_bit_shifts o
-                       semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts)
-                       A2_,
-                 (semidom_modulo_euclidean_semiring o
-                   euclidean_semiring_euclidean_semiring_cancel o
-                   euclidean_semiring_cancel_unique_euclidean_semiring o
-                   unique_euclidean_semiring_unique_euclidean_semiring_with_nat o
-                   unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts)
-                   A2_)
-            n (nat_of_num (Bit0 (Bit1 One))),
-          bita (A1_, (semiring_bits_semiring_bit_shifts o
-                       semiring_bit_shifts_unique_euclidean_semiring_with_bit_shifts)
-                       A2_,
-                 (semidom_modulo_euclidean_semiring o
-                   euclidean_semiring_euclidean_semiring_cancel o
-                   euclidean_semiring_cancel_unique_euclidean_semiring o
-                   unique_euclidean_semiring_unique_euclidean_semiring_with_nat o
-                   unique_euclidean_semiring_with_nat_unique_euclidean_semiring_with_bit_shifts)
-                   A2_)
-            n (nat_of_num (Bit1 (Bit1 One))));
+fun char_of_int x = (char_of_integer o integer_of_int) x;
 
 fun writeInt n =
-  (if less_int n Zero_int
+  (if less_int n zero_int
     then Chara (true, false, true, true, false, true, false, false) ::
            writeInt (uminus_int n)
-    else (if less_int n (Pos (Bit0 (Bit1 (Bit0 One))))
-           then [char_of
-                   (equal_int, unique_euclidean_semiring_with_bit_shifts_int)
-                   (plus_inta
-                     (of_char comm_semiring_1_int
+    else (if less_int n (Int_of_integer (10 : IntInf.int))
+           then [char_of_int
+                   (plus_int
+                     (int_of_char
                        (Chara
                          (false, false, false, false, true, true, false,
                            false)))
                      n)]
-           else writeInt (divide_inta n (Pos (Bit0 (Bit1 (Bit0 One))))) @
-                  writeInt (modulo_inta n (Pos (Bit0 (Bit1 (Bit0 One)))))));
+           else writeInt (divide_int n (Int_of_integer (10 : IntInf.int))) @
+                  writeInt (modulo_int n (Int_of_integer (10 : IntInf.int)))));
 
 fun shiftr_word A_ w n = funpow n (shiftr1 A_) w;
 
 fun bitAND_int x y =
-  (if equal_inta x Zero_int then Zero_int
-    else (if equal_inta x (uminus_int one_inta) then y
+  (if equal_int x zero_int then zero_int
+    else (if equal_int x (uminus_int one_inta) then y
            else bit (bitAND_int (bin_rest x) (bin_rest y))
                   (bin_last x andalso bin_last y)));
 
@@ -1752,32 +830,32 @@ fun less_word A_ a b = less_int (uint A_ a) (uint A_ b);
 fun writeHexNibble x =
   (if less_word (len0_bit0 (len0_bit0 len0_num1)) x
         (word_of_int (len0_bit0 (len0_bit0 len0_num1))
-          (Pos (Bit0 (Bit1 (Bit0 One)))))
-    then char_of (equal_int, unique_euclidean_semiring_with_bit_shifts_int)
-           (plus_inta
-             (of_char comm_semiring_1_int
+          (Int_of_integer (10 : IntInf.int)))
+    then char_of_int
+           (plus_int
+             (int_of_char
                (Chara (false, false, false, false, true, true, false, false)))
              (uint (len0_bit0 (len0_bit0 len0_num1)) x))
-    else char_of (equal_int, unique_euclidean_semiring_with_bit_shifts_int)
-           (minus_inta
-             (plus_inta
-               (of_char comm_semiring_1_int
+    else char_of_int
+           (minus_int
+             (plus_int
+               (int_of_char
                  (Chara (true, false, false, false, false, false, true, false)))
                (uint (len0_bit0 (len0_bit0 len0_num1)) x))
-             (Pos (Bit0 (Bit1 (Bit0 One))))));
+             (Int_of_integer (10 : IntInf.int))));
 
 fun writeHexDigit x =
   [writeHexNibble
      (ucast (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
        (len0_bit0 (len0_bit0 len0_num1))
        (shiftr_word (len0_bit0 (len0_bit0 (len0_bit0 len0_num1))) x
-         (nat_of_num (Bit0 (Bit0 One))))),
+         (nat_of_integer (4 : IntInf.int)))),
     writeHexNibble
       (ucast (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
         (len0_bit0 (len0_bit0 len0_num1))
         (bitAND_word (len0_bit0 (len0_bit0 (len0_bit0 len0_num1))) x
           (word_of_int (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
-            (Pos (Bit1 (Bit1 (Bit1 One)))))))];
+            (Int_of_integer (15 : IntInf.int)))))];
 
 fun writeHex (x :: tail) = writeHexDigit x @ writeHex tail
   | writeHex [] = [];
@@ -1889,7 +967,7 @@ fun writeValue (Vuint (s, value)) = writeInt value
       writeHex
         (map (fn x =>
                word_of_int (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
-                 (of_char comm_semiring_1_int x))
+                 (int_of_char x))
           str)
 and writeValueList (v :: vs) =
   (if null vs then writeValue v
@@ -1952,22 +1030,33 @@ fun parseBaseTypePrefix x =
       Chara (true, true, true, false, false, true, true, false)]
     (SOME (fn a => (case a of NONE => SOME Tstring | SOME _ => NONE))) x;
 
-fun parseDigit x =
-  (if is_digit x
-    then SOME (minus_nat (of_char comm_semiring_1_nat x)
-                (of_char comm_semiring_1_nat
-                  (Chara
-                    (false, false, false, false, true, true, false, false))))
-    else NONE);
+fun less_eq_int k l = IntInf.<= (integer_of_int k, integer_of_int l);
 
 fun parseNatRev (x :: xs) =
-  (case (parseDigit x, parseNatRev xs) of (NONE, _) => NONE
-    | (SOME _, NONE) => NONE
-    | (SOME d, SOME y) =>
-      SOME (plus_nata d (times_nata y (nat_of_num (Bit0 (Bit1 (Bit0 One)))))))
-  | parseNatRev [] = SOME Zero_nat;
+  let
+    val v = int_of_char x;
+  in
+    (if less_eq_int
+          (int_of_char
+            (Chara (false, false, false, false, true, true, false, false)))
+          v andalso
+          less_eq_int v
+            (int_of_char
+              (Chara (true, false, false, true, true, true, false, false)))
+      then (case parseNatRev xs of NONE => NONE
+             | SOME vs =>
+               SOME (plus_int
+                      (minus_int v
+                        (int_of_char
+                          (Chara
+                            (false, false, false, false, true, true, false,
+                              false))))
+                      (times_inta (Int_of_integer (10 : IntInf.int)) vs)))
+      else NONE)
+  end
+  | parseNatRev [] = SOME zero_int;
 
-fun parseNat x = (fn xa => parseNatRev (rev xa)) x;
+fun parseNat x = (fn xa => map_option nat (parseNatRev (rev xa))) x;
 
 fun splitDigitSuffix (x :: tail) parsed =
   (if is_digit x
@@ -2271,46 +1360,35 @@ fun scanTokens x =
 
 fun parseType x = (fn xa => typeParser (scanTokens xa) []) x;
 
-fun modulo_nat m n = snd (divmod_nat m n);
+fun modulo_nat m n = Nat (modulo_integer (integer_of_nat m) (integer_of_nat n));
 
 fun list_all p [] = true
   | list_all p (x :: xs) = p x andalso list_all p xs;
 
 fun abi_type_valid (Tuint n) =
-  less_nat Zero_nat n andalso
-    (less_eq_nat n
-       (nat_of_num
-         (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))))) andalso
-      equal_nat (modulo_nat n (nat_of_num (Bit0 (Bit0 (Bit0 One))))) Zero_nat)
+  less_nat zero_nat n andalso
+    (less_eq_nat n (nat_of_integer (256 : IntInf.int)) andalso
+      equal_nat (modulo_nat n (nat_of_integer (8 : IntInf.int))) zero_nat)
   | abi_type_valid (Tsint n) =
-    less_nat Zero_nat n andalso
-      (less_eq_nat n
-         (nat_of_num
-           (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))))) andalso
-        equal_nat (modulo_nat n (nat_of_num (Bit0 (Bit0 (Bit0 One))))) Zero_nat)
+    less_nat zero_nat n andalso
+      (less_eq_nat n (nat_of_integer (256 : IntInf.int)) andalso
+        equal_nat (modulo_nat n (nat_of_integer (8 : IntInf.int))) zero_nat)
   | abi_type_valid (Tfixed (m, n)) =
-    less_eq_nat (nat_of_num (Bit0 (Bit0 (Bit0 One)))) m andalso
-      (less_eq_nat m
-         (nat_of_num
-           (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))))) andalso
-        (equal_nat (modulo_nat m (nat_of_num (Bit0 (Bit0 (Bit0 One)))))
-           Zero_nat andalso
-          (less_nat Zero_nat n andalso
-            less_eq_nat n
-              (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit1 (Bit0 One))))))))))
+    less_eq_nat (nat_of_integer (8 : IntInf.int)) m andalso
+      (less_eq_nat m (nat_of_integer (256 : IntInf.int)) andalso
+        (equal_nat (modulo_nat m (nat_of_integer (8 : IntInf.int)))
+           zero_nat andalso
+          (less_nat zero_nat n andalso
+            less_eq_nat n (nat_of_integer (80 : IntInf.int)))))
   | abi_type_valid (Tufixed (m, n)) =
-    less_eq_nat (nat_of_num (Bit0 (Bit0 (Bit0 One)))) m andalso
-      (less_eq_nat m
-         (nat_of_num
-           (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))))) andalso
-        (equal_nat (modulo_nat m (nat_of_num (Bit0 (Bit0 (Bit0 One)))))
-           Zero_nat andalso
-          (less_nat Zero_nat n andalso
-            less_eq_nat n
-              (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit1 (Bit0 One))))))))))
+    less_eq_nat (nat_of_integer (8 : IntInf.int)) m andalso
+      (less_eq_nat m (nat_of_integer (256 : IntInf.int)) andalso
+        (equal_nat (modulo_nat m (nat_of_integer (8 : IntInf.int)))
+           zero_nat andalso
+          (less_nat zero_nat n andalso
+            less_eq_nat n (nat_of_integer (80 : IntInf.int)))))
   | abi_type_valid (Tfbytes m) =
-    less_nat Zero_nat m andalso
-      less_eq_nat m (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))
+    less_nat zero_nat m andalso less_eq_nat m (nat_of_integer (32 : IntInf.int))
   | abi_type_valid (Tfarray (t, uu)) = abi_type_valid t
   | abi_type_valid (Ttuple ts) = list_all abi_type_valid ts
   | abi_type_valid (Tarray t) = abi_type_valid t
@@ -2320,10 +1398,10 @@ fun abi_type_valid (Tuint n) =
   | abi_type_valid Tbytes = true
   | abi_type_valid Tstring = true;
 
-fun gen_length n (x :: xs) = gen_length (Suc n) xs
+fun gen_length n (x :: xs) = gen_length (suc n) xs
   | gen_length n [] = n;
 
-fun size_list x = gen_length Zero_nat x;
+fun size_list x = gen_length zero_nat x;
 
 fun decode_err s (ix, l) =
   s @ [Chara (false, false, false, false, false, true, false, false),
@@ -2343,20 +1421,7 @@ fun decode_err s (ix, l) =
             decwrite (size_list l) @
               [Chara (false, true, true, true, false, true, false, false)];
 
-fun of_nat_aux A_ inc Zero_nat i = i
-  | of_nat_aux A_ inc (Suc n) i = of_nat_aux A_ inc n (inc i);
-
-fun of_nat A_ n =
-  of_nat_aux A_
-    (fn i =>
-      plus ((plus_semigroup_add o semigroup_add_numeral o
-              numeral_semiring_numeral o semiring_numeral_semiring_1)
-             A_)
-        i (one ((one_numeral o numeral_semiring_numeral o
-                  semiring_numeral_semiring_1)
-                 A_)))
-    n (zero ((zero_mult_zero o mult_zero_semiring_0 o semiring_0_semiring_1)
-              A_));
+fun int_of_nat n = Int_of_integer (integer_of_nat n);
 
 fun abi_type_isdynamic (Tfarray (t, n)) = abi_type_isdynamic t
   | abi_type_isdynamic Tbytes = true
@@ -2374,28 +1439,27 @@ fun abi_type_isdynamic (Tfarray (t, n)) = abi_type_isdynamic t
 
 fun abi_type_isstatic t = not (abi_type_isdynamic t);
 
-fun abi_static_size (Tuint n) = Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))
-  | abi_static_size (Tsint n) = Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))
-  | abi_static_size Taddr = Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))
-  | abi_static_size Tbool = Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))
-  | abi_static_size (Tfixed (uu, uv)) =
-    Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))
-  | abi_static_size (Tufixed (uw, ux)) =
-    Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))
-  | abi_static_size (Tfbytes uy) = Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))
-  | abi_static_size Tfunction = Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))
+fun abi_static_size (Tuint n) = Int_of_integer (32 : IntInf.int)
+  | abi_static_size (Tsint n) = Int_of_integer (32 : IntInf.int)
+  | abi_static_size Taddr = Int_of_integer (32 : IntInf.int)
+  | abi_static_size Tbool = Int_of_integer (32 : IntInf.int)
+  | abi_static_size (Tfixed (uu, uv)) = Int_of_integer (32 : IntInf.int)
+  | abi_static_size (Tufixed (uw, ux)) = Int_of_integer (32 : IntInf.int)
+  | abi_static_size (Tfbytes uy) = Int_of_integer (32 : IntInf.int)
+  | abi_static_size Tfunction = Int_of_integer (32 : IntInf.int)
   | abi_static_size (Tfarray (t, n)) =
-    times_inta (of_nat semiring_1_int n) (abi_static_size t)
+    times_inta (int_of_nat n) (abi_static_size t)
   | abi_static_size (Ttuple ts) =
-    foldl (fn a => fn x => plus_inta a (abi_static_size x)) Zero_int ts
-  | abi_static_size Tbytes = Zero_int
-  | abi_static_size Tstring = Zero_int
-  | abi_static_size (Tarray v) = Zero_int;
+    foldl (fn a => fn x => plus_int a (abi_static_size x)) zero_int ts
+  | abi_static_size Tbytes = zero_int
+  | abi_static_size Tstring = zero_int
+  | abi_static_size (Tarray v) = zero_int;
 
-fun bin_cat w Zero_nat v = w
-  | bin_cat w (Suc n) v = bit (bin_cat w n (bin_rest v)) (bin_last v);
+fun bin_cat w n v =
+  (if equal_nat n zero_nat then w
+    else bit (bin_cat w (minus_nat n one_nat) (bin_rest v)) (bin_last v));
 
-fun bin_rcat n = foldl (fn u => bin_cat u n) Zero_int;
+fun bin_rcat n = foldl (fn u => bin_cat u n) zero_int;
 
 fun word_rcat A_ B_ ws =
   word_of_int B_ (bin_rcat (len_of A_ Type) (map (uint A_) ws));
@@ -2411,20 +1475,7 @@ fun decode_sint l =
           (len0_bit0
             (len0_bit0
               (len0_bit0 (len0_bit0 (len0_bit0 (len0_bit0 len0_num1))))))))
-      (take (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))) l));
-
-fun integer_of_int k =
-  (if less_int k Zero_int then IntInf.~ (integer_of_int (uminus_int k))
-    else (if equal_inta k Zero_int then (0 : IntInf.int)
-           else let
-                  val l =
-                    IntInf.* ((2 : IntInf.int), integer_of_int
-          (divide_inta k (Pos (Bit0 One))));
-                  val j = modulo_inta k (Pos (Bit0 One));
-                in
-                  (if equal_inta j Zero_int then l
-                    else IntInf.+ (l, (1 : IntInf.int)))
-                end));
+      (take (nat_of_integer (32 : IntInf.int)) l));
 
 fun bytes_to_string bs =
   map (fn b =>
@@ -2454,26 +1505,27 @@ fun farray_value_valid_aux t n l =
 fun tuple_value_valid_aux ts vs =
   equal_lista equal_abi_type (map abi_get_type vs) ts;
 
-fun max_uint n = minus_inta (power power_int (Pos (Bit0 One)) n) one_inta;
+fun max_uint n =
+  minus_int (power power_int (Int_of_integer (2 : IntInf.int)) n) one_inta;
 
 fun uint_value_valid n i =
-  less_eq_int Zero_int i andalso less_eq_int i (max_uint n);
+  less_eq_int zero_int i andalso less_eq_int i (max_uint n);
 
 fun function_value_valid i1 i2 =
-  uint_value_valid
-    (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit1 (Bit0 One)))))))) i1 andalso
-    uint_value_valid (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))) i2;
+  uint_value_valid (nat_of_integer (160 : IntInf.int)) i1 andalso
+    uint_value_valid (nat_of_integer (32 : IntInf.int)) i2;
 
 fun skip_padding n =
-  (case divmod_nat n (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))
-    of (_, Zero_nat) => n
-    | (_, Suc nat) =>
-      minus_nat
-        (plus_nata n (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))))
-        (Suc nat));
+  let
+    val (_, na) = divmod_nat n (nat_of_integer (32 : IntInf.int));
+  in
+    (if equal_nat na zero_nat then n
+      else minus_nat (plus_nat n (nat_of_integer (32 : IntInf.int)))
+             (suc (minus_nat na one_nat)))
+  end;
 
-fun replicate Zero_nat x = []
-  | replicate (Suc n) x = x :: replicate n x;
+fun replicate n x =
+  (if equal_nat n zero_nat then [] else x :: replicate (minus_nat n one_nat) x);
 
 fun check_padding n l =
   let
@@ -2483,11 +1535,11 @@ fun check_padding n l =
       equal_lista (equal_word (len0_bit0 (len0_bit0 (len0_bit0 len0_num1))))
         (drop n (take p l))
         (replicate (minus_nat p n)
-          (word_of_int (len0_bit0 (len0_bit0 (len0_bit0 len0_num1))) Zero_int))
+          (word_of_int (len0_bit0 (len0_bit0 (len0_bit0 len0_num1))) zero_int))
   end;
 
 fun decode_function_sel bs =
-  (if check_padding (nat_of_num (Bit0 (Bit0 (Bit0 (Bit1 One))))) bs
+  (if check_padding (nat_of_integer (24 : IntInf.int)) bs
     then SOME (uint (len0_bit0
                       (len0_bit0
                         (len0_bit0
@@ -2499,15 +1551,15 @@ fun decode_function_sel bs =
                        (len0_bit0
                          (len0_bit0
                            (len0_bit0 (len0_bit1 (len0_bit0 len0_num1)))))))
-                   (take (nat_of_num (Bit0 (Bit0 (Bit1 (Bit0 One))))) bs)),
+                   (take (nat_of_integer (20 : IntInf.int)) bs)),
                 uint (len0_bit0
                        (len0_bit0
                          (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))))
                   (word_rcat (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
                     (len0_bit0
                       (len0_bit0 (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))))
-                    (take (nat_of_num (Bit0 (Bit0 One)))
-                      (drop (nat_of_num (Bit0 (Bit0 (Bit1 (Bit0 One))))) bs))))
+                    (take (nat_of_integer (4 : IntInf.int))
+                      (drop (nat_of_integer (20 : IntInf.int)) bs))))
     else NONE);
 
 fun int_of_fixed n r =
@@ -2515,23 +1567,25 @@ fun int_of_fixed n r =
     val (num, den) =
       quotient_of
         (times_rata r
-          (power power_rat (of_int (Pos (Bit0 (Bit1 (Bit0 One))))) n));
+          (power power_rat (of_int (Int_of_integer (10 : IntInf.int))) n));
   in
-    (if equal_inta den one_inta then SOME num else NONE)
+    (if equal_int den one_inta then SOME num else NONE)
   end;
 
 fun ufixed_value_valid m n r =
   (case int_of_fixed n r of NONE => false
-    | SOME i => less_eq_int Zero_int i andalso less_eq_int i (max_uint m));
+    | SOME i => less_eq_int zero_int i andalso less_eq_int i (max_uint m));
 
 fun fbytes_value_valid n l = equal_nat (size_list l) n;
 
 fun min_sint n =
   times_inta (uminus_int one_inta)
-    (power power_int (Pos (Bit0 One)) (minus_nat n one_nata));
+    (power power_int (Int_of_integer (2 : IntInf.int)) (minus_nat n one_nat));
 
 fun max_sint n =
-  minus_inta (power power_int (Pos (Bit0 One)) (minus_nat n one_nata)) one_inta;
+  minus_int
+    (power power_int (Int_of_integer (2 : IntInf.int)) (minus_nat n one_nat))
+    one_inta;
 
 fun fixed_value_valid m n r =
   (case int_of_fixed n r of NONE => false
@@ -2540,9 +1594,7 @@ fun fixed_value_valid m n r =
 fun sint_value_valid n i =
   less_eq_int (min_sint n) i andalso less_eq_int i (max_sint n);
 
-fun addr_value_valid i =
-  uint_value_valid
-    (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit1 (Bit0 One)))))))) i;
+fun addr_value_valid i = uint_value_valid (nat_of_integer (160 : IntInf.int)) i;
 
 fun divide_rat p q = Frct let
                             val a = quotient_of p;
@@ -2565,14 +1617,14 @@ fun decode_uint l =
           (len0_bit0
             (len0_bit0
               (len0_bit0 (len0_bit0 (len0_bit0 (len0_bit0 len0_num1))))))))
-      (take (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))) l));
+      (take (nat_of_integer (32 : IntInf.int)) l));
 
 fun decode_ufixed n l =
   let
     val i = decode_uint l;
   in
     divide_rat (of_int i)
-      (power power_rat (of_int (Pos (Bit0 (Bit1 (Bit0 One))))) n)
+      (power power_rat (of_int (Int_of_integer (10 : IntInf.int))) n)
   end;
 
 fun decode_fbytes n l = (if check_padding n l then SOME (take n l) else NONE);
@@ -2582,15 +1634,15 @@ fun decode_fixed n l =
     val i = decode_sint l;
   in
     divide_rat (of_int i)
-      (power power_rat (of_int (Pos (Bit0 (Bit1 (Bit0 One))))) n)
+      (power power_rat (of_int (Int_of_integer (10 : IntInf.int))) n)
   end;
 
 fun decode_bool l =
   let
     val i = decode_uint l;
   in
-    (if equal_inta i Zero_int then SOME false
-      else (if equal_inta i one_inta then SOME true else NONE))
+    (if equal_int i zero_int then SOME false
+      else (if equal_int i one_inta then SOME true else NONE))
   end;
 
 fun decode_static (Tuint n) (ix, l) =
@@ -3059,12 +2111,12 @@ and decode_static_tup [] (ix, l) = Inl []
   | decode_static_tup (t :: ts) (ix, l) =
     (case decode_static t (ix, l)
       of Inl v =>
-        (case decode_static_tup ts (plus_inta ix (abi_static_size t), l)
+        (case decode_static_tup ts (plus_int ix (abi_static_size t), l)
           of Inl vs => Inl (v :: vs) | Inr a => Inr a)
       | Inr a => Inr a);
 
 fun decodeb t (ix, l) =
-  (if less_int ix Zero_int
+  (if less_int ix zero_int
     then Inr (decode_err
                [Chara (false, false, true, false, true, false, true, false),
                  Chara (false, true, false, false, true, true, true, false),
@@ -3102,7 +2154,7 @@ fun decodeb t (ix, l) =
                  Chara (true, false, true, false, false, true, true, false),
                  Chara (false, false, false, true, true, true, true, false)]
                (ix, l))
-    else (if less_int (of_nat semiring_1_int (size_list l)) ix
+    else (if less_int (int_of_nat (size_list l)) ix
            then Inr (decode_err
                       [Chara (false, false, true, false, true, false, true,
                                false),
@@ -3189,8 +2241,8 @@ fun decodeb t (ix, l) =
                   val la = drop (nat ix) l;
                 in
                   (if abi_type_isstatic t
-                    then (if less_int (of_nat semiring_1_int (size_list l))
-                               (plus_inta (abi_static_size t) ix)
+                    then (if less_int (int_of_nat (size_list l))
+                               (plus_int (abi_static_size t) ix)
                            then Inr (decode_err
                                       [Chara
  (false, false, true, false, true, false, true, false),
@@ -3643,33 +2695,30 @@ Chara (true, false, true, false, false, true, true, false)]
                                    (ix, l))
                            | Tfarray (ta, n) =>
                              let
-                               val ts =
-                                 replicate (nat (of_nat semiring_1_int n)) ta;
+                               val ts = replicate (nat (int_of_nat n)) ta;
                              in
-                               (case decode_dyn_tuple_heads ts Zero_int (ix, l)
+                               (case decode_dyn_tuple_heads ts zero_int (ix, l)
                                  of Inl (vos,
   (idxs, (byteoffset, bytes_parsed)))
                                    => (case
 decode_dyn_tuple_tails idxs ts vos byteoffset (ix, l)
 of Inl (vs, bytes_parseda) =>
-  Inl (Vfarray (ta, n, vs), plus_inta bytes_parsed bytes_parseda)
+  Inl (Vfarray (ta, n, vs), plus_int bytes_parsed bytes_parseda)
 | Inr a => Inr a)
                                  | Inr a => Inr a)
                              end
                            | Ttuple ts =>
-                             (case decode_dyn_tuple_heads ts Zero_int (ix, l)
+                             (case decode_dyn_tuple_heads ts zero_int (ix, l)
                                of Inl (vos, (idxs, (byteoffset, bytes_parsed)))
                                  => (case decode_dyn_tuple_tails idxs ts vos
     byteoffset (ix, l)
                                       of Inl (vs, bytes_parseda) =>
-Inl (Vtuple (ts, vs), plus_inta bytes_parsed bytes_parseda)
+Inl (Vtuple (ts, vs), plus_int bytes_parsed bytes_parseda)
                                       | Inr a => Inr a)
                                | Inr a => Inr a)
                            | Tbytes =>
-                             (if less_int (of_nat semiring_1_int (size_list l))
-                                   (plus_inta
-                                     (Pos (Bit0
-    (Bit0 (Bit0 (Bit0 (Bit0 One))))))
+                             (if less_int (int_of_nat (size_list l))
+                                   (plus_int (Int_of_integer (32 : IntInf.int))
                                      ix)
                                then Inr (decode_err
   [Chara (false, false, true, false, true, false, true, false),
@@ -3720,11 +2769,10 @@ Inl (Vtuple (ts, vs), plus_inta bytes_parsed bytes_parseda)
   (ix, l))
                                else let
                                       val sz =
-decode_uint (take (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))) la);
+decode_uint (take (nat_of_integer (32 : IntInf.int)) la);
                                     in
-                                      (if less_int
-    (of_nat semiring_1_int (size_list l))
-    (plus_inta (plus_inta sz (Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))) ix)
+                                      (if less_int (int_of_nat (size_list l))
+    (plus_int (plus_int sz (Int_of_integer (32 : IntInf.int))) ix)
 then Inr (decode_err
            [Chara (false, true, true, false, false, false, true, false),
              Chara (true, false, true, false, false, true, true, false),
@@ -3769,14 +2817,11 @@ then Inr (decode_err
              Chara (false, true, false, true, true, true, true, false),
              Chara (true, false, true, false, false, true, true, false)]
            (ix, l))
-else (if check_padding (nat sz)
-           (drop (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))) la)
+else (if check_padding (nat sz) (drop (nat_of_integer (32 : IntInf.int)) la)
        then Inl (Vbytes
-                   (take (nat sz)
-                     (drop (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))
-                       la)),
-                  plus_inta (of_nat semiring_1_int (skip_padding (nat sz)))
-                    (Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))))
+                   (take (nat sz) (drop (nat_of_integer (32 : IntInf.int)) la)),
+                  plus_int (int_of_nat (skip_padding (nat sz)))
+                    (Int_of_integer (32 : IntInf.int)))
        else Inr (decode_err
                   [Chara (true, false, false, true, false, false, true, false),
                     Chara (false, true, true, true, false, true, true, false),
@@ -3804,10 +2849,8 @@ else (if check_padding (nat sz)
                   (ix, l))))
                                     end)
                            | Tstring =>
-                             (if less_int (of_nat semiring_1_int (size_list l))
-                                   (plus_inta
-                                     (Pos (Bit0
-    (Bit0 (Bit0 (Bit0 (Bit0 One))))))
+                             (if less_int (int_of_nat (size_list l))
+                                   (plus_int (Int_of_integer (32 : IntInf.int))
                                      ix)
                                then Inr (decode_err
   [Chara (false, false, true, false, true, false, true, false),
@@ -3854,11 +2897,10 @@ else (if check_padding (nat sz)
   (ix, l))
                                else let
                                       val sz =
-decode_uint (take (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))) la);
+decode_uint (take (nat_of_integer (32 : IntInf.int)) la);
                                     in
-                                      (if less_int
-    (of_nat semiring_1_int (size_list l))
-    (plus_inta (plus_inta sz (Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))) ix)
+                                      (if less_int (int_of_nat (size_list l))
+    (plus_int (plus_int sz (Int_of_integer (32 : IntInf.int))) ix)
 then Inr (decode_err
            [Chara (false, true, true, false, false, false, true, false),
              Chara (true, false, true, false, false, true, true, false),
@@ -3899,15 +2941,13 @@ then Inr (decode_err
              Chara (false, true, false, true, true, true, true, false),
              Chara (true, false, true, false, false, true, true, false)]
            (ix, l))
-else (if check_padding (nat sz)
-           (drop (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))) la)
+else (if check_padding (nat sz) (drop (nat_of_integer (32 : IntInf.int)) la)
        then Inl (Vstring
                    (bytes_to_string
                      (take (nat sz)
-                       (drop (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))
-                         la))),
-                  plus_inta (of_nat semiring_1_int (skip_padding (nat sz)))
-                    (Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))))
+                       (drop (nat_of_integer (32 : IntInf.int)) la))),
+                  plus_int (int_of_nat (skip_padding (nat sz)))
+                    (Int_of_integer (32 : IntInf.int)))
        else Inr (decode_err
                   [Chara (true, false, false, true, false, false, true, false),
                     Chara (false, true, true, true, false, true, true, false),
@@ -3936,10 +2976,8 @@ else (if check_padding (nat sz)
                   (ix, l))))
                                     end)
                            | Tarray ta =>
-                             (if less_int (of_nat semiring_1_int (size_list l))
-                                   (plus_inta
-                                     (Pos (Bit0
-    (Bit0 (Bit0 (Bit0 (Bit0 One))))))
+                             (if less_int (int_of_nat (size_list l))
+                                   (plus_int (Int_of_integer (32 : IntInf.int))
                                      ix)
                                then Inr (decode_err
   [Chara (false, false, true, false, true, false, true, false),
@@ -3985,43 +3023,41 @@ else (if check_padding (nat sz)
   (ix, l))
                                else let
                                       val n =
-decode_uint (take (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))) la);
+decode_uint (take (nat_of_integer (32 : IntInf.int)) la);
                                       val ts = replicate (nat n) ta;
                                     in
                                       (case
-decode_dyn_tuple_heads ts Zero_int
-  (plus_inta ix (Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))), l)
+decode_dyn_tuple_heads ts zero_int
+  (plus_int ix (Int_of_integer (32 : IntInf.int)), l)
 of Inl (vos, (idxs, (byteoffset, bytes_parsed))) =>
   (case decode_dyn_tuple_tails idxs ts vos byteoffset
-          (plus_inta ix (Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))), l)
+          (plus_int ix (Int_of_integer (32 : IntInf.int)), l)
     of Inl (vs, bytes_parseda) =>
       Inl (Varray (ta, vs),
-            plus_inta (plus_inta bytes_parsed bytes_parseda)
-              (Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))))
+            plus_int (plus_int bytes_parsed bytes_parseda)
+              (Int_of_integer (32 : IntInf.int)))
     | Inr a => Inr a)
 | Inr a => Inr a)
                                     end)))
                 end))
-and decode_dyn_tuple_heads [] n (ix, l) = Inl ([], ([], (n, Zero_int)))
+and decode_dyn_tuple_heads [] n (ix, l) = Inl ([], ([], (n, zero_int)))
   | decode_dyn_tuple_heads (th :: tt) n (ix, l) =
     let
-      val la = drop (nat (plus_inta ix n)) l;
+      val la = drop (nat (plus_int ix n)) l;
     in
       (if abi_type_isstatic th
-        then (case decodeb th (plus_inta ix n, l)
+        then (case decodeb th (plus_int ix n, l)
                of Inl (v, bytes_parsed) =>
                  (case decode_dyn_tuple_heads tt
-                         (plus_inta n
-                           (of_nat semiring_1_int (nat (abi_static_size th))))
+                         (plus_int n (int_of_nat (nat (abi_static_size th))))
                          (ix, l)
                    of Inl (vos, (idxs, (na, bytes_parseda))) =>
                      Inl (SOME v :: vos,
                            (NONE :: idxs,
-                             (na, plus_inta bytes_parsed bytes_parseda)))
+                             (na, plus_int bytes_parsed bytes_parseda)))
                    | Inr a => Inr a)
                | Inr a => Inr a)
-        else (if less_nat (size_list la)
-                   (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))
+        else (if less_nat (size_list la) (nat_of_integer (32 : IntInf.int))
                then Inr (decode_err
                           [Chara (false, false, true, false, true, false, true,
                                    false),
@@ -4107,23 +3143,20 @@ and decode_dyn_tuple_heads [] n (ix, l) = Inl ([], ([], (n, Zero_int)))
                else let
                       val sz =
                         decode_sint
-                          (take (nat_of_num
-                                  (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))
-                            la);
+                          (take (nat_of_integer (32 : IntInf.int)) la);
                     in
                       (case decode_dyn_tuple_heads tt
-                              (plus_inta n
-                                (Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))))
+                              (plus_int n (Int_of_integer (32 : IntInf.int)))
                               (ix, l)
                         of Inl (vos, (idxs, (na, bytes_parsed))) =>
                           Inl (NONE :: vos,
-                                (SOME (plus_inta ix sz) :: idxs,
-                                  (na, plus_inta bytes_parsed
- (Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))))))
+                                (SOME (plus_int ix sz) :: idxs,
+                                  (na, plus_int bytes_parsed
+ (Int_of_integer (32 : IntInf.int)))))
                         | Inr a => Inr a)
                     end))
     end
-and decode_dyn_tuple_tails [] [] [] uu (ix, l) = Inl ([], Zero_int)
+and decode_dyn_tuple_tails [] [] [] uu (ix, l) = Inl ([], zero_int)
   | decode_dyn_tuple_tails (NONE :: t) (th :: tt) (SOME vh :: vt) offset (ix, l)
     = (case decode_dyn_tuple_tails t tt vt offset (ix, l)
         of Inl (vs, bytes_parsed) => Inl (vh :: vs, bytes_parsed)
@@ -4136,11 +3169,11 @@ and decode_dyn_tuple_tails [] [] [] uu (ix, l) = Inl ([], Zero_int)
       (case decodeb th (ixa, l)
         of Inl (v, bytes_parsed) =>
           let
-            val offseta = plus_inta offset bytes_parsed;
+            val offseta = plus_int offset bytes_parsed;
           in
             (case decode_dyn_tuple_tails t tt vt offseta (ix, l)
               of Inl (vs, bytes_parseda) =>
-                Inl (v :: vs, plus_inta bytes_parsed bytes_parseda)
+                Inl (v :: vs, plus_int bytes_parsed bytes_parseda)
               | Inr a => Inr a)
           end
         | Inr a => Inr a)
@@ -4368,7 +3401,7 @@ and decode_dyn_tuple_tails [] [] [] uu (ix, l) = Inl ([], Zero_int)
 
 fun decodea t l =
   (if abi_type_valid t
-    then (case decodeb t (Zero_int, l) of Inl (v, _) => Inl v | Inr a => Inr a)
+    then (case decodeb t (zero_int, l) of Inl (v, _) => Inl v | Inr a => Inr a)
     else Inr [Chara (true, false, false, true, false, false, true, false),
                Chara (false, true, true, true, false, true, true, false),
                Chara (false, true, true, false, true, true, true, false),
@@ -4385,19 +3418,6 @@ fun decodea t l =
                Chara (true, false, false, true, true, true, true, false),
                Chara (false, false, false, false, true, true, true, false),
                Chara (true, false, true, false, false, true, true, false)]);
-
-fun integer_of_char (Chara (b0, b1, b2, b3, b4, b5, b6, b7)) =
-  IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (IntInf.+ (IntInf.* (of_bool
-                        zero_neq_one_integer
-                        b7, (2 : IntInf.int)), of_bool zero_neq_one_integer
-         b6), (2 : IntInf.int)), of_bool zero_neq_one_integer
-                                   b5), (2 : IntInf.int)), of_bool
-                     zero_neq_one_integer
-                     b4), (2 : IntInf.int)), of_bool zero_neq_one_integer
-       b3), (2 : IntInf.int)), of_bool zero_neq_one_integer
-                                 b2), (2 : IntInf.int)), of_bool
-                   zero_neq_one_integer
-                   b1), (2 : IntInf.int)), of_bool zero_neq_one_integer b0);
 
 fun implode cs =
   (String.implode
@@ -4514,7 +3534,7 @@ fun parseU32 x =
   (fn str =>
     (case parseWords str of NONE => NONE
       | SOME w =>
-        (if equal_nat (size_list w) (nat_of_num (Bit0 (Bit0 One)))
+        (if equal_nat (size_list w) (nat_of_integer (4 : IntInf.int))
           then SOME (word_rcat (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
                       (len0_bit0
                         (len0_bit0
@@ -4570,7 +3590,7 @@ fun parseU160 x =
   (fn str =>
     (case parseWords str of NONE => NONE
       | SOME w =>
-        (if equal_nat (size_list w) (nat_of_num (Bit0 (Bit0 (Bit1 (Bit0 One)))))
+        (if equal_nat (size_list w) (nat_of_integer (20 : IntInf.int))
           then SOME (word_rcat (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
                       (len0_bit0
                         (len0_bit0
@@ -4627,36 +3647,35 @@ fun parseAddress x =
       | Chara (false, false, false, false, false, _, _, _) :: _ => NONE))
     x;
 
-fun parseUint x =
-  (fn str => map_option (of_nat semiring_1_int) (parseNat str)) x;
+fun parseUint x = (fn str => map_option int_of_nat (parseNat str)) x;
 
 fun parseSint
   (Chara (true, false, true, true, false, true, false, false) :: tail) =
-  map_option (fn n => uminus_int (of_nat semiring_1_int n)) (parseNat tail)
-  | parseSint [] = map_option (of_nat semiring_1_int) (parseNat [])
+  map_option (fn n => uminus_int (int_of_nat n)) (parseNat tail)
+  | parseSint [] = map_option int_of_nat (parseNat [])
   | parseSint (Chara (false, vc, vd, ve, vf, vg, vh, vi) :: va) =
-    map_option (of_nat semiring_1_int)
+    map_option int_of_nat
       (parseNat (Chara (false, vc, vd, ve, vf, vg, vh, vi) :: va))
   | parseSint (Chara (vb, true, vd, ve, vf, vg, vh, vi) :: va) =
-    map_option (of_nat semiring_1_int)
+    map_option int_of_nat
       (parseNat (Chara (vb, true, vd, ve, vf, vg, vh, vi) :: va))
   | parseSint (Chara (vb, vc, false, ve, vf, vg, vh, vi) :: va) =
-    map_option (of_nat semiring_1_int)
+    map_option int_of_nat
       (parseNat (Chara (vb, vc, false, ve, vf, vg, vh, vi) :: va))
   | parseSint (Chara (vb, vc, vd, false, vf, vg, vh, vi) :: va) =
-    map_option (of_nat semiring_1_int)
+    map_option int_of_nat
       (parseNat (Chara (vb, vc, vd, false, vf, vg, vh, vi) :: va))
   | parseSint (Chara (vb, vc, vd, ve, true, vg, vh, vi) :: va) =
-    map_option (of_nat semiring_1_int)
+    map_option int_of_nat
       (parseNat (Chara (vb, vc, vd, ve, true, vg, vh, vi) :: va))
   | parseSint (Chara (vb, vc, vd, ve, vf, false, vh, vi) :: va) =
-    map_option (of_nat semiring_1_int)
+    map_option int_of_nat
       (parseNat (Chara (vb, vc, vd, ve, vf, false, vh, vi) :: va))
   | parseSint (Chara (vb, vc, vd, ve, vf, vg, true, vi) :: va) =
-    map_option (of_nat semiring_1_int)
+    map_option int_of_nat
       (parseNat (Chara (vb, vc, vd, ve, vf, vg, true, vi) :: va))
   | parseSint (Chara (vb, vc, vd, ve, vf, vg, vh, true) :: va) =
-    map_option (of_nat semiring_1_int)
+    map_option int_of_nat
       (parseNat (Chara (vb, vc, vd, ve, vf, vg, vh, true) :: va));
 
 fun typedValueParser (Tuint n) (PrimaryValue v) =
@@ -4704,8 +3723,7 @@ fun typedValueParser (Tuint n) (PrimaryValue v) =
     map_option Vstring
       (map_option
         (map (fn x =>
-               char_of
-                 (equal_int, unique_euclidean_semiring_with_bit_shifts_int)
+               char_of_int
                  (uint (len0_bit0 (len0_bit0 (len0_bit0 len0_num1))) x)))
         (parseWordsPrefixed v))
   | typedValueParser (Tarray t) (ArrayValue vs) =
@@ -4782,20 +3800,17 @@ fun parseTypedValue x =
     x;
 
 fun array_value_valid_aux t l =
-  uint_value_valid
-    (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))))))
-    (of_nat semiring_1_int (size_list l)) andalso
+  uint_value_valid (nat_of_integer (256 : IntInf.int))
+    (int_of_nat (size_list l)) andalso
     list_all (fn v => equal_abi_typea (abi_get_type v) t) l;
 
 fun string_value_valid s =
-  uint_value_valid
-    (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))))))
-    (of_nat semiring_1_int (size_list s));
+  uint_value_valid (nat_of_integer (256 : IntInf.int))
+    (int_of_nat (size_list s));
 
 fun bytes_value_valid bs =
-  uint_value_valid
-    (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))))))
-    (of_nat semiring_1_int (size_list bs));
+  uint_value_valid (nat_of_integer (256 : IntInf.int))
+    (int_of_nat (size_list bs));
 
 fun bool_value_valid b = true;
 
@@ -4835,67 +3850,23 @@ fun encode_int i =
               (len0_bit0 (len0_bit0 (len0_bit0 (len0_bit0 len0_num1))))))))
       i);
 
-fun apsnd f (x, y) = (x, f y);
-
-fun divmod_integer k l =
-  (if ((k : IntInf.int) = (0 : IntInf.int))
-    then ((0 : IntInf.int), (0 : IntInf.int))
-    else (if IntInf.< ((0 : IntInf.int), l)
-           then (if IntInf.< ((0 : IntInf.int), k)
-                  then IntInf.divMod (IntInf.abs k, IntInf.abs l)
-                  else let
-                         val (r, s) =
-                           IntInf.divMod (IntInf.abs k, IntInf.abs l);
-                       in
-                         (if ((s : IntInf.int) = (0 : IntInf.int))
-                           then (IntInf.~ r, (0 : IntInf.int))
-                           else (IntInf.- (IntInf.~ r, (1 : IntInf.int)),
-                                  IntInf.- (l, s)))
-                       end)
-           else (if ((l : IntInf.int) = (0 : IntInf.int))
-                  then ((0 : IntInf.int), k)
-                  else apsnd IntInf.~
-                         (if IntInf.< (k, (0 : IntInf.int))
-                           then IntInf.divMod (IntInf.abs k, IntInf.abs l)
-                           else let
-                                  val (r, s) =
-                                    IntInf.divMod (IntInf.abs k, IntInf.abs l);
-                                in
-                                  (if ((s : IntInf.int) = (0 : IntInf.int))
-                                    then (IntInf.~ r, (0 : IntInf.int))
-                                    else (IntInf.- (IntInf.~
-              r, (1 : IntInf.int)),
-   IntInf.- (IntInf.~ l, s)))
-                                end))));
-
-fun int_of_integer k =
-  (if IntInf.< (k, (0 : IntInf.int))
-    then uminus_int (int_of_integer (IntInf.~ k))
-    else (if ((k : IntInf.int) = (0 : IntInf.int)) then Zero_int
-           else let
-                  val (l, j) = divmod_integer k (2 : IntInf.int);
-                  val la = times_inta (Pos (Bit0 One)) (int_of_integer l);
-                in
-                  (if ((j : IntInf.int) = (0 : IntInf.int)) then la
-                    else plus_inta la one_inta)
-                end));
-
 fun string_to_bytes s =
   map (fn c =>
         word_of_int (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
-          (int_of_integer (integer_of_char c)))
+          (Int_of_integer (integer_of_char c)))
     s;
 
 fun pad_bytes l =
-  (case divmod_nat (size_list l)
-          (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))
-    of (_, Zero_nat) => l
-    | (_, Suc rem) =>
-      l @ replicate
-            (minus_nat (nat_of_num (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))
-              (Suc rem))
-            (word_of_int (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
-              Zero_int));
+  let
+    val (_, n) = divmod_nat (size_list l) (nat_of_integer (32 : IntInf.int));
+  in
+    (if equal_nat n zero_nat then l
+      else l @ replicate
+                 (minus_nat (nat_of_integer (32 : IntInf.int))
+                   (suc (minus_nat n one_nat)))
+                 (word_of_int (len0_bit0 (len0_bit0 (len0_bit0 len0_num1)))
+                   zero_int))
+  end;
 
 fun encode_function_sel addr sel =
   pad_bytes
@@ -4924,10 +3895,10 @@ fun encode_fixed n r =
   encode_int
     (fst (quotient_of
            (times_rata r
-             (power power_rat (of_int (Pos (Bit0 (Bit1 (Bit0 One))))) n))));
+             (power power_rat (of_int (Int_of_integer (10 : IntInf.int))) n))));
 
 fun encode_bool true = encode_int one_inta
-  | encode_bool false = encode_int Zero_int;
+  | encode_bool false = encode_int zero_int;
 
 fun encode_static (Vuint (n, i)) = Inl (encode_int i)
   | encode_static (Vsint (n, i)) = Inl (encode_int i)
@@ -5061,15 +4032,14 @@ fun encode_static (Vuint (n, i)) = Inl (encode_int i)
           Chara (true, false, true, false, true, true, true, false),
           Chara (true, false, true, false, false, true, true, false)];
 
-fun heads_length [] = Zero_int
+fun heads_length [] = zero_int
   | heads_length (h :: t) =
     let
       val tyh = abi_get_type h;
     in
       (if abi_type_isstatic tyh
-        then plus_inta (abi_static_size tyh) (heads_length t)
-        else plus_inta (Pos (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One))))))
-               (heads_length t))
+        then plus_int (abi_static_size tyh) (heads_length t)
+        else plus_int (Int_of_integer (32 : IntInf.int)) (heads_length t))
     end;
 
 fun encodeb v =
@@ -5348,35 +4318,33 @@ fun encodeb v =
                    Chara (true, true, true, false, false, true, false, false),
                    Chara (true, false, false, true, false, true, false, false)]
            | Vfarray (_, _, vs) =>
-             (case encode_tuple_tails vs Zero_int (heads_length vs)
+             (case encode_tuple_tails vs zero_int (heads_length vs)
                of Inl bvs =>
                  (case encode_tuple_heads vs bvs
                    of Inl (heads, tails) => Inl (heads @ tails)
                    | Inr a => Inr a)
                | Inr a => Inr a)
            | Vtuple (_, vs) =>
-             (case encode_tuple_tails vs Zero_int (heads_length vs)
+             (case encode_tuple_tails vs zero_int (heads_length vs)
                of Inl bvs =>
                  (case encode_tuple_heads vs bvs
                    of Inl (heads, tails) => Inl (heads @ tails)
                    | Inr a => Inr a)
                | Inr a => Inr a)
            | Vbytes l =>
-             Inl (encode_int (of_nat semiring_1_int (size_list l)) @
-                   pad_bytes l)
+             Inl (encode_int (int_of_nat (size_list l)) @ pad_bytes l)
            | Vstring s =>
              let
                val bs = string_to_bytes s;
              in
-               Inl (encode_int (of_nat semiring_1_int (size_list bs)) @
-                     pad_bytes bs)
+               Inl (encode_int (int_of_nat (size_list bs)) @ pad_bytes bs)
              end
            | Varray (_, vs) =>
-             (case encode_tuple_tails vs Zero_int (heads_length vs)
+             (case encode_tuple_tails vs zero_int (heads_length vs)
                of Inl bvs =>
                  (case encode_tuple_heads vs bvs
                    of Inl (heads, tails) =>
-                     Inl (encode_int (of_nat semiring_1_int (size_list vs)) @
+                     Inl (encode_int (int_of_nat (size_list vs)) @
                            heads @ tails)
                    | Inr a => Inr a)
                | Inr a => Inr a)))
@@ -5481,22 +4449,19 @@ and encode_tuple_tails [] uw ux = Inl []
   | encode_tuple_tails (v :: rest) headlen len_total =
     (if abi_type_isstatic (abi_get_type v)
       then (case encode_tuple_tails rest headlen len_total
-             of Inl ts => Inl ((plus_inta len_total headlen, []) :: ts)
+             of Inl ts => Inl ((plus_int len_total headlen, []) :: ts)
              | Inr a => Inr a)
       else (case encodeb v
              of Inl enc =>
                let
                  val len_totala =
-                   plus_inta len_total (of_nat semiring_1_int (size_list enc));
+                   plus_int len_total (int_of_nat (size_list enc));
                in
                  (case encode_tuple_tails rest headlen len_totala
                    of Inl ts =>
-                     (if sint_value_valid
-                           (nat_of_num
-                             (Bit0 (Bit0 (Bit0
-   (Bit0 (Bit0 (Bit0 (Bit0 (Bit0 One)))))))))
-                           (plus_inta len_total headlen)
-                       then Inl ((plus_inta len_total headlen, enc) :: ts)
+                     (if sint_value_valid (nat_of_integer (256 : IntInf.int))
+                           (plus_int len_total headlen)
+                       then Inl ((plus_int len_total headlen, enc) :: ts)
                        else Inr [Chara (true, false, true, false, false, false,
  true, false),
                                   Chara (false, true, true, true, false, true,

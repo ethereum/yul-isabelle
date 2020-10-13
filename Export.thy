@@ -1,5 +1,5 @@
 theory Export
- imports AbiDecode AbiEncode "HOL.String" "HOL-Library.IArray" "HOL.Code_Numeral"
+ imports AbiDecode AbiEncode "HOL.String" "HOL-Library.IArray" "HOL-Library.Code_Target_Numeral" "HOL-Library.Code_Target_Nat" "HOL-Library.Code_Target_Int"
 begin
 
 datatype Token = LParen | RParen | LBrack | RBrack | Comma | Elem string
@@ -39,12 +39,13 @@ definition is_digit :: "char \<Rightarrow> bool" where
 definition parseDigit :: "char \<Rightarrow> nat option" where
   "parseDigit x \<equiv> if is_digit x then Some (of_char x - of_char (CHR ''0'')) else None"
 
-
-fun parseNatRev :: "string \<Rightarrow> nat option" where
-  "parseNatRev (x#xs) = (case (parseDigit x, parseNatRev xs) of (Some d, Some y) \<Rightarrow> Some (d+y*10) | _ \<Rightarrow> None)"
+fun parseNatRev :: "char list \<Rightarrow> int option" where
+  "parseNatRev (x#xs) = (let v = of_char x in if (v \<ge> (of_char CHR ''0'') \<and> v \<le> (of_char CHR ''9'')) then (
+  case (parseNatRev xs) of (Some vs) \<Rightarrow> Some ((v - ((of_char CHR ''0''))) + (10)*vs) | _ \<Rightarrow> None
+  ) else None)"
 | "parseNatRev [] = Some 0"
 
-definition parseNat :: "string \<Rightarrow> nat option" where "parseNat \<equiv> \<lambda> x . parseNatRev (List.rev x)"
+definition parseNat :: "string \<Rightarrow> nat option" where "parseNat \<equiv> \<lambda> x . map_option nat (parseNatRev (List.rev x))"
 
 fun splitDigitSuffix :: "string \<Rightarrow> string \<Rightarrow> (string \<times> nat option)" where
   "splitDigitSuffix (x#tail) parsed = (if is_digit x then
