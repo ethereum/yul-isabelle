@@ -1,6 +1,6 @@
 theories := $(wildcard ../*.thy)
 
-all: test
+all: abicoder.a
 
 export/abicoder.ML: $(theories) ../ROOT
 	isabelle build -D ..
