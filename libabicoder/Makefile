@@ -12,10 +12,10 @@ abicoder.a: export/abicoder.ML abicoder.mlb mlton_export.sml
 export/abicoder.h: abicoder.a
 
 test.o: test.cpp abicoder.hpp
-	g++ -c -I . -o test.o test.cpp
+	g++ -std=c++17 -c -I . -o test.o test.cpp
 
 abicoder.o: abicoder.cpp abicoder.hpp export/abicoder.h
-	g++ -c abicoder.cpp -o abicoder.o
+	g++ -std=c++17 -c abicoder.cpp -o abicoder.o
 
 test: test.o abicoder.a abicoder.o
 	g++ -o test test.o abicoder.o abicoder.a -lgmp

@@ -57,7 +57,7 @@ definition ParseBaseTypePrefix :: "string \<Rightarrow> (nat option \<Rightarrow
     ''uint'' \<mapsto> (\<lambda> nopt . map_option (\<lambda> n . Tuint n) nopt),
     ''int'' \<mapsto> (\<lambda> nopt . map_option (\<lambda> n . Tsint n) nopt),
     ''address'' \<mapsto> (\<lambda> opt . case opt of None \<Rightarrow> Some Taddr | _ \<Rightarrow> None),
-    ''function'' \<mapsto> (\<lambda> opt . case opt of None \<Rightarrow> Some Taddr | _ \<Rightarrow> None),
+    ''function'' \<mapsto> (\<lambda> opt . case opt of None \<Rightarrow> Some Tfunction | _ \<Rightarrow> None),
     ''bool'' \<mapsto> (\<lambda> opt . case opt of None \<Rightarrow> Some Tbool | _ \<Rightarrow> None),
     ''bytes'' \<mapsto> (\<lambda> opt . case opt of Some n \<Rightarrow> Some (Tfbytes n) | _ \<Rightarrow> Some Tbytes),
     ''string'' \<mapsto> (\<lambda> opt . case opt of None \<Rightarrow> Some (Tstring) | _ \<Rightarrow> None)
@@ -104,6 +104,9 @@ fun parseWords :: "string \<Rightarrow> 8 word list option" where
 | "parseWords [] = Some []"
 | "parseWords [x] = None"
 
+definition parseWordsPrefixed  :: "string \<Rightarrow> 8 word list option" where
+  "parseWordsPrefixed \<equiv> (\<lambda> str . case str of (CHR ''0''#CHR ''x''#tail) \<Rightarrow> parseWords tail | _ \<Rightarrow> None)"
+
 datatype valueParseTree = arrayValue "valueParseTree list" | tupleValue "valueParseTree list" | primaryValue string
 datatype valueParserState = vPS_primary valueParseTree | vPS_arrtuple bool "valueParseTree list"
 fun valueParser :: "Token list \<Rightarrow> valueParserState list \<Rightarrow> valueParseTree option" where
@@ -121,18 +124,42 @@ fun valueParser :: "Token list \<Rightarrow> valueParserState list \<Rightarrow>
 definition parseU256 :: "string \<Rightarrow> 256 word option" where
   "parseU256 \<equiv> \<lambda> str. (case parseWords str of Some w \<Rightarrow> (if length w = 32 then Some (word_rcat w) else None) | _ \<Rightarrow> None)"
 
+definition parseU160 :: "string \<Rightarrow> 160 word option" where
+  "parseU160 \<equiv> \<lambda> str. (case parseWords str of Some w \<Rightarrow> (if length w = 20 then Some (word_rcat w) else None) | _ \<Rightarrow> None)"
+
+definition parseU32 :: "string \<Rightarrow> 32 word option" where
+  "parseU32 \<equiv> \<lambda> str. (case parseWords str of Some w \<Rightarrow> (if length w = 4 then Some (word_rcat w) else None) | _ \<Rightarrow> None)"
+
+definition parseUint :: "string \<Rightarrow> int option" where
+  "parseUint \<equiv> \<lambda> str . map_option int (parseNat str)"
+
+fun parseSint :: "string \<Rightarrow> int option" where
+  "parseSint (CHR ''-''#tail) = map_option (\<lambda> n . -int n) (parseNat tail)"
+| "parseSint str = map_option int (parseNat str)"
+
+fun splitFunction :: "string \<Rightarrow> string \<Rightarrow> (string\<times>string) option" where
+  "splitFunction (CHR '':''#tail) [] = None"
+| "splitFunction (CHR '':''#tail) (p#partial) = (if tail = [] then None else Some (List.rev (p#partial), tail))"
+| "splitFunction (oth#tail) (partial) = splitFunction tail (oth#partial)"
+| "splitFunction [] _ = None"
+
+definition parseAddress :: "string \<Rightarrow> int option" where                              
+  "parseAddress \<equiv> (\<lambda> str . case str of (CHR ''0''#CHR ''x''#hexstr) \<Rightarrow> map_option (\<lambda> w . (uint w)) (parseU160 hexstr) | _ \<Rightarrow> None)"
+definition parseSelector :: "string \<Rightarrow> int option" where
+  "parseSelector \<equiv> (\<lambda> str . case str of (CHR ''0''#CHR ''x''#hexstr) \<Rightarrow> map_option (\<lambda> w . (uint w)) (parseU32 hexstr) | _ \<Rightarrow> None)"
+
 function (sequential) typedValueParser :: "abi_type \<Rightarrow> valueParseTree \<Rightarrow> abi_value option" where
 (* TODO: nicer primary value parsing *)
-  "typedValueParser (Tuint n) (primaryValue v) = map_option (\<lambda> w . Vuint n (uint w)) (parseU256 v)"
-| "typedValueParser (Tsint n) (primaryValue v) = map_option (\<lambda> w . Vsint n (sint w)) (parseU256 v)"
-| "typedValueParser Taddr (primaryValue v) = map_option (\<lambda> w . Vaddr (uint w)) (parseU256 v)"
+  "typedValueParser (Tuint n) (primaryValue v) = map_option (Vuint n) (parseUint v)"
+| "typedValueParser (Tsint n) (primaryValue v) = map_option (Vsint n) (parseSint v)"
+| "typedValueParser Taddr (primaryValue v) = map_option Vaddr (parseAddress v)"
 | "typedValueParser Tbool (primaryValue v) = (if v = ''true'' then Some (Vbool True) else if v = ''false'' then Some (Vbool False) else None)"
-| "typedValueParser (Tfbytes n) (primaryValue v) = Option.bind (parseWords v) (\<lambda> ws . if length ws = n then Some (Vfbytes n ws) else None)"
-(* TODO: function *)
+| "typedValueParser (Tfbytes n) (primaryValue v) = Option.bind (parseWordsPrefixed v) (\<lambda> ws . if length ws = n then Some (Vfbytes n ws) else None)"
+| "typedValueParser (Tfunction) (primaryValue v) = Option.bind (splitFunction v []) (\<lambda> (x,y) . case (parseAddress x, parseSelector y) of (Some addr, Some sel) \<Rightarrow> Some (Vfunction addr sel) | _ \<Rightarrow> None) "
 | "typedValueParser (Tfarray t n) (arrayValue vs) = (if (length vs = n) then map_option (\<lambda> vs . Vfarray t n vs) (those (map (\<lambda> v . typedValueParser t v) vs))  else None)"
 | "typedValueParser (Ttuple ts) (tupleValue vs) = (if (length vs = length ts) then map_option (\<lambda> vs . Vtuple ts vs) (those (map2 (\<lambda> t v . typedValueParser t v) ts vs)) else None)"
-| "typedValueParser Tbytes (primaryValue v) = map_option Vbytes (parseWords v)"
-| "typedValueParser Tstring (primaryValue v) = map_option Vbytes (parseWords v)"
+| "typedValueParser Tbytes (primaryValue v) = map_option Vbytes (parseWordsPrefixed v)"                       
+| "typedValueParser Tstring (primaryValue v) = map_option Vstring (map_option (map (\<lambda> x :: 8 word . char_of (uint x))) (parseWordsPrefixed v))"
 | "typedValueParser (Tarray t) (arrayValue vs) = (map_option (\<lambda> vs . Varray t vs) (those (map (\<lambda> v . typedValueParser t v) vs)))"
 | "typedValueParser _ _ = None"
   by pat_completeness auto
@@ -162,8 +189,11 @@ qed
 definition parseTypedValue :: "abi_type \<Rightarrow> string \<Rightarrow> abi_value option" where
   "parseTypedValue \<equiv> \<lambda>type str . Option.bind (valueParser (scanTokens str) []) (\<lambda> vs . typedValueParser type vs)"
 
-value "Option.bind (parseType ''int256[]'') (\<lambda> t. parseTypedValue t ''[0000000000000000000000000000000000000000000000000000000000000010,0000000000000000000000000000000000000000000000000000000000000011]'')"
+value "Option.bind (parseType ''int256[]'') (\<lambda> t. parseTypedValue t ''[10,-12314]'')"
 value "Option.bind (parseType ''int256[0]'') (\<lambda> t. parseTypedValue t ''[]'')"
+value "Option.bind (parseType ''function'') (\<lambda> t. parseTypedValue t ''0x000a0B0304050607080910121314151617181920:0x01020304'')"
+value "Option.bind (parseType ''bytes'') (\<lambda> t. parseTypedValue t ''0x0402'')"
+value "Option.bind (parseType ''string'') (\<lambda> t. parseTypedValue t ''0x3432'')"
 
 fun writeHexNibble :: "4 word \<Rightarrow> char" where
   "writeHexNibble x = (if x < 10 then char_of (of_char (CHR ''0'') + uint x) else char_of (of_char (CHR ''A'') + uint x - 10))"
@@ -175,8 +205,12 @@ fun writeHex :: "8 word list \<Rightarrow> string" where
   "writeHex (x#tail) = writeHexDigit x@writeHex tail"
 | "writeHex [] = ''''"
 
-definition writeInt :: "int \<Rightarrow> string" where
-  "writeInt \<equiv> \<lambda> n . (CHR ''0'')#(CHR ''x'')#writeHex (word_rsplit ((word_of_int n)::256 word))"
+function writeInt :: "int \<Rightarrow> string" where
+  "writeInt n = (if n < 0 then CHR ''-'' # writeInt (-n)
+                 else if n < 10 then [char_of ((of_char (CHR ''0'')) + n)]
+                 else writeInt (n div 10)@(writeInt (n mod 10)))"
+  by pat_completeness auto
+termination by size_change
 
 primrec writeType :: "abi_type \<Rightarrow> string" and
         writeTypeList :: "abi_type list \<Rightarrow> string" where
@@ -199,12 +233,12 @@ primrec writeType :: "abi_type \<Rightarrow> string" and
 primrec writeValue :: "abi_value \<Rightarrow> string" and writeValueList :: "abi_value list \<Rightarrow> string" where
   "writeValue (Vuint s value) = writeInt value"
 | "writeValue (Vsint s value) = writeInt value"
-| "writeValue (Vaddr value) = writeInt value"
+| "writeValue (Vaddr value) = ''0x''@(writeHex (word_rsplit ((word_of_int::int\<Rightarrow>160 word) value)))"
 | "writeValue (Vbool value) = (if value then ''true'' else ''false'')"
 | "writeValue (Vfixed a b x) = ''unsupported''"
 | "writeValue (Vufixed a b x) = ''unsupported''"
 | "writeValue (Vfbytes s v) = ''0x''@(writeHex v)"
-| "writeValue (Vfunction addr sel) = writeInt addr@'':''@writeInt sel"
+| "writeValue (Vfunction addr sel) = (''0x''@(writeHex (word_rsplit ((word_of_int::int\<Rightarrow>160 word) addr))))@'':''@(''0x''@(writeHex (word_rsplit ((word_of_int::int\<Rightarrow>32 word) sel))))"
 | "writeValue (Vfarray t n vs) = CHR ''[''#writeValueList vs@'']''"
 | "writeValueList (v#vs) = (if vs = [] then writeValue v else writeValue v@'',''@writeValueList vs)"
 | "writeValueList [] = ''''"
@@ -217,7 +251,7 @@ definition Decode :: "String.literal \<Rightarrow> String.literal \<Rightarrow> 
   "Decode \<equiv> \<lambda> type encoding .
     case parseType (literal.explode type) of Some type \<Rightarrow>
     (
-      case parseWords (literal.explode encoding) of Some encoding \<Rightarrow>
+      case parseWordsPrefixed (literal.explode encoding) of Some encoding \<Rightarrow>
       (
         case decode type encoding of (Ok value) \<Rightarrow> String.implode (''OK: ''@writeValue value)
         | Err msg \<Rightarrow> String.implode (''ERR: ''@msg)
@@ -233,7 +267,7 @@ definition Encode :: "String.literal \<Rightarrow> String.literal \<Rightarrow> 
     (
       case parseTypedValue type (literal.explode value) of Some value \<Rightarrow>
       (
-        case encode value of (Ok value) \<Rightarrow> String.implode (''OK: ''@writeHex value)
+        case encode value of (Ok value) \<Rightarrow> String.implode (''OK: 0x''@writeHex value)
         | Err msg \<Rightarrow> String.implode (''ERR: ''@msg)
       )
       | _ \<Rightarrow> String.implode ''ERR: Cannot parse data.''

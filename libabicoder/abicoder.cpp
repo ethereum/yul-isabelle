@@ -22,7 +22,15 @@ char toHexNibble(unsigned char x)
 	else return 'A' + x - 10;
 }
 
-std::string ABICoder::encode(std::string const& _type, std::string const& _data)
+std::pair<bool, std::string> splitErrorCondition(const char* result, size_t size)
+{
+  if (size >= 4 && result[0] == 'O' && result[1] == 'K' && result[2] == ':' && result[3] == ' ')
+	return {true, std::string(result + 4, size - 4)};
+  else
+	return {false, std::string(result, size)};
+}
+
+std::pair<bool, std::string> ABICoder::encode(std::string const& _type, std::string const& _data)
 {
 	Objptr type = abicoder_alloc(_type.size());
 	std::copy(_type.begin(), _type.end(), reinterpret_cast<char*>(type));
@@ -34,10 +42,10 @@ std::string ABICoder::encode(std::string const& _type, std::string const& _data)
 	Objptr data = abicoder_alloc(dataWithoutWhitespace.size());
 	std::copy(dataWithoutWhitespace.begin(), dataWithoutWhitespace.end(), reinterpret_cast<char*>(data));
 	Objptr result = abicoder_encode(type, data);
-	return std::string(reinterpret_cast<const char*>(result), abicoder_size(result));
+	return splitErrorCondition(reinterpret_cast<const char*>(result), abicoder_size(result));
 }
 
-std::string ABICoder::decode(std::string const& _type, std::string const& _data)
+std::pair<bool, std::string> ABICoder::decode(std::string const& _type, std::string const& _data)
 {
 	Objptr type = abicoder_alloc(_type.size());
 	std::copy(_type.begin(), _type.end(), reinterpret_cast<char*>(type));
@@ -49,10 +57,10 @@ std::string ABICoder::decode(std::string const& _type, std::string const& _data)
 	Objptr data = abicoder_alloc(dataWithoutWhitespace.size());
 	std::copy(dataWithoutWhitespace.begin(), dataWithoutWhitespace.end(), reinterpret_cast<char*>(data));
 	Objptr result = abicoder_decode(type, data);
-	return std::string(reinterpret_cast<const char*>(result), abicoder_size(result));
+	return splitErrorCondition(reinterpret_cast<const char*>(result), abicoder_size(result));
 }
 
-std::string ABICoder::decode(std::string const& _type, std::vector<unsigned char> const& _data)
+std::pair<bool, std::string> ABICoder::decode(std::string const& _type, std::vector<unsigned char> const& _data)
 {
 	Objptr type = abicoder_alloc(_type.size());
 	std::copy(_type.begin(), _type.end(), reinterpret_cast<char*>(type));
@@ -66,5 +74,5 @@ std::string ABICoder::decode(std::string const& _type, std::vector<unsigned char
 		}
 	}
 	Objptr result = abicoder_decode(type, data);
-	return std::string(reinterpret_cast<const char*>(result), abicoder_size(result));
+	return splitErrorCondition(reinterpret_cast<const char*>(result), abicoder_size(result));
 }
