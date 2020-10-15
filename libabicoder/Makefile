@@ -25,4 +25,5 @@ test: test.o libabicoder.a
 	${CXX} ${CXXFLAGS} -o test -L . test.o -labicoder -lgmp
 
 clean:
-	rm -rf export libabicoder.a test.o test abicoderpp.o
+	echo "Remove the export directory to trigger a rebuild of the ML code exported from the Isabelle theories (requires an isabelle installation)."
+	rm -rf libabicoder.a test.o test abicoderpp.o
