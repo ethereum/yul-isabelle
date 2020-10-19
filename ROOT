@@ -5,3 +5,4 @@ session SolidityAbi = "HOL-Word" +
   theories "AbiTypes" "AbiTypesSyntax" "Ok" "AbiEncodeSpec"
            "AbiEncode" "AbiDecode" 
            "AbiEncodeCorrect" "AbiDecodeCorrect" "Inverses"
+           "Export"
