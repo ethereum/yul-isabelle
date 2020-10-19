@@ -183,6 +183,11 @@ fun tails_measure :: "(abi_value + (abi_type * nat)) list \<Rightarrow> nat" whe
 | "tails_measure ((Inr (t, _))#ts) =
     abi_type_measure t + tails_measure ts"
 
+fun abi_size_lower_bound :: "abi_type \<Rightarrow> int" where
+"abi_size_lower_bound t =
+ (if abi_type_isstatic t then abi_static_size t
+  else 32)"
+
 (* Implementation of the core decoder
    End-users should call decode instead (see below), which implements
    top-level validity checks 
@@ -226,14 +231,19 @@ where
       | Tarray t \<Rightarrow>
        if int (length l) < 32 + ix 
        then Err (decode_err ''Too few bytes; could not read array size'' (ix, l))
-       else let n = (decode_uint (take 32 l')) in
-        (let ts = List.replicate (nat n) t in
-        (case decode'_dyn_tuple_heads ts 0 (ix + 32, l) of
-          Err s \<Rightarrow> Err s
-          | Ok (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
-            (case decode'_dyn_tuple_tails idxs ts vos byteoffset (ix + 32, l) of
-              Err s \<Rightarrow> Err s
-              | Ok (vs, bytes_parsed') \<Rightarrow> Ok (Varray t vs, bytes_parsed + bytes_parsed' + 32))))
+       else
+         (let n = (decode_uint (take 32 l')) in
+          \<comment> \<open>check data length against a lower bound for size of encoded data \<close>
+          if int (length l) < 32 + (n * abi_size_lower_bound t) + ix
+          then Err (decode_err ''Bytes remaining less than lower bound on array size'' (ix, l))
+          else
+          (let ts = List.replicate (nat n) t in
+          (case decode'_dyn_tuple_heads ts 0 (ix + 32, l) of
+            Err s \<Rightarrow> Err s
+            | Ok (vos, idxs, byteoffset, bytes_parsed) \<Rightarrow>
+              (case decode'_dyn_tuple_tails idxs ts vos byteoffset (ix + 32, l) of
+                Err s \<Rightarrow> Err s
+                | Ok (vs, bytes_parsed') \<Rightarrow> Ok (Varray t vs, bytes_parsed + bytes_parsed' + 32)))))
       | Ttuple ts \<Rightarrow>
         (case decode'_dyn_tuple_heads ts 0 (ix, l) of
           Err s \<Rightarrow> Err s
