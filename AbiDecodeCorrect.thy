@@ -1872,6 +1872,62 @@ next
   then show ?case by auto
 qed
 
+(* relate behavior of dynamic-data size lower bound to heads-length
+   for easier reasoning *)
+lemma abi_size_lower_bound_ty_heads_length :
+  "ty_heads_length (replicate n t) = n * (abi_size_lower_bound t)"
+proof(induction n)
+  case 0
+  then show ?case by auto
+next
+  case (Suc n)
+  then show ?case by (simp add: comm_semiring_class.distrib) 
+qed
+
+(* finally, some lemmas used for showing our lower bound for encoded value size
+   (used to terminate the decoder early if the array size decoded is too large w/r/t
+   the data being decoded) is sound *)
+lemma is_head_and_tail_static_head_types_eq :
+"is_head_and_tail vs heads head_types tails \<Longrightarrow>
+ list_all abi_type_isstatic (map abi_get_type vs) \<Longrightarrow>
+ head_types = map abi_get_type vs"
+proof(induction rule: is_head_and_tail.induct)
+  case iht_nil
+  then show ?case by auto
+next
+  case (iht_static xs ys ts tails x v)
+  then show ?case by(auto)
+next
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case by(auto)
+qed
+
+lemma is_head_and_tail_dynamic_head_types_eq :
+"is_head_and_tail vs heads head_types tails \<Longrightarrow>
+ list_all abi_type_isdynamic (map abi_get_type vs) \<Longrightarrow>
+ head_types = replicate (length vs) (Tsint 256)"
+proof(induction rule: is_head_and_tail.induct)
+  case iht_nil
+  then show ?case by auto
+next
+  case (iht_static xs ys ts tails x v)
+  then show ?case by(auto)
+next
+  case (iht_dynamic xs ys ts tails x ptr)
+  then show ?case by(auto)
+qed
+
+lemma heads_length_dyn :
+"list_all abi_type_isdynamic (map abi_get_type vs) \<Longrightarrow>
+ heads_length vs = int (length vs) * 32"
+proof(induction vs)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons a vs)
+  then show ?case by(auto)
+qed
+
 declare decode'.simps [simp del]
 
 (* can_encode_as holds implies decoder implementation will agree *)
@@ -2561,10 +2617,10 @@ next
           using  sym[OF my_replicate_map[of abi_get_type t vs]] Earray
           by(auto simp add:array_value_valid_aux_def)
 
-          show ?thesis
-          proof(cases "decode'_dyn_tuple_heads (replicate (length vs) t) 0
-                 (int (length pre2), pre1 @ encode_int (int (length vs)) @ post1)")
-          case (Inr err)
+        show ?thesis
+        proof(cases "decode'_dyn_tuple_heads (replicate (length vs) t) 0
+               (int (length pre2), pre1 @ encode_int (int (length vs)) @ post1)")
+        case (Inr err)
           obtain tpre tbad tpost err'
             where Tbad: "decode' tbad (start + 32 + ty_heads_length tpre, full_code) = Err err'"
             and Tbad_t : "replicate (length vs) t = tpre @ [tbad] @ tpost"
@@ -2663,7 +2719,8 @@ next
             show "encode_static vbad = Ok vbad_code" using Vbad_code by auto
           qed
 
-          have Heads_code' : "concat heads_code = concat hpre_codes @ (vbad_code @ concat hpost_codes)"
+          have Heads_code' : "concat heads_code = concat hpre_codes @ 
+                                          (vbad_code @ concat hpost_codes)"
             using Heads_ok Heads_code Heads_bad Hpre_codes Bad_valid' Tbad_static 
                   Vbad_t Vbad_full Vbad_code Hpost_codes
                   those_err_split[of "map encode_static hpre"
@@ -2734,7 +2791,8 @@ next
                   can_encode_as_start_nonneg[OF Varray(2)]
                   abi_decode'_dyn_tuple_heads_succeed
                     [OF Earray(2), 
-                     of "[]" "take (nat (start + 32)) full_code" "drop (nat (start + 32)) full_code" "[]"
+                     of "[]" "take (nat (start + 32)) full_code" 
+                        "drop (nat (start + 32)) full_code" "[]"
                         vos idxs byteoffset bytes_parsed] Inl'
                  Start_fullcode Res Earray Vs_rep Offs' 
              by(auto simp add: Start32')
@@ -2761,6 +2819,67 @@ next
                 can_encode_as_start_nonneg[OF Varray(2)]
             unfolding Combine
             by(auto)
+
+          have LenCheck : "32 + ((int (length vs)) * abi_size_lower_bound t) + start \<le> 
+                            int (length full_code)"
+            using abi_size_lower_bound_ty_heads_length Varray Earray Estatic Estatic'
+          proof(cases "abi_type_isstatic t")
+            case True
+
+            then have Ht_rep : "head_types = replicate (length vs) t"
+              using Earray
+                is_head_and_tail_static_head_types_eq[OF Earray(2)]
+                my_replicate_map[of abi_get_type t vs]
+              by(auto simp add: array_value_valid_aux_def list_all_iff)
+
+            hence Ht_ty_hl : "ty_heads_length (replicate (length vs) t) =
+                               (length vs) * abi_size_lower_bound t"
+              using abi_size_lower_bound_ty_heads_length by auto
+
+            hence Ht_hl : "heads_length vs = (length vs) * abi_size_lower_bound t"
+              using True ty_heads_length_heads_length
+                my_replicate_map[of abi_get_type t vs]
+                Earray
+                is_head_and_tail_static_head_types_eq[OF Earray(2)]
+                sym[OF Ht_rep]
+              by(auto simp add: array_value_valid_aux_def list_all_iff)
+
+            thus ?thesis
+              using True heads_length_heads[OF Earray(2), of full_code "start + 32"] 
+                    Ht_rep
+                    Earray(4)
+                    can_encode_as_start_nonneg[OF Earray(4)]
+              by(auto)
+          next
+            case False
+
+            hence Vs_dyn : "list_all abi_type_isdynamic (map abi_get_type vs)"
+              using Earray my_replicate_map[of abi_get_type t vs]
+              by(auto simp add: array_value_valid_aux_def list_all_iff)
+
+            have Ht_rep : "head_types = replicate (length vs) (Tsint 256)"
+              using Earray
+                is_head_and_tail_dynamic_head_types_eq[OF Earray(2) Vs_dyn]
+              by(auto simp add: array_value_valid_aux_def)
+
+            hence Ht_ty_hl : "ty_heads_length (replicate (length vs) t) =
+                               (length vs) * abi_size_lower_bound t"
+              using abi_size_lower_bound_ty_heads_length by auto
+
+            hence Ht_hl : "heads_length vs = (length vs) * abi_size_lower_bound t"
+              using False ty_heads_length_heads_length[of vs]
+                Earray
+                sym[OF Ht_rep]
+                heads_length_dyn[OF Vs_dyn]
+              by(auto simp add: array_value_valid_aux_def)
+
+            thus ?thesis
+              using False heads_length_heads[OF Earray(2), of full_code "start + 32"] 
+                    Ht_rep
+                    Earray(4)
+                    can_encode_as_start_nonneg[OF Earray(4)]
+              by(auto)
+          qed
 
           show ?thesis
           proof(cases "decode'_dyn_tuple_tails idxs (map abi_get_type vs) 
@@ -2823,6 +2942,7 @@ next
                   Res_tl
                   Etuple_dyn Offs' Combine Head_succeed Varray Inl'''
                   Vs_rep Count Earray(4)
+                  LenCheck
               by(auto simp add:decode'.simps Let_def simp del:decode_uint.simps)
             thus ?thesis by auto
           qed
@@ -2920,7 +3040,8 @@ lemma uint_reencode :
   unfolding encode_int.simps decode_uint.simps word_of_int word_of_int_uint
 proof(rule word_rsplit_rcat_size)
   have Hcode' : "min (length code) 32 = 32" using Hcode by auto
-  show "size (word_rcat (take 32 code) :: 256 word) = length (take 32 code) * LENGTH(8)" using Hcode'
+  show "size (word_rcat (take 32 code) :: 256 word) = length (take 32 code) * LENGTH(8)"
+    using Hcode'
     by(auto simp add: word_size)
 qed
 
@@ -2930,7 +3051,8 @@ lemma sint_reencode :
   unfolding encode_int.simps decode_sint.simps word_of_int word_sint.Rep_inverse
 proof(rule word_rsplit_rcat_size)
   have Hcode' : "min (length code) 32 = 32" using Hcode by auto
-  show "size (word_rcat (take 32 code) :: 256 word) = length (take 32 code) * LENGTH(8)" using Hcode'
+  show "size (word_rcat (take 32 code) :: 256 word) = length (take 32 code) * LENGTH(8)"
+    using Hcode'
     by(auto simp add: word_size)
 qed
 
@@ -2954,7 +3076,8 @@ lemma abi_decode_encode_static':
                   map abi_get_type vs = replicate n t \<Longrightarrow>
                   (list_all abi_value_valid vs \<and>
                   (\<exists> (codes :: 8 word list list) . those_err (map encode_static vs) = Ok codes \<and>
-                           take (nat (n * (abi_static_size t))) (drop (nat index) full_code) = concat codes)))" and
+                           take (nat (n * (abi_static_size t))) (drop (nat index) full_code) = 
+                           concat codes)))" and
 
      "(\<And> v ts index full_code  .
           v = (Vtuple ts vs) \<Longrightarrow>
@@ -2965,7 +3088,8 @@ lemma abi_decode_encode_static':
                   map abi_get_type vs = ts \<Longrightarrow>
                   (list_all abi_value_valid vs \<and>
                   (\<exists> (codes :: 8 word list list) . those_err (map encode_static vs) = Ok codes \<and>
-                           take (nat (list_sum (map abi_static_size ts))) (drop (nat index) full_code) = concat codes)))"
+                           take (nat (list_sum (map abi_static_size ts))) 
+                                (drop (nat index) full_code) = concat codes)))"
 proof(induction rule:my_abi_value_induct)
 (* Vuint *)
   case (1 n i)
@@ -3889,7 +4013,8 @@ next
 
   have ListPart : "(take (nat start) full_code @
       take 32 (drop (nat start) full_code) @
-      pad_bytes (take (nat (decode_uint (take 32 (drop (nat start) full_code)))) (drop (32 + nat start) full_code)) @
+      pad_bytes (take (nat (decode_uint (take 32 (drop (nat start) full_code))))
+                      (drop (32 + nat start) full_code)) @
       drop (32 + nat start + (skip_padding 
             (nat (decode_uint (take (32::nat) (drop (nat start) full_code)))))) full_code)
   = full_code"
@@ -4073,17 +4198,21 @@ next
     by(cases "32 + start \<le> length full_code";
         auto simp add: decode'.simps)
 
-  then obtain heads' tails' count' bytes where
+  (* NB: tried stating the length check separately as a fact, but Isabelle didn't
+         seem to like the proof unless I add if_split_asm to auto *)
+  obtain heads' tails' count' bytes where
      Heads : "decode'_dyn_tuple_heads 
                (replicate (nat (decode_uint (take 32 (drop (nat start) full_code)))) t') 0 
                (start + 32, full_code) = 
                Ok (heads', tails', count', bytes)" 
-     using "13.prems" Start_nonneg Start_bound
+     using "13.prems" Start_nonneg Start_bound Start_idx_size
      by(cases "decode'_dyn_tuple_heads 
                (replicate (nat (decode_uint (take 32 (drop (nat start) full_code)))) t') 0 
                (start + 32, full_code) ";
-         auto simp add:decode'.simps Let_def )
+         auto simp add:decode'.simps Let_def split: if_split_asm)
 
+  (* NB: tried stating the length check separately as a fact, but Isabelle didn't
+         seem to like the proof unless I add if_split_asm to auto *)
   then obtain bytes' where
     Tails : "decode'_dyn_tuple_tails tails' 
               (replicate (nat (decode_uint (take 32 (drop (nat start) full_code)))) t') 
@@ -4092,7 +4221,7 @@ next
     by(cases "decode'_dyn_tuple_tails tails' 
               (replicate (nat (decode_uint (take 32 (drop (nat start) full_code)))) t') 
               heads' count' (start + 32, full_code)";
-        auto simp add:decode'.simps Let_def)
+        auto simp add:decode'.simps Let_def split: if_split_asm)
 
   have Min : "(int (min (length full_code) (nat start))) = start"
     using Start_bound Start_nonneg
