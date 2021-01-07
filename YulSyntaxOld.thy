@@ -4,6 +4,8 @@ begin
 
 (* https://solidity.readthedocs.io/en/v0.5.10/yul.html#specification-of-yul *)
 
+(* "leave" ? *)
+
 (* note that we are assuming numbers have been parsed *)
 datatype bool_literal =
   BLit bool

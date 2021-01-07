@@ -161,7 +161,8 @@ to propagate back up to outer scopes? this seems bad *)
 | "yul_eval_e G L F cond (G1, L1, F1, [VBool False]) \<Longrightarrow>
    yul_eval_st G L F (SI (Ifst cond body)) (G1, L1, F1, mode)"
 
-(* switch *)
+(* switch 
+   there is an overlap in the first two cases here. *)
 | "yul_eval_st G L F (SS (Switch e c cs (Some (Default (Block []))))) (G1, L1, F1, mode) \<Longrightarrow>
    yul_eval_st G L F (SS (Switch e c cs None)) (G1, L1, F1, mode)"
 | "yul_eval_e G L F e (G1, L1, F1, vs) \<Longrightarrow>
