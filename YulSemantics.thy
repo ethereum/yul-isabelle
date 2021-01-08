@@ -111,7 +111,7 @@ fun canonicalizeSwitch ::
 
 (* TODO: do we need to maintain the typing environment at runtime?
    I don't think we should. *)
-fun yul_eval_statement :: 
+function yul_eval_statement :: 
   "'g \<Rightarrow> YulLiteralValue local \<Rightarrow> function_sig local \<Rightarrow> YulStatement \<Rightarrow>
    ('g * YulLiteralValue local * function_sig local * mode)"
 and yul_eval_statements ::
@@ -213,6 +213,11 @@ to propagate back up to outer scopes? this seems bad *)
     (YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body)) =
    (G, L, (put_value F name (YulFunctionSig args rets body)), Regular)"
 
+(* function call statement *)
+| "yul_eval_statement G L F (YulFunctionCallStatement fc) =
+    (case yul_eval_expression G L F (YulFunctionCallExpression fc) of
+      (G1, L1, F1, _) \<Rightarrow> (G1, L1, F1, Regular))"
+
 (* variable declarations *)
 (* need a way to fill in values for undefined variables.
    for now let's use Isabelle undefined *)
@@ -287,7 +292,7 @@ to propagate back up to outer scopes? this seems bad *)
           Some canonical \<Rightarrow> yul_eval_canonical_switch G L F result canonical
           | _ \<Rightarrow> undefined)
       | _ \<Rightarrow> undefined)"
-
+ 
 (* break *)
 | "yul_eval_statement G L F YulBreak = (G, L, F, Break)"
 
