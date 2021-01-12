@@ -90,6 +90,152 @@ fun canonicalizeSwitch ::
 syntax plus_literal_inst.plus_literal :: "String.literal \<Rightarrow> String.literal \<Rightarrow> String.literal"
   ("_ @@ _")
 
+(* measures for Yul programs (used for semantics termination) *)
+function yulStatementMeasure :: "YulStatement \<Rightarrow> nat"
+and yulStatementsMeasure :: "YulStatement list \<Rightarrow> nat"
+and yulExpressionMeasure :: "YulExpression \<Rightarrow> nat"
+and yulExpressionsMeasure :: "YulExpression list \<Rightarrow> nat"
+and yulCaseMeasure :: "YulSwitchCase \<Rightarrow> nat"
+and yulCasesMeasure :: "YulSwitchCase list \<Rightarrow> nat"
+ where
+"yulStatementMeasure (YulFunctionCallStatement fc) =
+  (case fc of (YulFunctionCall _ args) \<Rightarrow> 1 + yulExpressionsMeasure args)"
+| "yulStatementMeasure (YulAssignmentStatement a) =
+  (case a of (YulAssignment _ expr) \<Rightarrow> 1 + yulExpressionMeasure expr)"
+| "yulStatementMeasure (YulVariableDeclarationStatement vd) =
+  (case vd of (YulVariableDeclaration _ oexpr) \<Rightarrow>
+   (case oexpr of
+    None \<Rightarrow> 1
+    | Some expr \<Rightarrow> 1 + yulExpressionMeasure expr))"
+| "yulStatementMeasure (YulFunctionDefinitionStatement _) = 1"
+| "yulStatementMeasure (YulIf cond body) =
+   1 + yulExpressionMeasure cond + yulStatementsMeasure body"
+| "yulStatementMeasure (YulSwitch cond cases) =
+   1 + yulExpressionMeasure cond + 
+      yulCasesMeasure cases"
+| "yulStatementMeasure (YulForLoop pre cond post body) =
+   1 + yulStatementsMeasure pre + 
+       yulExpressionMeasure cond +
+       yulStatementsMeasure post +
+       yulStatementsMeasure body"
+| "yulStatementMeasure (YulBlock sts) =
+   1 + yulStatementsMeasure sts"
+| "yulStatementMeasure (YulBreak) = 1"
+| "yulStatementMeasure (YulLeave) = 1"
+| "yulStatementMeasure (YulContinue) = 1"
+
+| "yulExpressionMeasure (YulFunctionCallExpression  fc) =
+  (case fc of (YulFunctionCall _ args) \<Rightarrow>  1 + yulExpressionsMeasure args)"
+| "yulExpressionMeasure (YulIdentifier _) = 1"
+| "yulExpressionMeasure (YulLiteralExpression _) = 1"
+
+| "yulCaseMeasure (YulSwitchCase _ body) =
+   1 + yulStatementsMeasure body"
+
+| "yulStatementsMeasure [] = 1"
+| "yulStatementsMeasure (h#t) = 1 + yulStatementMeasure h + yulStatementsMeasure t"
+
+| "yulExpressionsMeasure [] = 1"
+| "yulExpressionsMeasure (h#t) = 1 + yulExpressionMeasure h + yulExpressionsMeasure t"
+
+| "yulCasesMeasure [] = 1"
+| "yulCasesMeasure (h#t) = 1 + yulCaseMeasure h + yulCasesMeasure t"
+
+  by pat_completeness auto
+
+(* I am not sure why size_change is needed here.
+   It seems like this function is rather trivially
+   structurally recursive. *)
+termination by size_change
+
+lemma yul_canonical_switch_expr :
+  assumes H : "canonicalizeSwitch expr cases dfl = 
+               Some (YulSwitchCanonical expr2 cases2 dfl2)" 
+  shows "expr = expr2" using assms
+proof(induction cases arbitrary: expr expr2 cases2 dfl dfl2)
+  case Nil
+  then show ?case by(cases dfl; auto)
+next
+  case (Cons a cases)
+  obtain cond body where A : "a = YulSwitchCase cond body" by(cases a; auto)
+  then show ?case
+  proof(cases cond)
+    case None
+    then show ?thesis
+      using Cons.prems Cons.IH A None by(cases dfl; auto)
+  next
+    case (Some cond')
+    then show ?thesis
+    proof(cases dfl)
+      case None' : None
+      then show ?thesis
+        using Cons.prems Cons.IH A Some by(auto split:option.splits YulSwitchCanonical.splits)
+    next      
+      case Some' : (Some dfl')
+      then show ?thesis
+        using Cons.prems Cons.IH A Some by(auto split:option.splits YulSwitchCanonical.splits)
+    qed
+  qed
+qed
+
+fun yulSwitchCanonicalMeasure :: "YulSwitchCanonical \<Rightarrow> nat" where
+"yulSwitchCanonicalMeasure (YulSwitchCanonical expr' cases' dfl2) =
+  yulExpressionMeasure expr' +
+  yulCasesMeasure cases' +
+  yulStatementsMeasure dfl2"
+
+lemma yul_canonical_switch_size :
+  assumes H : "canonicalizeSwitch expr cases dfl = 
+               Some (YulSwitchCanonical expr' cases' dfl2)"
+  shows "(case dfl of None \<Rightarrow> 0 
+          | Some dfl' \<Rightarrow> yulStatementsMeasure dfl') +
+         yulStatementMeasure (YulSwitch expr cases) \<ge>
+         yulSwitchCanonicalMeasure (YulSwitchCanonical expr' cases' dfl2)" using H
+proof(induction cases arbitrary: expr dfl expr' cases' dfl2)
+  case Nil
+  then show ?case
+    by(cases dfl; auto)
+next
+  case (Cons a cases)
+  then obtain lit body where
+    A : "a = (YulSwitchCase lit body)" by(cases a; auto)
+  show ?case
+  proof(cases dfl)
+    case None
+    show ?thesis
+    proof(cases lit)
+      case None' : None
+      then show ?thesis using Cons.prems Cons.IH[of expr "Some body" expr' cases' dfl2] A None
+        by(auto)
+    next
+      case Some' : (Some a')
+
+      then obtain cases'tl where Cases' : "cases' = YulSwitchCase (Some a') body # cases'tl"
+        using Cons.prems None A Some' by(auto split:option.splits YulSwitchCanonical.splits)
+      then show ?thesis using Cons.prems Cons.IH[of expr None expr' cases'tl dfl2] A None Some'
+        by(auto simp add: yul_canonical_switch_expr
+                split:option.splits YulSwitchCanonical.splits)
+    qed
+  next
+    case (Some dfl')
+    then show ?thesis
+    proof(cases lit)
+      case None' : None
+      then show ?thesis using Cons.prems Cons.IH A Some
+        by(auto)
+    next
+      case Some' : (Some a')
+
+      then obtain cases'tl where Cases' : "cases' = YulSwitchCase (Some a') body # cases'tl"
+        using Cons.prems Some A Some' by(auto split:option.splits YulSwitchCanonical.splits)
+      then show ?thesis using Cons.prems Cons.IH[of expr "(Some dfl')" expr' cases'tl dfl2]
+                              A Some Some'
+        by(auto simp add: yul_canonical_switch_expr
+                split:option.splits YulSwitchCanonical.splits)
+    qed
+  qed
+qed
+
 (* executable semantics for Yul programs *)
 (* parameters:
    - global state
@@ -135,7 +281,10 @@ locale YulSem =
       updateGas n (updateGas n' g) = updateGas n g"
 
   assumes error_isError :
-    "\<And> msg G . getError (error msg G) = Some msg"    
+    "\<And> msg G . getError (error msg G) = Some msg"
+
+assumes updateGas_pres :
+    "\<And> G g . getError G = getError (updateGas g G)"
 
 begin
 
@@ -409,22 +558,31 @@ as they appear syntactically.
 (* measure for yul_eval function - based on gas *)
 (* however we are also going to need a notion of how far in the syntax tree we are.
    then we should only need to use gas for the for loop piece *)
-
-(*
 termination
   apply(relation 
       "measure 
         (\<lambda> x .
           (case x of
-              Inl (Inl (G, L, F, st)) \<Rightarrow> 0
-              | Inl (Inr (Inl (G, L, F, st))) \<Rightarrow> 0
-              | Inl (Inr (Inr (G, L, F, sts))) \<Rightarrow> 0
-              | Inr (Inl (G, L, F, e)) \<Rightarrow> 0
-              | Inr (Inr (Inl (G, L, F, sw))) \<Rightarrow> 0
-              | Inr (Inr (Inr (G, L, F, args))) \<Rightarrow> 0))")
-  apply(simp_all)
-end
-*)
+              \<comment> \<open> yul_eval_statement_check_gas \<close>
+              Inl (Inl (G, L, F, st)) \<Rightarrow> 
+                if isError G then 0 else gas G + 1 + yulStatementMeasure st
+              \<comment> \<open> yul_eval_statement \<close>
+              | Inl (Inr (Inl (G, L, F, st))) \<Rightarrow> gas G + 1 + yulStatementMeasure st
+              \<comment> \<open> yul_eval_statements \<close>
+              | Inl (Inr (Inr (G, L, F, sts))) \<Rightarrow> gas G + 1 + yulStatementsMeasure sts
+              \<comment> \<open> yul_eval_expression \<close>
+              | Inr (Inl (G, L, F, e)) \<Rightarrow> gas G + 1 + yulExpressionMeasure e
+              \<comment> \<open> yul_eval_canonical_switch \<close>
+              | Inr (Inr (Inl (G, L, F, cond, sw))) \<Rightarrow> 
+                gas G + 1 + yulSwitchCanonicalMeasure sw
+              \<comment> \<open> yul_eval_args \<close>
+              | Inr (Inr (Inr (G, L, F, args))) \<Rightarrow> 
+                gas G + 1 + yulExpressionsMeasure args))")
+                      apply(auto simp add: error_isError updateGas_pres gas_lens2 gas_decrease split:option.splits if_splits)
+                     apply(cut_tac s = st in gas_decrease) apply(auto)
+  defer
+  
+  
 
 end
 
