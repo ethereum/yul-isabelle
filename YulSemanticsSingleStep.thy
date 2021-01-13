@@ -15,8 +15,6 @@ datatype stackEl =
   | SeExpr "YulExpression"
   | SeExprs "YulExpression list"
   | SeSwitchCases "YulSwitchCase list"
-  (* separate pass to handle function scope correctly *)
-  | SeGatherFuns "YulStatement list"
   (* Following a defunctionalization approach, these commands represent
      situations where we must run a subexpression during evaluation of an expression,
      and then resume *)
@@ -164,15 +162,33 @@ fun evalYulStatement ::
 | "evalYulStatement YulLeave _ =
     ErrorResult (STR ''invalid eval context (YulLeave)'')"
 
-(* sequencing Yul statements *)
-fun evalYulStatements :: "YulStatement list \<Rightarrow> ('g, 'v) result \<Rightarrow> ('g, 'v) result" where
-"evalYulStatements [] (StResult G L F mode cont) = StResult G L F mode cont"
-| "evalYulStatements (s#st) (StResult G L F Regular cont) =
+(* TODO: I don't think this handles functions exiting scope correctly. *)
+fun gatherYulFunctions :: "YulStatement list \<Rightarrow> ('g, 'v) result \<Rightarrow> ('g, 'v) result" where
+"gatherYulFunctions [] r = r"
+| "gatherYulFunctions 
+    ((YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body))#t)
+     (StResult G L F mode cont) =
+     gatherYulFunctions t
+      (StResult G L (put_value F name (YulFunctionSig args rets body)) mode cont)"
+| "gatherYulFunctions (_#t) r =
+    gatherYulFunctions t r"
+    
+
+(* sequencing Yul statements
+   TODO: need to split this into an initial and recursive version
+   initial version must also call gather *)
+fun evalYulStatements' :: "YulStatement list \<Rightarrow> ('g, 'v) result \<Rightarrow> ('g, 'v) result" where
+"evalYulStatements' [] (StResult G L F mode cont) = StResult G L F mode cont"
+| "evalYulStatements' (s#st) (StResult G L F Regular cont) =
    StResult G L F Regular ((SeStatement s)#(SeStatements st)#cont)"
-| "evalYulStatements (s#st) (StResult G L F mode cont) =
+| "evalYulStatements' (s#st) (StResult G L F mode cont) =
    StResult G L F mode cont"
-| "evalYulStatements _ _ =
+| "evalYulStatements' _ _ =
    ErrorResult (STR ''invalid eval context (statement-cons)'')"
+
+fun evalYulStatements :: "YulStatement list \<Rightarrow> ('g, 'v) result \<Rightarrow> ('g, 'v) result" where
+"evalYulStatements sts r =
+  evalYulStatements' sts (gatherYulFunctions sts r)"
 
 (* convenience code for expressions that need to work for both Expr and Statement
    result types *)
