@@ -558,30 +558,7 @@ as they appear syntactically.
 (* measure for yul_eval function - based on gas *)
 (* however we are also going to need a notion of how far in the syntax tree we are.
    then we should only need to use gas for the for loop piece *)
-termination
-  apply(relation 
-      "measure 
-        (\<lambda> x .
-          (case x of
-              \<comment> \<open> yul_eval_statement_check_gas \<close>
-              Inl (Inl (G, L, F, st)) \<Rightarrow> 
-                if isError G then 0 else gas G + 1 + yulStatementMeasure st
-              \<comment> \<open> yul_eval_statement \<close>
-              | Inl (Inr (Inl (G, L, F, st))) \<Rightarrow> gas G + 1 + yulStatementMeasure st
-              \<comment> \<open> yul_eval_statements \<close>
-              | Inl (Inr (Inr (G, L, F, sts))) \<Rightarrow> gas G + 1 + yulStatementsMeasure sts
-              \<comment> \<open> yul_eval_expression \<close>
-              | Inr (Inl (G, L, F, e)) \<Rightarrow> gas G + 1 + yulExpressionMeasure e
-              \<comment> \<open> yul_eval_canonical_switch \<close>
-              | Inr (Inr (Inl (G, L, F, cond, sw))) \<Rightarrow> 
-                gas G + 1 + yulSwitchCanonicalMeasure sw
-              \<comment> \<open> yul_eval_args \<close>
-              | Inr (Inr (Inr (G, L, F, args))) \<Rightarrow> 
-                gas G + 1 + yulExpressionsMeasure args))")
-                      apply(auto simp add: error_isError updateGas_pres gas_lens2 gas_decrease split:option.splits if_splits)
-                     apply(cut_tac s = st in gas_decrease) apply(auto)
-  defer
-  
+termination sorry (* TODO *)  
   
 
 end
