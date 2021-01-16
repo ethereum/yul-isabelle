@@ -213,13 +213,20 @@ fixes F0 :: "function_sig locals"
 
 begin
 
+
 (* gas checks will happen on statement *)
 (* TODO: consider not using the same "result" state type, this may end up giving us an
    implementation that is too similar to the small step at some points. *)
+(* TODO: consider changing the nat type for fuel to int, in order to bring this in line
+   with the small-step version *)
+(* TODO: make sure mode is getting reset to Regular correctly when alternating between
+   statement and expression evaluation *)
 function
 yul_eval_statement ::
   "YulStatement \<Rightarrow> nat \<Rightarrow> ('g, 'v) YulResult \<Rightarrow> ('g, 'v) YulResult"
 and yul_eval_statements ::
+  "YulStatement list \<Rightarrow> nat \<Rightarrow> ('g, 'v) YulResult \<Rightarrow> ('g, 'v) YulResult"
+and yul_eval_block ::
   "YulStatement list \<Rightarrow> nat \<Rightarrow> ('g, 'v) YulResult \<Rightarrow> ('g, 'v) YulResult"
 and yul_eval_expression ::
   "YulExpression \<Rightarrow> nat \<Rightarrow> ('g, 'v) YulResult \<Rightarrow> ('g, 'v) YulResult"
@@ -233,8 +240,7 @@ and yul_eval_canonical_switch ::
  * helper: expression
  *)
 (* identifier *)
-"yul_eval_expression (YulIdentifier i) n 
-  (YulResult r) =
+"yul_eval_expression (YulIdentifier i) n (YulResult r) =
  (case (locals r) of
     [] \<Rightarrow> ErrorResult (STR ''No variable context'')
     | Lh#Lt \<Rightarrow> 
@@ -253,7 +259,6 @@ and yul_eval_canonical_switch ::
       (case (vals r) of
         None \<Rightarrow> YulResult (r \<lparr> vals := (Some [v])\<rparr>)
         | Some vs \<Rightarrow> YulResult (r \<lparr> vals := Some (vs @ [v])\<rparr>)))"
-| "yul_eval_expression _ _ (ErrorResult e) = ErrorResult e"
 
 (* function call *)
 (* function calls consume fuel *)
@@ -318,6 +323,7 @@ and yul_eval_canonical_switch ::
              then yul_eval_statements hdBody n (YulResult r)
              else yul_eval_canonical_switch (YulSwitchCanonical e rest dfl) n (YulResult r)))
       | _ \<Rightarrow> ErrorResult (STR ''Bad switch condition''))"
+| "yul_eval_canonical_switch _ _ (ErrorResult s) = ErrorResult s"
 
 (* 
  * helper: statement list
@@ -326,132 +332,163 @@ and yul_eval_canonical_switch ::
 | "yul_eval_statements (sh#st) n (YulResult r) =
    (case yul_eval_statement sh n (YulResult r) of
     YulResult r1 \<Rightarrow> 
+      (if mode r1 = Some Regular
+       then yul_eval_statements st n (YulResult r1)
+       else r1)
+    | ErrorResult s \<Rightarrow> ErrorResult s)"
+| "yul_eval_statements _ _ (ErrorResult s) = ErrorResult s"
 
-    | ErrorResult s \<Rightarrow> ErrorResult s
 
-      (if isError G1 then (G1, L1, F1, Regular)
-       else yul_eval_statements G1 L1 F1 st)
-    | (G1, L1, F1, mode) \<Rightarrow> (G1, L1, F1, mode))"
-
+(* helper: blocks
+   (handle scoping, function gathering *)
 (*
- * helper: function arguments
- *)
-| "yul_eval_args G L F [] = (G, L, F, [])"
-| "yul_eval_args G L F (eh#et) =
-   (case yul_eval_expression G L F eh of
-      (G1, L1, F1, [vh]) \<Rightarrow>
-        (case yul_eval_args G1 L1 F1 et of
-          (Gn, Ln, Fn, vt) \<Rightarrow> (Gn, Ln, Fn, vh#vt))
-      | _ \<Rightarrow> (error (STR ''Expression doesn't have 1 value (function argument)'') G, L, F, []))"
-
+| "yul_eval_block
+*)
 (*
  * statement
  *)
 
-(* TODO should we allow redefinition of functions in inner scopes
-to propagate back up to outer scopes? this seems bad *)
-(* blocks *)
-| "yul_eval_statement G L F (YulBlock sl) =
-  (case yul_eval_statements G L F sl of
-    (G1, L1, F1, mode) \<Rightarrow> (G1, restrict L1 L, F, mode))"
+(* have a separate yul_eval_block function? *)
 
-(* function definitions *)
+(* blocks *)
+
+| "yul_eval_statement (YulBlock sl) n (YulResult r) =
+   yul_eval_block sl n (YulResult r)"
+
+(* function definitions - TODO this needs to be a separate pass *)
+(*
 | "yul_eval_statement G L F 
     (YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body)) =
    (G, L, (put_value F name (YulFunctionSig args rets body)), Regular)"
+*)
 
 (* function call statement *)
-| "yul_eval_statement G L F (YulFunctionCallStatement fc) =
-    (case yul_eval_expression G L F (YulFunctionCallExpression fc) of
-      (G1, L1, F1, _) \<Rightarrow> (G1, L1, F1, Regular))"
+| "yul_eval_statement (YulFunctionCallStatement fc) n (YulResult r) =
+    (case yul_eval_expression (YulFunctionCallExpression fc) n (YulResult r) of  
+      YulResult r1 \<Rightarrow> YulResult (r1 \<lparr> mode := Regular, vals := None \<rparr>)
+      | ErrorResult s \<Rightarrow> ErrorResult s)"
 
-(* variable declarations *)
-(* need a way to fill in values for undefined variables.
-   for now let's use Isabelle undefined *)
-(* idea: put_values, putting undefined if we have None on the RHS
-   if we have Some, then evaluate it as an assignment *)
-| "yul_eval_statement G L F
-    (YulVariableDeclarationStatement (YulVariableDeclaration names None)) =
-  (case put_values L (strip_id_types names) (List.replicate (length names) defaultValue) of
-    None \<Rightarrow> (error (STR ''Should be dead code'') G, L, F, Regular)
-    | Some L1 \<Rightarrow>  (G, L1 , F, Regular))"
+(* variable declarations without definition *)
+| "yul_eval_statement (YulVariableDeclarationStatement (YulVariableDeclaration names None)) n
+    (YulResult r) =
+  (case locals r of
+    [] \<Rightarrow> ErrorResult (STR ''Empty list of local var contexts'')
+    | (Lh#Lt) \<Rightarrow>
+      (case put_values Lh (strip_id_types names)
+                          (List.replicate (length names) defaultValue) of
+        None \<Rightarrow> (ErrorResult (STR ''Arity mismatch in variable declaration - should be dead code''))
+        | Some L1 \<Rightarrow> YulResult (r \<lparr> locals := L1#Lt \<rparr>)))"
 
 (* variable declaration + definition *)
-(* TODO: do we need to check gas again? i don't think we should. *)
-| "yul_eval_statement G L F
-    (YulVariableDeclarationStatement (YulVariableDeclaration names (Some expr))) =
-   yul_eval_statement G L F (YulAssignmentStatement (YulAssignment (strip_id_types names) expr))"
+| "yul_eval_statement (YulVariableDeclarationStatement (YulVariableDeclaration names (Some expr))) n
+                      (YulResult r) =
+   yul_eval_statement (YulAssignmentStatement (YulAssignment (strip_id_types names) expr)) y
+                      (YulResult r)"
 
 (* assignments *)
-| "yul_eval_statement G L F
-    (YulAssignmentStatement (YulAssignment ids expr)) =
-    (case yul_eval_expression G L F expr of
-      (G1, L1, F1, vals) \<Rightarrow>
-      (case put_values L1 ids vals of
-        None \<Rightarrow> undefined
-        | Some L2 \<Rightarrow> (G1, L2, F1, Regular)))"
+| "yul_eval_statement (YulAssignmentStatement (YulAssignment ids expr)) n (YulResult r) =
+    (case yul_eval_expression expr n (YulResult r) of
+      ErrorResult s \<Rightarrow> ErrorResult s
+      | YulResult r1 \<Rightarrow>
+        (case locals r1 of
+          [] \<Rightarrow> ErrorResult (STR ''Empty list of local var contexts'')
+          | (Lh#Lt) \<Rightarrow>
+            (case vals r1 of
+              None \<Rightarrow> ErrorResult (STR ''Invalid returned expression state'')
+              | Some v1 \<Rightarrow>
+                (case put_values Lh ids v1 of
+                  None \<Rightarrow> ErrorResult (STR ''Arity mismatch in assignment'')
+                  | Some L2 \<Rightarrow> 
+                    (YulResult (r1 \<lparr> locals := L2#Lt, mode := Some Regular, vals := None \<rparr>))))))"
 
 (* if statement *)
-| "yul_eval_statement G L F (YulIf cond body) =
-   (case yul_eval_expression G L F cond of
-    (G1, L1, F1, [v]) \<Rightarrow>
-      (if truthy v then yul_eval_statements G L F body
-       else (G, L, F, Regular))
-    | _ \<Rightarrow> (error (STR ''Expression doesn't have 1 value (if condition)'') G, L, F, Regular))"
+| "yul_eval_statement (YulIf cond body) n (YulResult r) =
+   (case yul_eval_expression cond n (YulResult r) of
+    ErrorResult s \<Rightarrow> ErrorResult s
+    | YulResult r1 \<Rightarrow>
+      (case vals r1 of
+        Some [v] \<Rightarrow>
+          (if isTruthy v then yul_eval_statements body n 
+                              (YulResult (r1 \<lparr> mode := Some Regular, vals := None \<rparr>))
+           else (YulResult (r1 \<lparr> mode := Some Regular, vals := None \<rparr>)))
+        | _ \<Rightarrow> (ErrorResult (STR ''Expression doesn't have 1 value (if condition)''))))"
 
 (* for loops *)
 
+(* for loops consume fuel *)
+| "yul_eval_statement (YulForLoop _ _ _ _) 0 (YulResult r) = YulResult r"
+
 (* process for-loop without pre-statements *)
-| "yul_eval_statement G L F (YulForLoop [] cond post body) =
-   (case yul_eval_expression G L F cond of
-    (G1, L1, F1, [v]) \<Rightarrow>
-      (if truthy v
-       then
-        (case yul_eval_statements G1 L F1 body of
-         (G2, L2, F2, mode) \<Rightarrow>
-         (case mode of
-          Break \<Rightarrow> (G2, L2, F2, Regular)
-          | Leave \<Rightarrow> (G2, L2, F2, Leave)
-          | _ \<Rightarrow> (case yul_eval_statements G2 L2 F2 post of
-                  (G3, L3, F3, mode) \<Rightarrow>
-                  (case mode of
-                    Leave \<Rightarrow> (G2, L3, F2, Leave)
-                    | _ \<Rightarrow> yul_eval_statement_check_gas G3 L3 F3 (YulForLoop [] cond post body)))))
-       else (G1, L1, F1, Regular))
-      | _ \<Rightarrow> undefined)"
+| "yul_eval_statement (YulForLoop [] cond post body) (Suc n) (YulResult r) =
+   (case yul_eval_expression cond (Suc n) (YulResult r) of
+    ErrorResult s \<Rightarrow> ErrorResult s
+    | YulResult r1 \<Rightarrow>
+      (case vals r1 of
+        Some [v] \<Rightarrow>
+          (if isTruthy v then
+            (case yul_eval_statements body (Suc n) (YulResult r1) of
+              ErrorResult s \<Rightarrow> ErrorResult s
+              | YulResult r2 \<Rightarrow>
+                (case mode r2 of
+                  None \<Rightarrow> ErrorResult (STR ''Invalid state after loop body'')
+                  | Some Break \<Rightarrow> YulResult (r2 \<lparr> mode := Some Regular \<rparr>)
+                  | Some Leave \<Rightarrow> YulResult r2
+                  | Some _ \<Rightarrow> yul_eval_statement (YulForLoop [] cond post body) n (YulResult r2)))
+            else YulResult (r1 \<lparr> mode := Some Regular, vals := None \<rparr>))
+        | _ \<Rightarrow> ErrorResult (STR ''Expression doesn't have 1 value (loop condition)'')))"
      
 (* process pre-statements for for-loop *)
-(* TODO: I don't think we need to deduct gas when we do the final yul_eval_statement call
-   because all we have done here is preprocess the loop structure *)
-| "yul_eval_statement G L F (YulForLoop (preh#pret) cond post body) =
-   (case yul_eval_statements G L F (preh#pret) of
-        (G1, L1, F1, mode) \<Rightarrow>
+| "yul_eval_statement (YulForLoop (preh#pret) cond post body) n (YulResult r) =
+   (case yul_eval_statements (preh#pret) n (YulResult r) of
+      ErrorResult s \<Rightarrow> ErrorResult s
+      | YulResult r1 \<Rightarrow>
           \<comment> \<open>mode will be either Regular or Leave here\<close>
-          (case mode of
-            Leave \<Rightarrow> (G1, restrict L1 L, F1, Leave)
-            | _ \<Rightarrow>
-              (case yul_eval_statement G L F (YulForLoop [] cond post body) of
-                (G2, L2, F2, mode) \<Rightarrow> (G2, restrict L2 L, F2, mode))))"
-                
+          (case mode r1 of
+            None \<Rightarrow> ErrorResult (STR ''Invalid state after loop init'')
+            | Some Leave \<Rightarrow> 
+              (case (locals r1, locals r) of
+                (L1h#L1t, Lh#Lt) \<Rightarrow>
+                  \<comment> \<open> L1t and Lt should be equal here \<close>
+                  YulResult (r1 \<lparr> locals := (restrict L1h Lh)#Lt \<rparr>) 
+                | _ \<Rightarrow> ErrorResult (STR ''Invalid local contexts on loop init exit''))
+            | Some _ \<Rightarrow>
+              (case yul_eval_statement (YulForLoop [] cond post body) n 
+                                       (YulResult r1) of
+                ErrorResult s \<Rightarrow> ErrorResult s
+                | YulResult r2 \<Rightarrow>
+                  (case (locals r2, locals r) of
+                    (L2h#L2t, Lh#Lt) \<Rightarrow>
+                      \<comment> \<open> L2t and Lt should be equal here \<close>
+                      YulResult (r2 \<lparr> locals := (restrict L2h Lh)#Lt \<rparr>)))))"
+
 
 (* switch statement *)
 
-| "yul_eval_statement G L F (YulSwitch e cl) =
-    (case yul_eval_expression G L F e of
-      (G1, L1, F1, [result]) \<Rightarrow> 
-        (case canonicalizeSwitch e cl None of
-          Some canonical \<Rightarrow> yul_eval_canonical_switch G L F result canonical
-          | _ \<Rightarrow> undefined)
-      | _ \<Rightarrow> undefined)"
+| "yul_eval_statement (YulSwitch e cl) n (YulResult r) =
+    (case yul_eval_expression e n (YulResult r) of
+      ErrorResult s \<Rightarrow> ErrorResult s
+      | YulResult r1 \<Rightarrow>
+        (case vals r1 of
+          Some [result] \<Rightarrow>
+            (case canonicalizeSwitch e cl None of
+              Some canonical \<Rightarrow> yul_eval_canonical_switch result canonical (YulResult r1)
+              | None \<Rightarrow> ErrorResult (STR ''Invalid switch statement''))))"
  
 (* break *)
-| "yul_eval_statement G L F YulBreak = (G, L, F, Break)"
+| "yul_eval_statement YulBreak n (YulResult r) = 
+    YulResult (r \<lparr> mode := Some Break \<rparr>)"
 
 (* continue *)
-| "yul_eval_statement G L F YulContinue = (G, L, F, Continue)"
+| "yul_eval_statement YulContinue n (YulResult r) =
+    YulResult (r \<lparr> mode := Some Continue \<rparr>)"
 
 (* leave *)
-| "yul_eval_statement G L F YulLeave = (G, L, F, Leave)"
+| "yul_eval_statement YulLeave n (YulResult r) =
+    YulResult (r \<lparr> mode := Some Leave \<rparr>)"
+
+(* on errors, halt *)
+| "yul_eval_statement _ _ (ErrorResult s) =
+    ErrorResult s"
 
 
 (* big-step inductive semantics for Yul programs *)

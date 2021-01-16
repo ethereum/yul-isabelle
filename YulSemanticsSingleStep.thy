@@ -9,7 +9,7 @@ begin
    in terms of small increments. *)
 
 (* stack used to represent computation remaining after this step *)
-datatype stackEl =
+datatype StackEl =
   SeStatement "YulStatement"
   | SeStatements "YulStatement list"
   | SeExpr "YulExpression"
@@ -49,7 +49,7 @@ datatype ('g, 'v) result =
 *)
 
 type_synonym ('g, 'v) result =
-  "('g, 'v, stackEl list) yulResult"
+  "('g, 'v) YulResult * StackEl list"
 
 (*
 type_synonym ('g, 'v) cont = "('g * 'v local * function_sig local * mode)"
@@ -69,7 +69,7 @@ fixes defaultValue :: "'v"
 fixes G0 :: "'g"
 
 (* starting function bindings - i.e., pre-defined *)
-fixes F0 :: "function_sig local"
+fixes F0 :: "function_sig locals"
 
 begin
 
