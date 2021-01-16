@@ -1,4 +1,4 @@
-theory YulSemanticsSingleStep imports "YulSemantics"
+theory YulSemanticsSingleStep imports "YulSemanticsCommon"
 begin
 
 (* For functions: search through a list of locals
@@ -47,9 +47,9 @@ datatype ('g, 'v) result =
     optional mode (for statement results)
     optional value list (for expression results)
 *)
-datatype ('g, 'v) result =
-  YulResult "'g" "'v local list" "function_sig local list" "mode option" "'v list option" "stackEl list"
-  | ErrorResult "String.literal"
+
+type_synonym ('g, 'v) result =
+  "('g, 'v, stackEl list) yulResult"
 
 (*
 type_synonym ('g, 'v) cont = "('g * 'v local * function_sig local * mode)"
@@ -75,6 +75,9 @@ begin
 
 
 (* TODO: review the way mode is being threaded *)
+(* TODO: some of the places where we are swapping between "yul expression states"
+   (that contain a list of accumulated variables) and "yul statement states"
+   (that don't, but that do have a mode) are incorrect here. *)
 fun evalYulStatement ::
 "YulStatement \<Rightarrow> ('g, 'v) result \<Rightarrow>
   ('g, 'v) result" where
@@ -177,21 +180,6 @@ fun evalYulStatement ::
     YulResult G L F (Some Leave) None cont"
 | "evalYulStatement YulLeave _ =
     ErrorResult (STR ''invalid eval context (YulLeave)'')"
-
-(* need to remember to remove from stack.
-   also create new variable
-   enter/exit block are the things here.
- *)
-fun gatherYulFunctions :: "YulStatement list \<Rightarrow> ('g, 'v) result \<Rightarrow> ('g, 'v) result" where
-"gatherYulFunctions [] r = r"
-| "gatherYulFunctions 
-    ((YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body))#t)
-     (YulResult G L (F#Ft) (Some mode) _ cont) =
-     gatherYulFunctions t
-      (YulResult G L (put_value F name (YulFunctionSig args rets body) # Ft) (Some mode) None cont)"
-| "gatherYulFunctions (_#t) r =
-    gatherYulFunctions t r"
-
 
 (* sequencing Yul statements
    TODO: need to split this into an initial and recursive version

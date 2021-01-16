@@ -1,61 +1,5 @@
-theory YulSemantics imports "YulSyntax"
+theory YulSemantics imports "YulSemanticsCommon"
 begin
-
-
-datatype mode =
-  Regular
-  | Break
-  | Continue
-  | Leave
-
-datatype yul_value =
-  VInt int
-  | VBool bool
-
-datatype function_sig =
-  YulFunctionSig
-  (YulFunctionSigArguments: "YulTypedName list")
-  (YulFunctionSigReturnValues: "YulTypedName list")
-  (YulFunctionSigBody: "YulStatement list")
-
-type_synonym 'v local = "YulIdentifier \<Rightarrow> 'v option"
-
-definition local_empty :: "'v local" where
-"local_empty = (\<lambda> _ . None)"
-
-(* restrict e1 to the identifiers of e2 *)
-definition restrict :: "'v local \<Rightarrow> 'v local \<Rightarrow> 'v local" where
-"restrict e1 e2 i =
-  (if e2 i = None then None
-      else e1 i)"
-
-fun strip_id_type :: "YulTypedName \<Rightarrow> YulIdentifier" where
-"strip_id_type (YulTypedName name type) = name"
-
-fun strip_id_types :: "YulTypedName list \<Rightarrow> YulIdentifier list" where
-"strip_id_types l =
-  List.map strip_id_type l"
-
-fun put_value :: "'v local \<Rightarrow> YulIdentifier \<Rightarrow> 'v \<Rightarrow> 'v local" where
-"put_value L i v =
-  (\<lambda> i' . if i' = i then Some v else L i')"
-
-fun put_values :: "'v local \<Rightarrow> YulIdentifier list \<Rightarrow> 'v list \<Rightarrow> 'v local option" where
-"put_values L [] [] = Some L"
-| "put_values L (ih#it) (vh#vt) =
-   (case put_values L it vt of
-    None \<Rightarrow> None
-    | Some L' \<Rightarrow> Some (put_value L' ih vh))"
-| "put_values L _ _ = None"
-
-fun get_values :: "'v local \<Rightarrow> YulIdentifier list \<Rightarrow> 'v list option" where
-"get_values L ids =
-   List.those (List.map L (ids))"
-
-fun get_min :: "('a \<Rightarrow> nat) \<Rightarrow> 'a set \<Rightarrow> 'a" where
-"get_min f aset =
-  (SOME a . a \<in> aset \<and>
-            (\<forall> a' \<in> aset . f a' \<le> f a \<longrightarrow> a = a'))"
 
 datatype YulSwitchCanonical =
   YulSwitchCanonical
@@ -66,6 +10,8 @@ datatype YulSwitchCanonical =
 (* idea: reorganize the switch statement so that
    - if there is no default, we add an empty one
    - pick out the default case specially either way *)
+(* TODO: if we are willing to complicate the state representation, we could
+   avoid having to do this as a pre-pass. *)
 fun canonicalizeSwitch ::
   "YulExpression \<Rightarrow> YulSwitchCase list \<Rightarrow> YulStatement list option \<Rightarrow> YulSwitchCanonical option" 
   where
@@ -87,8 +33,6 @@ fun canonicalizeSwitch ::
     | Some (YulSwitchCanonical e cs' d') \<Rightarrow>
            Some (YulSwitchCanonical e ((YulSwitchCase (Some x) body)#cs') d'))"
 
-syntax plus_literal_inst.plus_literal :: "String.literal \<Rightarrow> String.literal \<Rightarrow> String.literal"
-  ("_ @@ _")
 
 (* measures for Yul programs (used for semantics termination) *)
 function yulStatementMeasure :: "YulStatement \<Rightarrow> nat"
@@ -247,175 +191,144 @@ qed
 (* TODO: do we need to maintain the typing environment at runtime?
    I don't think we should. *)
 
+
 (* locale for fixing global state, value types *)
 locale YulSem =
   fixes local_var :: "'v itself"
   fixes local_type :: "'t itself"
   fixes global_state :: "'g itself"
-
-  fixes gasCost :: "YulStatement \<Rightarrow> nat"
-  fixes gas :: "'g \<Rightarrow> nat"
-  fixes updateGas :: "nat \<Rightarrow> 'g \<Rightarrow> 'g"
-
-  fixes truthy :: "'v \<Rightarrow> bool"
-  (* for declared, undefined variables *)
-  fixes defaultValue :: "'v"
-  (* comparison of values for use in switch *)
-  fixes valueEq :: "'v \<Rightarrow> 'v \<Rightarrow> bool"
-
-  fixes error :: "String.literal \<Rightarrow> 'g \<Rightarrow> 'g"
-  fixes getError :: "'g \<Rightarrow> String.literal option"
-
-  (* TODO: probably need more primitives for type reasoning *)
   fixes parseType :: "String.literal \<Rightarrow> 't option"
   fixes parseLiteral :: "String.literal \<Rightarrow> 'v option"
 
-  assumes gas_decrease :
-    "\<And> s . gasCost s > 0"
-  assumes gas_lens1 :
-    "\<And> g . updateGas (gas g) g = g"
-  assumes gas_lens2 :
-    "\<And> n g . gas (updateGas n g) = n"
-  assumes gas_lens3 :
-    "\<And> n n' g . 
-      updateGas n (updateGas n' g) = updateGas n g"
+fixes isTruthy :: "'v \<Rightarrow> bool"
 
-  assumes error_isError :
-    "\<And> msg G . getError (error msg G) = Some msg"
+fixes defaultValue :: "'v"
+(* global starting state *)
+fixes G0 :: "'g"
 
-assumes updateGas_pres :
-    "\<And> G g . getError G = getError (updateGas g G)"
+(* starting function bindings - i.e., pre-defined *)
+fixes F0 :: "function_sig locals"
+
+
 
 begin
 
-fun isError :: "'g \<Rightarrow> bool" where
-"isError G =
-  (case getError G of
-    None \<Rightarrow> False
-    | Some _ \<Rightarrow> True)"
-
-fun decrement_gas ::
-    "'g \<Rightarrow> YulStatement \<Rightarrow> 'g" where
-"decrement_gas G st =
-  (if gas G < gasCost st then error (STR ''Out of gas'') G
-   else updateGas (gas G - gasCost st) G)"
-
-lemma decrement_gas_correct :
-  assumes Ok : "\<not> isError G"
-  shows "isError (decrement_gas G st) \<or> gas (decrement_gas G st) < gas G"
-proof(cases "gas G < gasCost st")
-  case True
-
-  hence Bad : "isError (decrement_gas G st)"
-    by(simp add: error_isError)
-
-  thus ?thesis by auto
-next
-  case False
-
-  hence Good : "gas (decrement_gas G st) < gas G" using gas_decrease[of st]
-    by(simp add: gas_lens2)
-
-  thus ?thesis by auto
-qed
-
-
 (* gas checks will happen on statement *)
+(* TODO: consider not using the same "result" state type, this may end up giving us an
+   implementation that is too similar to the small step at some points. *)
 function
-yul_eval_statement_check_gas ::
-    "'g \<Rightarrow> 'v local \<Rightarrow> function_sig local \<Rightarrow> YulStatement \<Rightarrow>
-    ('g * 'v local * function_sig local * mode)"
-and yul_eval_statement ::
-  "'g \<Rightarrow> 'v local \<Rightarrow> function_sig local \<Rightarrow> YulStatement \<Rightarrow>
-   ('g * 'v local * function_sig local * mode)"
+yul_eval_statement ::
+  "YulStatement \<Rightarrow> nat \<Rightarrow> ('g, 'v) YulResult \<Rightarrow> ('g, 'v) YulResult"
 and yul_eval_statements ::
-  "'g \<Rightarrow> 'v local \<Rightarrow> function_sig local \<Rightarrow> YulStatement list \<Rightarrow>
-   ('g * 'v local * function_sig local * mode)"
+  "YulStatement list \<Rightarrow> nat \<Rightarrow> ('g, 'v) YulResult \<Rightarrow> ('g, 'v) YulResult"
 and yul_eval_expression ::
-   "'g \<Rightarrow> 'v local \<Rightarrow> function_sig local \<Rightarrow> YulExpression \<Rightarrow>
-   ('g * 'v local * function_sig local * 'v list)"
+  "YulExpression \<Rightarrow> nat \<Rightarrow> ('g, 'v) YulResult \<Rightarrow> ('g, 'v) YulResult"
+and yul_eval_expressions :: 
+   "YulExpression list \<Rightarrow> nat \<Rightarrow> ('g, 'v) YulResult \<Rightarrow> ('g, 'v) YulResult"
 and yul_eval_canonical_switch ::
- "'g \<Rightarrow> 'v local \<Rightarrow> function_sig local \<Rightarrow> 'v \<Rightarrow> YulSwitchCanonical \<Rightarrow>
-   ('g * 'v local * function_sig local * mode)"  
-and yul_eval_args ::
-  "'g \<Rightarrow> 'v local \<Rightarrow>
-    function_sig local \<Rightarrow>
-    YulExpression list \<Rightarrow>
-    ('g * 'v local * function_sig local * 'v list)" 
+  "YulSwitchCanonical \<Rightarrow> nat \<Rightarrow> ('g, 'v) YulResult \<Rightarrow> ('g, 'v) YulResult"  
   where
-
-(* gas checking (entry point) *)
-"yul_eval_statement_check_gas G L F st =
-  (let G' = decrement_gas G st in
-    (if isError G' then (G', L, F, Regular)
-     else yul_eval_statement G' L F st))"
 
 (*
  * helper: expression
  *)
 (* identifier *)
-| "yul_eval_expression G L F (YulIdentifier i) =
- (case (L i) of
-  None \<Rightarrow> (error (STR ''Undefined variable '' @@ i) G, L, F, []) 
-  | Some v \<Rightarrow> (G, L, F, [v]))"
+"yul_eval_expression (YulIdentifier i) n 
+  (YulResult r) =
+ (case (locals r) of
+    [] \<Rightarrow> ErrorResult (STR ''No variable context'')
+    | Lh#Lt \<Rightarrow> 
+     (case (Lh i) of
+      None \<Rightarrow> (ErrorResult (STR ''Undefined variable '' @@ i))
+      | Some v \<Rightarrow> 
+        (case (vals r) of
+          None \<Rightarrow> YulResult (r \<lparr> locals := (Lh#Lt), vals := (Some ([v]))\<rparr>)
+          | Some vs \<Rightarrow> YulResult (r \<lparr> locals := (Lh#Lt), vals := (Some (vs @ [v]))\<rparr>))))"
 (* literal *)
-| "yul_eval_expression G L F (YulLiteralExpression (YulLiteral value type)) =
+| "yul_eval_expression (YulLiteralExpression (YulLiteral value type)) n 
+                       (YulResult r) =
   (case parseLiteral value of
-    Some v \<Rightarrow> (G, L, F, [v])
-    | None \<Rightarrow> (error (STR ''Bad literal '' @@ value) G, L, F, []))"
+    None \<Rightarrow> (ErrorResult (STR ''Bad literal '' @@ value))
+    | Some v \<Rightarrow> 
+      (case (vals r) of
+        None \<Rightarrow> YulResult (r \<lparr> vals := (Some [v])\<rparr>)
+        | Some vs \<Rightarrow> YulResult (r \<lparr> vals := Some (vs @ [v])\<rparr>)))"
+| "yul_eval_expression _ _ (ErrorResult e) = ErrorResult e"
 
 (* function call *)
-(* TODO: evaluate function body as a block or as "raw" statements? *)
-| "yul_eval_expression G L F (YulFunctionCallExpression (YulFunctionCall name args)) =
-   (case yul_eval_args G L F args of
-    (G1, L1, F1, vals) \<Rightarrow>
-      (case F1 name of
-        None \<Rightarrow> (error (STR ''Undefined function '' @@ name) G1, L1, F1, [])
-        | (Some (YulFunctionSig argSig retSig body)) \<Rightarrow>
-          (case put_values local_empty (strip_id_types argSig) vals of
-          None \<Rightarrow> (error (STR ''Argument arity mismatch for '' @@ name) G1, L1, F1, [])
-          | Some Lsub \<Rightarrow>
-            (case put_values Lsub (strip_id_types retSig) 
-                                  (List.replicate (length retSig) defaultValue) of
-              None \<Rightarrow> (error (STR ''Should be dead code'') G1, L1, F1, [])
-              | Some Lsub1 \<Rightarrow>
-                (case yul_eval_statement_check_gas G1 Lsub1 F1 (YulBlock body) of
-                  (G2, Lsub2, _, mode) \<Rightarrow> 
-                  (if isError G2 then (G2, L1, F1, [])
-                    else 
-                    (case get_values Lsub2 (strip_id_types retSig) of
-                      None \<Rightarrow> (error(STR ''Return arity mismatch for '' @@ name) G2, L1, F1, [])
-                      | Some retVals \<Rightarrow> (G2, L1, F1, retVals))))))))"
+(* function calls consume fuel *)
+| "yul_eval_expression (YulFunctionCallExpression (YulFunctionCall name args)) 0 r =
+    r"
+
+(* G L F m vso *)
+(* G1 (L1h#L1t) (F1h#F1t) m1 vso1 *)
+
+(* TODO: double check details around threading of function context and mode *)
+| "yul_eval_expression (YulFunctionCallExpression (YulFunctionCall name args)) (Suc n)
+                       (YulResult r) =
+   (case yul_eval_expressions args n (YulResult r) of
+    ErrorResult s \<Rightarrow> ErrorResult s
+    | YulResult r1 \<Rightarrow> 
+      (case funs r of [] \<Rightarrow> ErrorResult (STR ''No function context'')
+       | F1h#F1t \<Rightarrow>
+        (case locals r of [] \<Rightarrow> ErrorResult (STR ''No local context'')
+        | L1h#L1t \<Rightarrow>
+          (case F1h name of
+            None \<Rightarrow> (ErrorResult (STR ''Undefined function '' @@ name))
+            | (Some (YulFunctionSig argSig retSig body)) \<Rightarrow>
+              (case vals r of
+                None \<Rightarrow> ErrorResult (STR ''invalid eval context (YulFunctionCallExpression)'')
+                | Some vs \<Rightarrow>
+                  (case put_values L1h (strip_id_types argSig) vs of
+                    None \<Rightarrow> (ErrorResult (STR ''Argument arity mismatch for '' @@ name))
+                    | Some Lsub \<Rightarrow>
+                      (case put_values Lsub (strip_id_types retSig) 
+                                            (List.replicate (length retSig) defaultValue) of
+                        None \<Rightarrow> (ErrorResult (STR ''Should be dead code''))
+                        | Some Lsub1 \<Rightarrow>
+                          (case yul_eval_statement (YulBlock body) n
+                                                   (YulResult (r1 \<lparr> locals := (Lsub1#L1h#L1t)\<rparr>)) of
+                            ErrorResult r \<Rightarrow> ErrorResult r
+                            | YulResult r2 \<Rightarrow>
+                              (case get_values Lsub2 (strip_id_types retSig) of
+                                None \<Rightarrow> ErrorResult (STR ''Return arity mismatch for '' @@ name)
+                                | Some retVals \<Rightarrow> 
+                                  YulResult (r2 \<lparr> locals := L1h#L1t
+                                                , mode := None
+                                                , vals := (Some retVals)\<rparr> ))))))))))"
+| "yul_eval_expression _ _ (ErrorResult e) = ErrorResult e"
 
 (*
  * helper: "canonicalized" switch
  *)
-(*
- * TODO: handle gas consumption of switch cases
- *)
-| "yul_eval_canonical_switch G L F condValue
-    (YulSwitchCanonical e [] dfl) =
-    (yul_eval_statements G L F dfl)"
+| "yul_eval_canonical_switch (YulSwitchCanonical e [] dfl) n (YulResult r) =
+    (yul_eval_statements dfl n (YulResult r))"
 (* canonicalization guarantees no defaults remain in cases list *)
-| "yul_eval_canonical_switch G L F condValue
-    (YulSwitchCanonical e (YulSwitchCase None _ # _) _) = 
-    (error (STR ''Non canonical switch statement'') G, L, F, Regular)"
-| "yul_eval_canonical_switch G L F condValue
-    (YulSwitchCanonical e (YulSwitchCase (Some (YulLiteral hdValue _)) hdBody # rest) dfl) =
-    (case parseLiteral hdValue of
-      None \<Rightarrow> (error (STR ''Bad literal '' @@ hdValue) G, L, F, Regular)
-      | Some v \<Rightarrow>
-        (if valueEq v condValue
-         then yul_eval_statements G L F hdBody
-         else yul_eval_canonical_switch G L F condValue (YulSwitchCanonical e rest dfl)))"
+| "yul_eval_canonical_switch (YulSwitchCanonical e (YulSwitchCase None _ # _) _) _ _ = 
+    (ErrorResult (STR ''Non canonical switch statement''))"
+| "yul_eval_canonical_switch 
+    (YulSwitchCanonical e (YulSwitchCase (Some (YulLiteral hdValue _)) hdBody # rest) dfl) n 
+      (YulResult r) =
+    (case vals r of
+      Some [condValue] \<Rightarrow>
+        (case parseLiteral hdValue of
+          None \<Rightarrow> ErrorResult (STR ''Bad literal '' @@ hdValue)
+          | Some v \<Rightarrow>
+            (if valueEq v condValue
+             then yul_eval_statements hdBody n (YulResult r)
+             else yul_eval_canonical_switch (YulSwitchCanonical e rest dfl) n (YulResult r)))
+      | _ \<Rightarrow> ErrorResult (STR ''Bad switch condition''))"
 
 (* 
  * helper: statement list
  *)
-| "yul_eval_statements G L F [] = (G, L, F, Regular)"
-| "yul_eval_statements G L F (sh#st) =
-   (case yul_eval_statement G L F sh of
-    (G1, L1, F1, Regular) \<Rightarrow> 
+| "yul_eval_statements [] n (YulResult r) = (YulResult (r \<lparr> mode := Some Regular \<rparr>))"
+| "yul_eval_statements (sh#st) n (YulResult r) =
+   (case yul_eval_statement sh n (YulResult r) of
+    YulResult r1 \<Rightarrow> 
+
+    | ErrorResult s \<Rightarrow> ErrorResult s
+
       (if isError G1 then (G1, L1, F1, Regular)
        else yul_eval_statements G1 L1 F1 st)
     | (G1, L1, F1, mode) \<Rightarrow> (G1, L1, F1, mode))"
