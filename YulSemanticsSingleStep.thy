@@ -73,6 +73,9 @@ fixes F0 :: "function_sig locals"
 
 begin
 
+(* convenient package errors with a dummy empty continuation *)
+abbreviation ErrorResult' where
+"ErrorResult' emsg \<equiv> (ErrorResult emsg, [])"
 
 (* TODO: review the way mode is being threaded *)
 (* TODO: some of the places where we are swapping between "yul expression states"

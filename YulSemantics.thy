@@ -265,9 +265,6 @@ and yul_eval_canonical_switch ::
 | "yul_eval_expression (YulFunctionCallExpression (YulFunctionCall name args)) 0 r =
     r"
 
-(* G L F m vso *)
-(* G1 (L1h#L1t) (F1h#F1t) m1 vso1 *)
-
 (* TODO: double check details around threading of function context and mode *)
 | "yul_eval_expression (YulFunctionCallExpression (YulFunctionCall name args)) (Suc n)
                        (YulResult r) =
@@ -295,12 +292,15 @@ and yul_eval_canonical_switch ::
                                                    (YulResult (r1 \<lparr> locals := (Lsub1#L1h#L1t)\<rparr>)) of
                             ErrorResult r \<Rightarrow> ErrorResult r
                             | YulResult r2 \<Rightarrow>
-                              (case get_values Lsub2 (strip_id_types retSig) of
-                                None \<Rightarrow> ErrorResult (STR ''Return arity mismatch for '' @@ name)
-                                | Some retVals \<Rightarrow> 
-                                  YulResult (r2 \<lparr> locals := L1h#L1t
-                                                , mode := None
-                                                , vals := (Some retVals)\<rparr> ))))))))))"
+                              (case locals r2 of
+                                [] \<Rightarrow> ErrorResult (STR ''No local context after call'')
+                                | Lsub2#_ \<Rightarrow>
+                                  (case get_values Lsub2 (strip_id_types retSig) of
+                                    None \<Rightarrow> ErrorResult (STR ''Return arity mismatch for '' @@ name)
+                                    | Some retVals \<Rightarrow> 
+                                      YulResult (r2 \<lparr> locals := L1h#L1t
+                                                    , mode := None
+                                                    , vals := (Some retVals)\<rparr> )))))))))))"
 | "yul_eval_expression _ _ (ErrorResult e) = ErrorResult e"
 
 (*
@@ -319,7 +319,7 @@ and yul_eval_canonical_switch ::
         (case parseLiteral hdValue of
           None \<Rightarrow> ErrorResult (STR ''Bad literal '' @@ hdValue)
           | Some v \<Rightarrow>
-            (if valueEq v condValue
+            (if v = condValue
              then yul_eval_statements hdBody n (YulResult r)
              else yul_eval_canonical_switch (YulSwitchCanonical e rest dfl) n (YulResult r)))
       | _ \<Rightarrow> ErrorResult (STR ''Bad switch condition''))"
@@ -334,21 +334,13 @@ and yul_eval_canonical_switch ::
     YulResult r1 \<Rightarrow> 
       (if mode r1 = Some Regular
        then yul_eval_statements st n (YulResult r1)
-       else r1)
+       else YulResult r1)
     | ErrorResult s \<Rightarrow> ErrorResult s)"
 | "yul_eval_statements _ _ (ErrorResult s) = ErrorResult s"
 
 
 (* helper: blocks
    (handle scoping, function gathering *)
-(*
-| "yul_eval_block
-*)
-(*
- * statement
- *)
-
-(* have a separate yul_eval_block function? *)
 
 (* blocks *)
 
@@ -365,7 +357,7 @@ and yul_eval_canonical_switch ::
 (* function call statement *)
 | "yul_eval_statement (YulFunctionCallStatement fc) n (YulResult r) =
     (case yul_eval_expression (YulFunctionCallExpression fc) n (YulResult r) of  
-      YulResult r1 \<Rightarrow> YulResult (r1 \<lparr> mode := Regular, vals := None \<rparr>)
+      YulResult r1 \<Rightarrow> YulResult (r1 \<lparr> mode := Some Regular, vals := None \<rparr>)
       | ErrorResult s \<Rightarrow> ErrorResult s)"
 
 (* variable declarations without definition *)
@@ -382,7 +374,7 @@ and yul_eval_canonical_switch ::
 (* variable declaration + definition *)
 | "yul_eval_statement (YulVariableDeclarationStatement (YulVariableDeclaration names (Some expr))) n
                       (YulResult r) =
-   yul_eval_statement (YulAssignmentStatement (YulAssignment (strip_id_types names) expr)) y
+   yul_eval_statement (YulAssignmentStatement (YulAssignment (strip_id_types names) expr)) n
                       (YulResult r)"
 
 (* assignments *)
@@ -468,11 +460,9 @@ and yul_eval_canonical_switch ::
     (case yul_eval_expression e n (YulResult r) of
       ErrorResult s \<Rightarrow> ErrorResult s
       | YulResult r1 \<Rightarrow>
-        (case vals r1 of
-          Some [result] \<Rightarrow>
-            (case canonicalizeSwitch e cl None of
-              Some canonical \<Rightarrow> yul_eval_canonical_switch result canonical (YulResult r1)
-              | None \<Rightarrow> ErrorResult (STR ''Invalid switch statement''))))"
+        (case canonicalizeSwitch e cl None of
+          Some canonical \<Rightarrow> yul_eval_canonical_switch canonical n (YulResult r1)
+          | None \<Rightarrow> ErrorResult (STR ''Invalid switch statement'')))"
  
 (* break *)
 | "yul_eval_statement YulBreak n (YulResult r) = 
