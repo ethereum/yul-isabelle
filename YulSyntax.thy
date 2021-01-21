@@ -4,34 +4,46 @@ begin
 
 
 type_synonym YulIdentifier = String.literal
-type_synonym YulType = String.literal
+(* type_synonym YulType = String.literal *)
 (* TODO: in the future we may need to change this type. *)
 type_synonym YulLiteralValue = String.literal
-datatype YulLiteral = YulLiteral YulLiteralValue YulType
-datatype YulTypedName = YulTypedName String.literal YulType
-datatype YulFunctionCall = YulFunctionCall (YulFunctionCallName: YulIdentifier) (YulFunctionCallArguments: "YulExpression list")
-     and YulExpression = YulFunctionCallExpression YulFunctionCall | YulIdentifier YulIdentifier | YulLiteralExpression YulLiteral
-datatype YulAssignment = YulAssignment "YulIdentifier list" YulExpression
-datatype YulVariableDeclaration = YulVariableDeclaration "YulTypedName list" "YulExpression option"
+datatype ('v, 't) YulLiteral = YulLiteral 'v 't
+datatype 't YulTypedName = YulTypedName String.literal 't
+datatype 
+  ('v, 't) YulFunctionCall =
+  YulFunctionCall (YulFunctionCallName: YulIdentifier) 
+                  (YulFunctionCallArguments: "('v, 't) YulExpression list")
+and ('v, 't) YulExpression = YulFunctionCallExpression "('v, 't) YulFunctionCall"
+     | YulIdentifier YulIdentifier
+     | YulLiteralExpression "('v, 't) YulLiteral"
 
-datatype YulStatement =
-  YulFunctionCallStatement YulFunctionCall |
-  YulAssignmentStatement YulAssignment |
-  YulVariableDeclarationStatement YulVariableDeclaration |
-  YulFunctionDefinitionStatement YulFunctionDefinition |
-  YulIf (YulIfCondition: YulExpression) (YulIfBody: "YulStatement list") |
-  YulSwitch (YulSwitchExpression: YulExpression) (YulSwitchCases: "YulSwitchCase list") |
-  YulForLoop (YulForLoopPre: "YulStatement list") (YulForLoopCondition: YulExpression) (YulForLoopPost: "YulStatement list") (YulForLoopBody: "YulStatement list")|
+datatype ('v, 't) YulAssignment = YulAssignment "YulIdentifier list" "('v, 't) YulExpression"
+datatype ('v, 't) YulVariableDeclaration = YulVariableDeclaration
+                                           "'t YulTypedName list" "('v, 't) YulExpression option"
+
+datatype ('v, 't) YulStatement =
+  YulFunctionCallStatement "('v, 't) YulFunctionCall" |
+  YulAssignmentStatement "('v, 't) YulAssignment" |
+  YulVariableDeclarationStatement "('v, 't) YulVariableDeclaration" |
+  YulFunctionDefinitionStatement "('v, 't) YulFunctionDefinition" |
+  YulIf (YulIfCondition: "('v, 't) YulExpression") (YulIfBody: "('v, 't) YulStatement list") |
+  YulSwitch (YulSwitchExpression: "('v, 't) YulExpression") 
+            (YulSwitchCases: "('v, 't) YulSwitchCase list") |
+  YulForLoop (YulForLoopPre: "('v, 't) YulStatement list") 
+             (YulForLoopCondition: "('v, 't) YulExpression") 
+             (YulForLoopPost: "('v, 't) YulStatement list") 
+             (YulForLoopBody: "('v, 't) YulStatement list")|
   YulBreak |
   YulContinue |
   YulLeave |
-  YulBlock (YulBlockStatements: "YulStatement list")
-and YulSwitchCase = YulSwitchCase (YulSwitchCaseValue: "YulLiteral option") (YulSwitchCaseBody: "YulStatement list")
-and YulFunctionDefinition = YulFunctionDefinition
-  (YulFunctionDefinitionName: YulIdentifier)
-  (YulFunctionDefinitionArguments: "YulTypedName list")
-  (YulFunctionDefinitionReturnValues: "YulTypedName list")
-  (YulFunctionDefinitionBody: "YulStatement list")
+  YulBlock (YulBlockStatements: "('v, 't) YulStatement list")
+and ('v, 't) YulSwitchCase = YulSwitchCase (YulSwitchCaseValue: "('v, 't) YulLiteral option")
+                                           (YulSwitchCaseBody: "('v, 't) YulStatement list")
+and ('v, 't) YulFunctionDefinition = YulFunctionDefinition
+                                      (YulFunctionDefinitionName: YulIdentifier)
+                                      (YulFunctionDefinitionArguments: "'t YulTypedName list")
+                                      (YulFunctionDefinitionReturnValues: "'t YulTypedName list")
+                                      (YulFunctionDefinitionBody: "('v, 't) YulStatement list")
 
 
 
@@ -52,15 +64,15 @@ consts YulFunctionDefinition :: "YulIdentifier \<Rightarrow> YulTypedName list \
 consts YulIdentifier :: "YulIdentifier \<Rightarrow> YulExpression"
 consts YulSwitch :: "YulExpression \<Rightarrow> YulSwitchCase list \<Rightarrow> YulStatement"
 consts YulCase :: "YulLiteral \<Rightarrow> YulStatement list \<Rightarrow> YulSwitchCase" *)
-consts YulDefaultCase :: "YulStatement list \<Rightarrow> YulSwitchCase"
+consts YulDefaultCase :: "('v, 't) YulStatement list \<Rightarrow> ('v, 't) YulSwitchCase"
 (* consts YulTypedName :: "YulIdentifier \<Rightarrow> YulType \<Rightarrow> YulTypedName" *)
 abbreviation (input) YulZero where "YulZero \<equiv> 0"
 abbreviation (input) YulOne where "YulOne \<equiv> 1"
 consts YulLiteralNumber :: "256 word \<Rightarrow> YulLiteralValue"
-consts YulUserDefinedType :: "String.literal \<Rightarrow> YulType"
-consts YulTypeUint256 :: YulType
-consts YulTypeBool :: YulType
-consts YulDefaultType :: YulType
+consts YulUserDefinedType :: "String.literal \<Rightarrow> 't"
+consts YulTypeUint256 :: 't
+consts YulTypeBool :: 't
+consts YulDefaultType :: 't
 consts YulStringLiteral :: "String.literal \<Rightarrow> YulLiteralValue"
 consts YulBoolTrueLiteral :: "YulLiteralValue"
 consts YulBoolFalseLiteral :: "YulLiteralValue"
@@ -94,7 +106,7 @@ nonterminal yul_function_definition
 
 abbreviation (input) YulNegativeLiteralNumber where "YulNegativeLiteralNumber \<equiv> (\<lambda> x . YulLiteralNumber (-x))"
 
-syntax YulBlock :: "yul_statements \<Rightarrow> YulStatement" ("YUL{_}")
+syntax YulBlock :: "yul_statements \<Rightarrow> ('v, 't) YulStatement" ("YUL{_}")
 syntax "" :: "yul_statement \<Rightarrow> any" ("YUL'_STMT'{_'}")
 syntax "" :: "yul_expression \<Rightarrow> any" ("YUL'_EXPR'{_'}")
 

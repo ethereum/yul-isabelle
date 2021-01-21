@@ -8,11 +8,16 @@ datatype mode =
   | Continue
   | Leave
 
-datatype function_sig =
+(* allow direct access to locals? *)
+datatype ('g, 'v, 't) YulFunctionBody =
+  YulBuiltin "'g \<Rightarrow> 'v list \<Rightarrow> (('g * 'v list) + String.literal)"
+  | YulFunction "('v, 't) YulStatement list"
+
+datatype ('g, 'v, 't) function_sig =
   YulFunctionSig
-  (YulFunctionSigArguments: "YulTypedName list")
-  (YulFunctionSigReturnValues: "YulTypedName list")
-  (YulFunctionSigBody: "YulStatement list")
+  (YulFunctionSigArguments: "'t YulTypedName list")
+  (YulFunctionSigReturnValues: "'t YulTypedName list")
+  (YulFunctionSigBody: "('g, 'v, 't) YulFunctionBody")
 
 type_synonym 'v locals = "YulIdentifier \<Rightarrow> 'v option"
 
@@ -25,10 +30,10 @@ definition restrict :: "'v locals \<Rightarrow> 'v locals \<Rightarrow> 'v local
   (if e2 i = None then None
       else e1 i)"
 
-fun strip_id_type :: "YulTypedName \<Rightarrow> YulIdentifier" where
+fun strip_id_type :: "'t YulTypedName \<Rightarrow> YulIdentifier" where
 "strip_id_type (YulTypedName name type) = name"
 
-fun strip_id_types :: "YulTypedName list \<Rightarrow> YulIdentifier list" where
+fun strip_id_types :: "'t YulTypedName list \<Rightarrow> YulIdentifier list" where
 "strip_id_types l =
   List.map strip_id_type l"
 
@@ -51,29 +56,44 @@ fun get_values :: "'v locals \<Rightarrow> YulIdentifier list \<Rightarrow> 'v l
 syntax plus_literal_inst.plus_literal :: "String.literal \<Rightarrow> String.literal \<Rightarrow> String.literal"
   ("_ @@ _")
 
-record ('g, 'v) result =
+(* store results of yul statements *)
+record ('g, 'v, 't) result =
   global :: "'g"
   locals :: "'v locals list"
-  funs :: "function_sig locals list"
-  mode :: "mode option"
-  vals :: "'v list option"
+  (* value stack, used within expression evaluation, as well as
+     for assignments and function arguments *)
+  stack :: "'v list"  
+  funs :: "('g, 'v, 't) function_sig locals list"
+  (* TODO: this was a mode option *)
+  mode :: "mode"
 
-datatype ('g, 'v) YulResult =
-  YulResult "('g, 'v) result"
-  | ErrorResult "String.literal"
+datatype ('g, 'v, 't, 'z) YulResult =
+  YulResult "('g, 'v, 't, 'z) result_scheme"
+  (* errors can optionally carry failed state *)
+  | ErrorResult "String.literal" "('g, 'v, 't, 'z) result_scheme option"
 
-fun gatherYulFunctions :: "YulStatement list \<Rightarrow> ('g, 'v) YulResult \<Rightarrow> ('g, 'v) YulResult" where
+fun gatherYulFunctions :: "('v, 't) YulStatement list \<Rightarrow> 
+                           ('g, 'v, 't, 'z) YulResult \<Rightarrow>
+                           ('g, 'v, 't, 'z) YulResult" where
 "gatherYulFunctions [] yr = yr"
 | "gatherYulFunctions 
     ((YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body))#t)
      (YulResult r) =
      (case funs r of
-      [] \<Rightarrow> ErrorResult (STR ''empty function context'')
+      [] \<Rightarrow> ErrorResult (STR ''empty function context'') (Some r)
       | F#Ft \<Rightarrow>
        gatherYulFunctions t
-        (YulResult (r \<lparr> funs := (put_value F name (YulFunctionSig args rets body) # Ft) \<rparr>)))"
+        (YulResult (r \<lparr> funs := (put_value F name 
+                                          (YulFunctionSig args rets (YulFunction body)) # Ft) \<rparr>)))"
 | "gatherYulFunctions (_#t) r =
     gatherYulFunctions t r"
 
+(* "locale parameters" passed to Yul semantics
+   (capture behaviors needed by certain control primitives) *)
+record ('g, 'v, 't) YulDialect =
+  is_truthy :: "'v \<Rightarrow> bool"
+  init_state :: "'g"
+  default_val :: "'v"
+  builtins :: "('g, 'v, 't) function_sig locals"
 
 end
