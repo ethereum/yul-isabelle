@@ -53,6 +53,11 @@ fun get_values :: "'v locals \<Rightarrow> YulIdentifier list \<Rightarrow> 'v l
 "get_values L ids =
    List.those (List.map L (ids))"
 
+fun make_locals :: "(YulIdentifier * 'v) list \<Rightarrow> 'v locals" where
+"make_locals [] = locals_empty"
+| "make_locals ((ih, vh)#t) =
+    put_value (make_locals t) ih vh"
+
 syntax plus_literal_inst.plus_literal :: "String.literal \<Rightarrow> String.literal \<Rightarrow> String.literal"
   ("_ @@ _")
 
@@ -65,7 +70,7 @@ record ('g, 'v, 't) result =
   stack :: "'v list"  
   funs :: "('g, 'v, 't) function_sig locals list"
   (* TODO: this was a mode option *)
-  mode :: "mode"
+  (*mode :: "mode"*)
 
 datatype ('g, 'v, 't, 'z) YulResult =
   YulResult "('g, 'v, 't, 'z) result_scheme"

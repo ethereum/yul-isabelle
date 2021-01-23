@@ -6,7 +6,7 @@ begin
 type_synonym YulIdentifier = String.literal
 (* type_synonym YulType = String.literal *)
 (* TODO: in the future we may need to change this type. *)
-type_synonym YulLiteralValue = String.literal
+type_synonym 'v YulLiteralValue = 'v
 datatype ('v, 't) YulLiteral = YulLiteral 'v 't
 datatype 't YulTypedName = YulTypedName String.literal 't
 datatype 
@@ -68,14 +68,14 @@ consts YulDefaultCase :: "('v, 't) YulStatement list \<Rightarrow> ('v, 't) YulS
 (* consts YulTypedName :: "YulIdentifier \<Rightarrow> YulType \<Rightarrow> YulTypedName" *)
 abbreviation (input) YulZero where "YulZero \<equiv> 0"
 abbreviation (input) YulOne where "YulOne \<equiv> 1"
-consts YulLiteralNumber :: "256 word \<Rightarrow> YulLiteralValue"
+consts YulLiteralNumber :: "256 word \<Rightarrow> 'v YulLiteralValue"
 consts YulUserDefinedType :: "String.literal \<Rightarrow> 't"
 consts YulTypeUint256 :: 't
 consts YulTypeBool :: 't
 consts YulDefaultType :: 't
-consts YulStringLiteral :: "String.literal \<Rightarrow> YulLiteralValue"
-consts YulBoolTrueLiteral :: "YulLiteralValue"
-consts YulBoolFalseLiteral :: "YulLiteralValue"
+consts YulStringLiteral :: "String.literal \<Rightarrow> 'v YulLiteralValue"
+consts YulBoolTrueLiteral :: "'v YulLiteralValue"
+consts YulBoolFalseLiteral :: "'v YulLiteralValue"
 
 
 nonterminal yul_typed_literal
