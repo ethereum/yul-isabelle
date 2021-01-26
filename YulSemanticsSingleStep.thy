@@ -1,6 +1,12 @@
 theory YulSemanticsSingleStep imports "YulSemanticsCommon"
 begin
 
+(* TODOS:
+   - change locals representation to state map + visible vars
+   - add a function frames component to state (will capture locals + value stack)
+
+*)
+
 (* For functions: search through a list of locals
    (corresponding to successive scopes) *)
 (* Perhaps we don't need this, going to see if we can do without *)
@@ -9,22 +15,57 @@ begin
    in terms of small increments. *)
 
 (* stack used to represent computation remaining after this step *)
-(* need to handle block *)
-datatype ('v, 't) StackEl =
+(* 'v locals parameter handles scope restriction 
+   (i.e. what locals looked like in terms of declared vars,
+    before this expression was entered)
+   'v function_sig locals is the same, but for function sigs
+   perhaps we also need one for resetting the value stack
+*)
+datatype ('g, 'v, 't) StackEl =
   EnterStatement "('v, 't) YulStatement"
-  | ExitStatement "('v, 't) YulStatement"
+  | ExitStatement "('v, 't) YulStatement" "'v locals" "('g, 'v, 't) function_sig locals"
   | EnterExpression "('v, 't) YulExpression"
-  | ExitExpression "('v, 't) YulExpression"
+  | ExitExpression "('v, 't) YulExpression" "'v locals" "('g, 'v, 't) function_sig locals"
+(*  | ExitScope "vset" *)
 
 type_synonym errf = "String.literal option"
 
-
 record ('g, 'v, 't) result =
   "('g, 'v, 't) YulSemanticsCommon.result" +
-  cont :: "('v, 't) StackEl list"
+  cont :: "('g, 'v, 't) StackEl list"
 
 type_synonym ('g, 'v, 't) YulResult =
-  "('g, 'v, 't, \<lparr>cont :: ('v, 't) StackEl list\<rparr>) YulResult"
+  "('g, 'v, 't, \<lparr>cont :: ('g, 'v, 't) StackEl list\<rparr>) YulResult"
+
+(* we need to have a stack element for cleaning up fun ctxt *)
+(*
+fun gatherYulFunctions :: "('v, 't) YulStatement list \<Rightarrow> 
+                           ('g, 'v, 't, 'z) YulResult \<Rightarrow>
+                           ('g, 'v, 't) function_sig list" where
+"gatherYulFunctions [] yr = yr"
+| "gatherYulFunctions 
+    ((YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body))#t)
+     (YulResult r) =
+     gatherYulFunctions t
+      (YulResult (r \<lparr> funs := (put_value (funs r) name 
+                              (YulFunctionSig args rets (YulFunction body)))
+                    , cont :=  \<rparr>))"
+| "gatherYulFunctions (_#t) r =
+    gatherYulFunctions t r"
+*)
+
+fun gatherYulFunctions :: "('g, 'v, 't) function_sig locals \<Rightarrow>
+                           ('v, 't) YulStatement list \<Rightarrow> 
+                           ('g, 'v, 't) function_sig locals" where
+"gatherYulFunctions F [] = F"
+| "gatherYulFunctions F
+    ((YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body))#t) =
+    put_value (gatherYulFunctions F t)
+              name
+              (YulFunctionSig args rets (YulFunction body))"
+| "gatherYulFunctions F (_#t) =
+    gatherYulFunctions F t"
+    
 
 (* TODO: review the way mode is being threaded *)
 (* TODO: some of the places where we are swapping between "yul expression states"
@@ -38,8 +79,9 @@ fun evalYulStatement ::
 "evalYulStatement _ _ (ErrorResult emsg x) = (ErrorResult emsg x)"
 
 | "evalYulStatement D st (YulResult r) =
-   YulResult (r \<lparr> cont := EnterStatement st # ExitStatement st # cont r \<rparr>)"
+   YulResult (r \<lparr> cont := EnterStatement st # ExitStatement st (locals r) (funs r) # cont r \<rparr>)"
 
+(* where do we put the exitScope? *)
 fun evalYulExpression ::
 "('g, 'v, 't) YulDialect \<Rightarrow>
  ('v, 't) YulExpression \<Rightarrow>
@@ -47,18 +89,13 @@ fun evalYulExpression ::
  ('g, 'v, 't) YulResult" where
 "evalYulExpression _ _ (ErrorResult e x) = (ErrorResult e x)"
 | "evalYulExpression _ e (YulResult r) =
-   YulResult (r \<lparr> cont := EnterExpression e # ExitExpression e # cont r \<rparr>)"
+   YulResult (r \<lparr> cont := EnterExpression e # ExitExpression e (locals r) (funs r) # cont r \<rparr>)"
+
+(* TODO: now entering scope means
+   - creating a stack element (exit scope) that contains the set of variables
+     we need to restrict back to *)
 
 (*
-yulExitScope D (YulResult (r \<lparr> stack := vs
-                                   , cont := (EnterStatement (YulBlock post) #
-                                              ExitStatement (YulBlock post) #cont r) \<rparr>))
-*)
-(* need to exit out of scopes (blocks)
-   if we hit an end of function definition this should be an error
-   for break/continue
-   do we need to exit out of loop init scopes? *)
-
 fun yulEnterScope :: "('g, 'v, 't) YulDialect \<Rightarrow>
                       ('v, 't) YulStatement list \<Rightarrow>
                       ('g, 'v, 't) YulResult \<Rightarrow>
@@ -73,6 +110,9 @@ fun yulEnterScope :: "('g, 'v, 't) YulDialect \<Rightarrow>
         | Fh#Ft \<Rightarrow> gatherYulFunctions sl 
                     (YulResult (r \<lparr> locals := Lh#Lh#Lt, funs := Fh#Fh#Ft \<rparr>))))"
 
+(* TODO: now exiting scope means
+   restricting back *)
+
 fun yulExitScope :: "('g, 'v, 't) YulDialect \<Rightarrow>
                      ('g, 'v, 't) YulResult \<Rightarrow>
                      ('g, 'v, 't) YulResult" where
@@ -84,7 +124,7 @@ fun yulExitScope :: "('g, 'v, 't) YulDialect \<Rightarrow>
       (case funs r of
         [] \<Rightarrow> ErrorResult (STR ''Empty funs stack (when exiting scope)'') (Some r)
         | Fh#Ft \<Rightarrow> YulResult (r \<lparr> locals := Lt, funs := Ft \<rparr>)))"
-
+*)
 (* when exiting a break/continue/leave:
    - burn through everything until loop body/fun exit (?) *)
 
@@ -94,6 +134,7 @@ fun yulExitScope :: "('g, 'v, 't) YulDialect \<Rightarrow>
 (* nat argument tracks depth of nesting of blocks *)
 (* TODO: make sure we handle the pathological case of
    break inside a function body (with no loop) *)
+(*
 fun yulBreak :: "('g, 'v, 't) YulDialect \<Rightarrow>
                  ('v, 't) StackEl list \<Rightarrow>
                  nat \<Rightarrow>
@@ -140,7 +181,7 @@ fun yulContinue :: "('g, 'v, 't) YulDialect \<Rightarrow>
    YulResult (r \<lparr> cont := ((EnterExpression cond1 # ExitExpression cond2 # 
       ExitStatement (YulForLoop pre cond post body) # ct))\<rparr>)"
 | "yulContinue D (ch#ct) n (YulResult r) = yulContinue D ct n (YulResult (r \<lparr> cont := ct \<rparr>))"
-
+*)
 (* first nat counts scopes
    note that because function calls won't yet be expanded out from statements into
    expressions, there shouldn't be a need for this kind of tracking for function
