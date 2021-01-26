@@ -134,82 +134,49 @@ fun yulExitScope :: "('g, 'v, 't) YulDialect \<Rightarrow>
 (* nat argument tracks depth of nesting of blocks *)
 (* TODO: make sure we handle the pathological case of
    break inside a function body (with no loop) *)
-(*
+
 fun yulBreak :: "('g, 'v, 't) YulDialect \<Rightarrow>
-                 ('v, 't) StackEl list \<Rightarrow>
-                 nat \<Rightarrow>
+                 ('g, 'v, 't) StackEl list \<Rightarrow>
                  ('g, 'v, 't) YulResult \<Rightarrow>
                  ('g, 'v, 't) YulResult" where
-"yulBreak D _ _ (ErrorResult e msg) = ErrorResult e msg"
-| "yulBreak D [] _ (YulResult r) = ErrorResult (STR ''Break outside loop body'') (Some r)"
-(* if we haven't gone into any blocks, we need to keep the scope exit. *)
-| "yulBreak D (ExitStatement (YulBlock st) # ct) 0 (YulResult r) = 
-    (case yulBreak D ct 0 (YulResult (r \<lparr> cont := ct \<rparr>)) of
-      ErrorResult e msg \<Rightarrow> ErrorResult e msg
-      | YulResult r' \<Rightarrow> YulResult (r \<lparr> cont := ExitStatement (YulBlock st) # cont r' \<rparr>))"
-(* maintain counter for block depth *)
-| "yulBreak D (ExitStatement (YulBlock st) # ct) (Suc n') (YulResult r) =
-    yulBreak D ct n' (YulResult (r \<lparr> cont := ct \<rparr>))"
-| "yulBreak D (EnterStatement (YulBlock st) # ct) n (YulResult r) =
-    yulBreak D ct (Suc n) (YulResult (r \<lparr> cont := ct \<rparr>))"
-(* could check for mismatched block depth here, probably don't need to *)
-| "yulBreak D (EnterExpression cond1 # ExitExpression cond2 # 
-      ExitStatement (YulForLoop pre cond post body) # ct) _ (YulResult r) =
-      yulExitScope D (YulResult (r \<lparr> cont := ct \<rparr>))"
-| "yulBreak D (ch#ct) n (YulResult r) = yulBreak D ct n (YulResult (r \<lparr> cont := ct \<rparr>))"
+"yulBreak D _ (ErrorResult e msg) = ErrorResult e msg"
+| "yulBreak D [] (YulResult r) = ErrorResult (STR ''Break outside loop body'') (Some r)"
+| "yulBreak D (EnterExpression cond1 # ExitExpression cond2 _ _ # 
+      ExitStatement (YulForLoop pre cond post body) c' f' # ct) (YulResult r) =
+      YulResult (r \<lparr> cont := ExitStatement (YulBlock []) c' f' # ct \<rparr>)"
+| "yulBreak D (ch#ct) (YulResult r) = yulBreak D ct (YulResult (r \<lparr> cont := ct \<rparr>))"
 
 fun yulContinue :: "('g, 'v, 't) YulDialect \<Rightarrow>
-                    ('v, 't) StackEl list \<Rightarrow>
-                    nat \<Rightarrow>
+                    ('g, 'v, 't) StackEl list \<Rightarrow>
                     ('g, 'v, 't) YulResult \<Rightarrow>
                     ('g, 'v, 't) YulResult" where
-"yulContinue D _ _ (ErrorResult e msg) = ErrorResult e msg"
-| "yulContinue D [] _ (YulResult r) = ErrorResult (STR ''Continue outside loop body'') (Some r)"
-(* if we haven't gone into any blocks we need to keep the scope exit *)
-| "yulContinue D (ExitStatement (YulBlock st) # ct) 0 (YulResult r) = 
-    (case yulContinue D ct 0 (YulResult (r \<lparr> cont := ct \<rparr>)) of
-      ErrorResult e msg \<Rightarrow> ErrorResult e msg
-      | YulResult r' \<Rightarrow> YulResult (r \<lparr> cont := ExitStatement (YulBlock st) # cont r' \<rparr>))"
-(* maintain counter for block depth *)
-| "yulContinue D (ExitStatement (YulBlock st) # ct) (Suc n') (YulResult r) =
-    yulContinue D ct n' (YulResult (r \<lparr> cont := ct \<rparr>))"
-| "yulContinue D (EnterStatement (YulBlock st) # ct) n (YulResult r) =
-    yulContinue D ct (Suc n) (YulResult (r \<lparr> cont := ct \<rparr>))"
+"yulContinue D _ (ErrorResult e msg) = ErrorResult e msg"
+| "yulContinue D [] (YulResult r) = ErrorResult (STR ''Continue outside loop body'') (Some r)"
 (* could check for mismatched block depth here, probably don't need to *)
-| "yulContinue D (EnterExpression cond1 # ExitExpression cond2 # 
-      ExitStatement (YulForLoop pre cond post body) # ct) _ (YulResult r) =
-   YulResult (r \<lparr> cont := ((EnterExpression cond1 # ExitExpression cond2 # 
-      ExitStatement (YulForLoop pre cond post body) # ct))\<rparr>)"
-| "yulContinue D (ch#ct) n (YulResult r) = yulContinue D ct n (YulResult (r \<lparr> cont := ct \<rparr>))"
-*)
-(* first nat counts scopes
-   note that because function calls won't yet be expanded out from statements into
-   expressions, there shouldn't be a need for this kind of tracking for function
-   enter/exit.*)
-(*
+| "yulContinue D (EnterExpression cond1 # ExitExpression cond2 f2 c2 # 
+      ExitStatement (YulForLoop pre cond post body) f' c' # ct)  (YulResult r) =
+   YulResult (r \<lparr> cont := ((EnterExpression cond1 # ExitExpression cond2 f2 c2 # 
+      ExitStatement (YulForLoop pre cond post body) f' c' # ct))\<rparr>)"
+| "yulContinue D (ch#ct) (YulResult r) = yulContinue D ct (YulResult (r \<lparr> cont := ct \<rparr>))"
+
 fun yulLeave :: "('g, 'v, 't) YulDialect \<Rightarrow>
-                 ('v, 't) StackEl list \<Rightarrow>
-                 nat \<Rightarrow>
+                 ('g, 'v, 't) StackEl list \<Rightarrow>
                  ('g, 'v, 't) YulResult \<Rightarrow>
                  ('g, 'v, 't) YulResult" where
-"yulLeave D _ _ (ErrorResult e msg) = ErrorResult e msg"
-| "yulLeave D [] _ (YulResult r) = ErrorResult (STR ''Leave outside function body'') (Some r)"
-(* the first function exit we see, we will need to keep (and stop recursing) *)
-| "yulLeave D ((ExitExpression (YulFunctionCallStatement fc))#ct) 0 (YulResult r) =
-   YulResult (r \<lparr> cont := ((ExitExpression (YulFunctionCallStatement fc))#ct) \<rparr>)"
-| "yulLeave D ((ExitExpression (YulFunctionCallStatement fc))#ct) _ (YulResult r) =
-   ErrorResult (STR ''Saw function return but block-scopes within function were still open'')
-               (Some r)"
+"yulLeave D _ (ErrorResult e msg) = ErrorResult e msg"
+| "yulLeave D [] (YulResult r) = ErrorResult (STR ''Leave outside function body'') (Some r)"
+| "yulLeave D ((ExitExpression (YulFunctionCallExpression fc) f' c')#ct) (YulResult r) =
+   YulResult (r \<lparr> cont := ((ExitExpression (YulFunctionCallExpression fc) f' c')#ct) \<rparr>)"
+| "yulLeave D (ch#ct) r = yulLeave D ct r"
 
-| "yulLeave D (ch#ct) = yulLeave D ct"
-*)
-
+(*
 definition yulLeave :: "('g, 'v, 't) YulDialect \<Rightarrow>
                  ('v, 't) StackEl list \<Rightarrow>
                  nat \<Rightarrow>
                  ('g, 'v, 't) YulResult \<Rightarrow>
                  ('g, 'v, 't) YulResult" where
 "yulLeave = undefined" (* TODO *)
+*)
 
 fun evalYulEnterStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
                               ('v, 't) YulStatement \<Rightarrow> 
@@ -221,26 +188,25 @@ fun evalYulEnterStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
 (* fun call \<Rightarrow> noop (delegate to expression) *)
 
 | "evalYulEnterStatement D (YulAssignmentStatement (YulAssignment ids e)) (YulResult r) =
-  YulResult (r \<lparr> cont := EnterExpression e # ExitExpression e # cont r\<rparr>)"
+  YulResult (r \<lparr> cont := EnterExpression e # 
+                         ExitExpression e (locals r) (funs r) # cont r\<rparr>)"
 
 | "evalYulEnterStatement D (YulIf cond body) (YulResult r) =
-  YulResult (r \<lparr> cont := EnterExpression cond # ExitExpression cond # cont r \<rparr>)"
+  YulResult (r \<lparr> cont := EnterExpression cond # ExitExpression cond (locals r) (funs r) # cont r \<rparr>)"
 
 | "evalYulEnterStatement D (YulSwitch cond cases) (YulResult r) =
-  YulResult (r \<lparr> cont := EnterExpression cond # ExitExpression cond # cont r \<rparr>)"
+  YulResult (r \<lparr> cont := EnterExpression cond # ExitExpression cond (locals r) (funs r) # cont r \<rparr>)"
 
 (* mode checking happens on loop exit *)
 | "evalYulEnterStatement D (YulForLoop pre cond post body) (YulResult r) = 
-  (case yulEnterScope D [] (YulResult r) of
-    ErrorResult e msg \<Rightarrow> ErrorResult e msg
-    | YulResult r' \<Rightarrow> 
-      YulResult (r' \<lparr> cont := concat (map (\<lambda> s . [EnterStatement s, ExitStatement s]) pre)
-                           @ [EnterExpression cond, ExitExpression cond] 
-                           @ cont r \<rparr>))"
+  YulResult (r \<lparr> cont := concat (map (\<lambda> s . [EnterStatement s, ExitStatement s (locals r) (funs r)]) pre)
+                           @ [EnterExpression cond, ExitExpression cond (locals r) (funs r)] 
+                           @ cont r \<rparr>)"
 
+(*
 | "evalYulEnterStatement D (YulBlock sl) (YulResult r) =
    yulEnterScope D sl (YulResult r)"
-
+*)
 | "evalYulEnterStatement _ _ (YulResult r) = (YulResult r)"
 
 (* helper functions for switch statements *)
@@ -269,12 +235,14 @@ fun nextCase ::
 *)
 fun evalYulExitStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
                              ('v, 't) YulStatement \<Rightarrow> 
+                             'v locals \<Rightarrow>
+                             ('g, 'v, 't) function_sig locals \<Rightarrow>
                              ('g, 'v, 't) YulResult \<Rightarrow>
                              ('g, 'v, 't) YulResult"
   where
 "evalYulExitStatement _ _ (ErrorResult e msg) = ErrorResult e msg"
 
-| "evalYulExitStatement D (YulAssignmentStatement (YulAssignment ids e)) (YulResult r) = 
+| "evalYulExitStatement D (YulAssignmentStatement (YulAssignment ids e)) L F (YulResult r) = 
   (case locals r of
       [] \<Rightarrow> ErrorResult (STR ''Bad locals stack (exiting assignment)'') (Some r)
       | Lh#L \<Rightarrow>
@@ -289,7 +257,7 @@ fun evalYulExitStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
     (if is_truthy D vh then 
       YulResult (r \<lparr> stack := vs
                    , cont := EnterStatement (YulBlock body) #
-                             ExitStatement (YulBlock body) # (cont r)\<rparr>)
+                             ExitStatement (YulBlock body) (locals r) (funs r) # (cont r)\<rparr>)
      else YulResult (r \<lparr> stack := vs \<rparr>)))"
 
 | "evalYulExitStatement D (YulSwitch exp scs) (YulResult r) =
