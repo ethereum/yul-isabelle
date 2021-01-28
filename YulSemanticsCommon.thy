@@ -13,17 +13,36 @@ datatype ('g, 'v, 't) YulFunctionBody =
   YulBuiltin "'g \<Rightarrow> 'v list \<Rightarrow> (('g * 'v list) + String.literal)"
   | YulFunction "('v, 't) YulStatement list"
 
+
+(* function signature data *)
+record ('g, 'v, 't) function_sig' =
+  f_sig_arguments ::"'t YulTypedName list"
+  f_sig_returns :: "'t YulTypedName list"
+  f_sig_body :: "('g, 'v, 't) YulFunctionBody"
+
+(* function signature data + list of visible functions at that function's definition
+   site *)
+record ('g, 'v, 't) function_sig = "('g, 'v, 't) function_sig'" +
+  f_sig_visible :: "YulIdentifier list"
+
+
+
+(*
 datatype ('g, 'v, 't) function_sig =
   YulFunctionSig
   (YulFunctionSigArguments: "'t YulTypedName list")
   (YulFunctionSigReturnValues: "'t YulTypedName list")
   (YulFunctionSigBody: "('g, 'v, 't) YulFunctionBody")
-
+  (* for each function, we must store the set of functions in scope at its definition site. *)
+  (YulVisibleFunctions : "YulIdentifier list")
+*)
 (*
 type_synonym 'v locals = "YulIdentifier \<Rightarrow> 'v option"
 *)
 
 type_synonym 'v locals = "(YulIdentifier * 'v) list"
+
+
 
 (* TODO: changes here
    - locals should no longer be a list. just single locals + list of visible vars (?)
@@ -67,6 +86,22 @@ fun del_value :: "'v locals \<Rightarrow> YulIdentifier \<Rightarrow> 'v locals"
    (if k = k' then del_value e1t k'
     else (k, v)#del_value e1t k')"
 
+(* insert a value into locals, fail if already present *)
+fun insert_value :: "'v locals \<Rightarrow> YulIdentifier \<Rightarrow> 'v \<Rightarrow> 'v locals option" where
+"insert_value L k v =
+  (case map_of L k of
+    Some _ \<Rightarrow> None
+    | None \<Rightarrow> Some ((k, v) # L))"
+
+fun insert_values :: "'v locals \<Rightarrow> YulIdentifier list \<Rightarrow> 'v list \<Rightarrow> 'v locals option" where
+"insert_values L [] [] = Some L"
+| "insert_values L (ih#it) (vh#vt) =
+   (case insert_values L it vt of
+    None \<Rightarrow> None
+    | Some L' \<Rightarrow> insert_value L' ih vh)"
+| "insert_values L _ _ = None"
+
+
 (* update (or insert if not present) a value into locals *)
 fun put_value :: "'v locals \<Rightarrow> YulIdentifier \<Rightarrow> 'v \<Rightarrow> 'v locals" where
 "put_value L k v =
@@ -80,14 +115,48 @@ fun put_values :: "'v locals \<Rightarrow> YulIdentifier list \<Rightarrow> 'v l
     | Some L' \<Rightarrow> Some (put_value L' ih vh))"
 | "put_values L _ _ = None"
 
+(* insert a value into locals, leaving it unchanged if present *)
+fun probe_value :: "'v locals \<Rightarrow> YulIdentifier \<Rightarrow> 'v \<Rightarrow> 'v locals" where
+"probe_value L k v =
+  (case map_of L k of
+    Some _ \<Rightarrow> L
+    | None \<Rightarrow> (k, v)#L)"
+
+(* retrieving a value is just map_of *)
+fun get_value :: "'v locals \<Rightarrow> YulIdentifier  \<Rightarrow> 'v option" where
+"get_value L idn = map_of L idn"
+
 fun get_values :: "'v locals \<Rightarrow> YulIdentifier list \<Rightarrow> 'v list option" where
 "get_values L ids =
    List.those (List.map (map_of L) (ids))"
 
+(* convert an association list into a locals, removing duplicates *)
 fun make_locals :: "(YulIdentifier * 'v) list \<Rightarrow> 'v locals" where
 "make_locals [] = locals_empty"
 | "make_locals ((ih, vh)#t) =
     put_value (make_locals t) ih vh"
+
+(* convert an association list into a locals, removing duplicates
+   this version fails if there is a duplicate key *)
+fun make_locals_strict :: "(YulIdentifier * 'v) list \<Rightarrow> 'v locals option" where
+"make_locals_strict [] = Some locals_empty"
+| "make_locals_strict ((ih, vh)#t) =
+  (case make_locals_strict t of
+    None \<Rightarrow> None
+    | Some t' \<Rightarrow> insert_value t' ih vh)"
+
+
+(* combine two locals environments, ensuring that
+   there is no overlap in keys. *)
+fun combine :: "'v locals \<Rightarrow> 'v locals \<Rightarrow> 'v locals option" where
+"combine [] l2 = Some l2"
+| "combine ((k1, v1)#l1) l2 =
+   (case map_of l2 k1 of
+    Some _ \<Rightarrow> None
+    | None \<Rightarrow>
+      (case combine l1 l2 of
+        None \<Rightarrow> None
+        | Some l \<Rightarrow> Some ((k1, v1) # l)))"
 
 fun strip_locals :: "'v locals \<Rightarrow> unit locals" where
 "strip_locals [] = []"
@@ -104,17 +173,51 @@ record ('g, 'v, 't) result =
   (* value stack, used within expression evaluation, as well as
      for assignments and function arguments *)
   vals :: "'v list"  
-  frames :: "'v frame list"
   (* which functions are currently visible *)
   funs :: "('g, 'v, 't) function_sig locals"
-  (* TODO: this was a mode option *)
-  (*mode :: "mode"*)
+
 
 datatype ('g, 'v, 't, 'z) YulResult =
   YulResult "('g, 'v, 't, 'z) result_scheme"
   (* errors can optionally carry failed state *)
   | ErrorResult "String.literal" "('g, 'v, 't, 'z) result_scheme option"
 
+(* pre-passes for constructing function signature environments *)
+(* first, construct an environment of function_sigs *)
+(* this will return the conflicting name, if there is a name conflict. *)
+fun gatherYulFunctions' :: "('g, 'v, 't) function_sig' locals \<Rightarrow>
+                           ('v, 't) YulStatement list \<Rightarrow> 
+                           (('g, 'v, 't) function_sig' locals + YulIdentifier)" where
+"gatherYulFunctions' F [] = Inl F"
+| "gatherYulFunctions' F
+    ((YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body))#t) =
+    (case gatherYulFunctions' F t of
+      Inr msg \<Rightarrow> Inr msg
+      | Inl F' \<Rightarrow>
+      (case insert_value F' name
+            \<lparr> f_sig_arguments = args, f_sig_returns = rets, f_sig_body = (YulFunction body) \<rparr> of
+        None \<Rightarrow> Inr name
+        | Some F'' \<Rightarrow> Inl F''))"
+        
+| "gatherYulFunctions' F (_#t) =
+    gatherYulFunctions' F t"
+
+fun gatherYulFunctions :: "('g, 'v, 't) function_sig locals \<Rightarrow>
+                           ('v, 't) YulStatement list \<Rightarrow> 
+                           (('g, 'v, 't) function_sig locals + YulIdentifier)" where
+"gatherYulFunctions F st =
+ (let F0 = map (\<lambda> nfs . (case nfs of
+                (n, fs) \<Rightarrow> (n, function_sig'.truncate fs))) F in
+ (case gatherYulFunctions' F0 st of
+  Inr msg \<Rightarrow> Inr msg
+  | Inl funcs \<Rightarrow>
+   (let names = map fst funcs in
+     (case (combine F (map (\<lambda> nfs . (case nfs of
+                    (n, fs) \<Rightarrow> (n, (function_sig'.extend fs \<lparr> f_sig_visible = names \<rparr>)))) funcs)) of
+      None \<Rightarrow> Inr (STR ''should be dead code'')
+      | Some res \<Rightarrow> Inl res))))"
+
+(* get the signature correspond to functions visible from a function of the given name. *)
 
 (* "locale parameters" passed to Yul semantics
    (capture behaviors needed by certain control primitives) *)
