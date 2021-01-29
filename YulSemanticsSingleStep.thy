@@ -5,34 +5,23 @@ begin
 (* stack used to represent computation remaining after this step *)
 datatype ('g, 'v, 't) StackEl =
   EnterStatement "('v, 't) YulStatement"
-  (* on statement exit, we restore the old function scope and restrict
-     the locals scope to forget block-local variables 
-
-     on function exit, we restore the old function scope, push return values,
-     and restore (not restrict) the old locals scope.
+  (* When exiting statements, we remember the old local-vars and function contexts
+     (used when exiting blocks)
   *)
   | ExitStatement "('v, 't) YulStatement" "'v locals" "('g, 'v, 't) function_sig locals" 
-  (* TODO: we may not need all the parameters we have for enter/exit function *)
-  (* when entering functions, we remember the function signature and name
-      *)
 
+  (* when entering functions, we remember the function name (for error reporting)
+     and function signature
+  *)
   | EnterFunctionCall "YulIdentifier" 
                       "('g, 'v, 't) function_sig"
-
-(*
-  | EnterFunctionCall "YulIdentifier" "('v, 't) YulExpression list" 
-                      "'v list" 
-                      "'v locals" "('g, 'v, 't) function_sig locals" 
-                      "('g, 'v, 't) function_sig"
-*)
   (* when exiting functions, we remember
      - function name
-     - function argument expressions
      - old stack
      - old locals
      - old functions context
      - signature of function being called *)
-  | ExitFunctionCall "YulIdentifier" "('v, 't) YulExpression list" 
+  | ExitFunctionCall "YulIdentifier"
                      "'v list" 
                      "'v locals" "('g, 'v, 't) function_sig locals" 
                      "('g, 'v, 't) function_sig"
@@ -81,7 +70,7 @@ fun evalYulExpression ::
     | Some fsig \<Rightarrow>
       YulResult (r \<lparr> cont := map Expression (rev args) @ 
                                    EnterFunctionCall name fsig #
-                                   ExitFunctionCall name args (vals r) (locals r) (funs r) fsig #
+                                   ExitFunctionCall name (vals r) (locals r) (funs r) fsig #
                                    cont r \<rparr>))"
 
 
@@ -114,19 +103,17 @@ fun yulLeave :: "('g, 'v, 't) YulDialect \<Rightarrow>
                  ('g, 'v, 't) YulResult" where
 "yulLeave D _ (ErrorResult e msg) = ErrorResult e msg"
 | "yulLeave D [] (YulResult r) = ErrorResult (STR ''Leave outside function body'') (Some r)"
-| "yulLeave D ((ExitFunctionCall idn args vals_old locals_old funs_old body )#ct) (YulResult r) =
-   YulResult (r \<lparr> cont := ((ExitFunctionCall idn args vals_old locals_old funs_old body)#ct) \<rparr>)"
+| "yulLeave D ((ExitFunctionCall idn vals_old locals_old funs_old body )#ct) (YulResult r) =
+   YulResult (r \<lparr> cont := ((ExitFunctionCall idn vals_old locals_old funs_old body)#ct) \<rparr>)"
 | "yulLeave D (ch#ct) r = yulLeave D ct r"
 
-(* TODO: could check for invalid stack here as well as on exit *)
+(* TODO: could check to ensure stack is empty here *)
 fun evalYulEnterStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
                               ('v, 't) YulStatement \<Rightarrow> 
                               ('g, 'v, 't) YulResult \<Rightarrow>
                               ('g, 'v, 't) YulResult"
   where
 "evalYulEnterStatement _ _ (ErrorResult e msg) = ErrorResult e msg"
-
-(* TODO: reset vals to [] after statements? *)
 
 | "evalYulEnterStatement D (YulAssignmentStatement (YulAssignment ids e)) (YulResult r) =
   YulResult (r \<lparr> cont := Expression e #
@@ -330,7 +317,6 @@ fun evalYulEnterFunctionCall :: "('g, 'v, 't) YulDialect \<Rightarrow>
 
 fun evalYulExitFunctionCall :: "('g, 'v, 't) YulDialect \<Rightarrow>
                                  YulIdentifier \<Rightarrow> 
-                                 ('v, 't) YulExpression list \<Rightarrow>
                                 'v list \<Rightarrow>
                                 'v locals \<Rightarrow> 
                                 ('g, 'v, 't) function_sig locals \<Rightarrow>
@@ -338,9 +324,9 @@ fun evalYulExitFunctionCall :: "('g, 'v, 't) YulDialect \<Rightarrow>
                                 ('g, 'v, 't) YulResult \<Rightarrow>
                                 ('g, 'v, 't) YulResult" 
   where
-"evalYulExitFunctionCall _ _ _ _ _ _ _ (ErrorResult e msg) = ErrorResult e msg"
+"evalYulExitFunctionCall _ _ _ _ _ _ (ErrorResult e msg) = ErrorResult e msg"
 
-| "evalYulExitFunctionCall D name args vals_old locals_old funs_old fsig (YulResult r) =
+| "evalYulExitFunctionCall D name vals_old locals_old funs_old fsig (YulResult r) =
   (case f_sig_body fsig of
     YulBuiltin _ \<Rightarrow> YulResult r
     | YulFunction _ \<Rightarrow>
@@ -365,8 +351,8 @@ fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) YulResult
     | (EnterFunctionCall name fsig)#ct \<Rightarrow> 
        evalYulEnterFunctionCall D name fsig 
         (YulResult (r \<lparr> cont := ct \<rparr>))
-    | (ExitFunctionCall name args vals_old locals_old funs_old fsig)#ct \<Rightarrow> 
-       evalYulExitFunctionCall D name args vals_old locals_old funs_old fsig
+    | (ExitFunctionCall name vals_old locals_old funs_old fsig)#ct \<Rightarrow> 
+       evalYulExitFunctionCall D name vals_old locals_old funs_old fsig
         (YulResult (r \<lparr> cont := ct \<rparr>))
 )"
 | "evalYulStep _ r = r"
