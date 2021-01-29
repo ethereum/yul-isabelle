@@ -136,7 +136,7 @@ fun make_locals :: "(YulIdentifier * 'v) list \<Rightarrow> 'v locals" where
 | "make_locals ((ih, vh)#t) =
     put_value (make_locals t) ih vh"
 
-(* convert an association list into a locals, removing duplicates
+(* convert an association list into a locals
    this version fails if there is a duplicate key *)
 fun make_locals_strict :: "(YulIdentifier * 'v) list \<Rightarrow> 'v locals option" where
 "make_locals_strict [] = Some locals_empty"
@@ -157,6 +157,15 @@ fun combine :: "'v locals \<Rightarrow> 'v locals \<Rightarrow> 'v locals option
       (case combine l1 l2 of
         None \<Rightarrow> None
         | Some l \<Rightarrow> Some ((k1, v1) # l)))"
+
+(* combine two locals environments,
+   if there is an overlap in keys, keep the value already there *)
+fun combine_keep :: "'v locals \<Rightarrow> 'v locals \<Rightarrow> 'v locals" where
+"combine_keep l1 [] = l1"
+| "combine_keep l1 ((k2, v2)#l2) =
+   (case map_of l1 k2 of
+    Some _ \<Rightarrow> combine_keep l1 l2
+    | None \<Rightarrow> ((k2, v2) # combine_keep l1 l2))"
 
 fun strip_locals :: "'v locals \<Rightarrow> unit locals" where
 "strip_locals [] = []"
@@ -202,6 +211,9 @@ fun gatherYulFunctions' :: "('g, 'v, 't) function_sig' locals \<Rightarrow>
 | "gatherYulFunctions' F (_#t) =
     gatherYulFunctions' F t"
 
+(* By using combine_keep here,
+   we avoid overwriting the visible-names field of existing functions
+   (not in the current block) *)
 fun gatherYulFunctions :: "('g, 'v, 't) function_sig locals \<Rightarrow>
                            ('v, 't) YulStatement list \<Rightarrow> 
                            (('g, 'v, 't) function_sig locals + YulIdentifier)" where
@@ -212,10 +224,8 @@ fun gatherYulFunctions :: "('g, 'v, 't) function_sig locals \<Rightarrow>
   Inr msg \<Rightarrow> Inr msg
   | Inl funcs \<Rightarrow>
    (let names = map fst funcs in
-     (case (combine F (map (\<lambda> nfs . (case nfs of
-                    (n, fs) \<Rightarrow> (n, (function_sig'.extend fs \<lparr> f_sig_visible = names \<rparr>)))) funcs)) of
-      None \<Rightarrow> Inr (STR ''should be dead code'')
-      | Some res \<Rightarrow> Inl res))))"
+     Inl (combine_keep F (map (\<lambda> nfs . (case nfs of
+                    (n, fs) \<Rightarrow> (n, (function_sig'.extend fs \<lparr> f_sig_visible = names \<rparr>)))) funcs)))))"
 
 (* get the signature correspond to functions visible from a function of the given name. *)
 
