@@ -298,12 +298,12 @@ fun evalYulEnterFunctionCall :: "('g, 'v, 't) YulDialect \<Rightarrow>
 | "evalYulEnterFunctionCall D name fsig (YulResult r) = 
   (case f_sig_body fsig of
     YulBuiltin impl \<Rightarrow>
-     (case impl (global r) (rev (take (length (f_sig_arguments fsig)) (vals r))) of
+     (case impl (global r) (take (length (f_sig_arguments fsig)) (vals r)) of
            Inr err \<Rightarrow> ErrorResult (STR ''Error in builtin '' @@ (name @@ (STR '' : '' @@ err))) (Some r)
            | Inl (G', vals') \<Rightarrow>
-                YulResult (r \<lparr> global := G', vals := rev vals' @ drop (length (f_sig_arguments fsig)) (vals r)  \<rparr>))
+                YulResult (r \<lparr> global := G', vals := vals' @ drop (length (f_sig_arguments fsig)) (vals r)  \<rparr>))
      | YulFunction body \<Rightarrow>
-       (case insert_values locals_empty (strip_id_types (f_sig_arguments fsig)) (rev (take (length (f_sig_arguments fsig)) (vals r))) of
+       (case insert_values locals_empty (strip_id_types (f_sig_arguments fsig)) (take (length (f_sig_arguments fsig)) (vals r)) of
         None \<Rightarrow> ErrorResult (STR ''Arity error when calling function '' @@ name) (Some r)
         | Some L1 \<Rightarrow>
           (case insert_values L1 (strip_id_types (f_sig_returns fsig)) (replicate (length (f_sig_returns fsig)) (default_val D)) of
@@ -336,7 +336,7 @@ fun evalYulExitFunctionCall :: "('g, 'v, 't) YulDialect \<Rightarrow>
         (case get_values (locals r) (strip_id_types (f_sig_returns fsig)) of
          None \<Rightarrow> ErrorResult (STR ''Uninintialized returns for function '' @@ name) (Some r)
          | Some vs \<Rightarrow> YulResult (r \<lparr> locals := locals_old
-                                   , vals := rev (vs) @ vals_old
+                                   , vals := vs @ vals_old
                                    , funs := funs_old \<rparr>))))"
 
 
