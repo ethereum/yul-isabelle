@@ -139,7 +139,7 @@ fun evalYulEnterStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
 
 (* empty pre = proceed with for loop *)
 | "evalYulEnterStatement D (YulForLoop [] cond post body) (YulResult r) = 
-    YulResult (r \<lparr> cont := ExitStatement (YulForLoop [] cond post body) (locals r) (funs r) #
+    YulResult (r \<lparr> cont := Expression cond # ExitStatement (YulForLoop [] cond post body) (locals r) (funs r) #
                             cont r \<rparr>)"
 
 (* non empty pre *)
@@ -258,12 +258,13 @@ fun evalYulExitStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
     (if is_truthy D vh then
       YulResult (r \<lparr> vals := []
                    , cont := (EnterStatement (YulBlock body) # 
+                              EnterStatement (YulBlock post) #
                               Expression cond # 
                               ExitStatement (YulForLoop pre cond post body) (locals r) (funs r) #
                               cont r) \<rparr>)
      else
        (YulResult (r \<lparr> vals := []
-                     , cont := (EnterStatement (YulBlock post) # cont r) \<rparr>)))
+                     , cont := (cont r) \<rparr>)))
      | _ \<Rightarrow> ErrorResult (STR ''Invalid value stack (exiting ForLoop i.e. entering body)'') (Some r))"
 
 | "evalYulExitStatement D (YulFunctionCallStatement fc) _ _ (YulResult r) =

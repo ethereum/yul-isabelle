@@ -208,7 +208,7 @@ syntax "_YulNamePartDollarSign" :: "yul_id_part" ("$")
 syntax "_YulNamePartUnderscore" :: "yul_id_part" ("'_")
 syntax "_YulNamePartDot" :: "yul_id_part" (".")
 syntax "_YulNamePartUnderscores" :: "yul_id_part" ("'_'_")
-syntax "_YulIdentifierNumConst" :: "num_const \<Rightarrow> yul_id_part" ("_")
+(*syntax "_YulIdentifierNumConst" :: "num_const \<Rightarrow> yul_id_part" ("_")*)
                 
 parse_ast_translation\<open>
 [
