@@ -64,7 +64,6 @@ consts YulFunctionDefinition :: "YulIdentifier \<Rightarrow> YulTypedName list \
 consts YulIdentifier :: "YulIdentifier \<Rightarrow> YulExpression"
 consts YulSwitch :: "YulExpression \<Rightarrow> YulSwitchCase list \<Rightarrow> YulStatement"
 consts YulCase :: "YulLiteral \<Rightarrow> YulStatement list \<Rightarrow> YulSwitchCase" *)
-consts YulDefaultCase :: "('v, 't) YulStatement list \<Rightarrow> ('v, 't) YulSwitchCase"
 (* consts YulTypedName :: "YulIdentifier \<Rightarrow> YulType \<Rightarrow> YulTypedName" *)
 abbreviation (input) YulZero where "YulZero \<equiv> 0"
 abbreviation (input) YulOne where "YulOne \<equiv> 1"
@@ -98,7 +97,8 @@ nonterminal yul_expressions
 nonterminal yul_switch_case
 nonterminal yul_switch_cases
 nonterminal yul_type
-nonterminal yul_id_part
+nonterminal yul_id_beginning
+nonterminal yul_id_suffix
 nonterminal yul_id
 nonterminal yul_assignment
 nonterminal yul_variable_declaration
@@ -109,6 +109,9 @@ abbreviation (input) YulNegativeLiteralNumber where "YulNegativeLiteralNumber \<
 syntax YulBlock :: "yul_statements \<Rightarrow> ('v, 't) YulStatement" ("YUL{_}")
 syntax "" :: "yul_statement \<Rightarrow> any" ("YUL'_STMT'{_'}")
 syntax "" :: "yul_expression \<Rightarrow> any" ("YUL'_EXPR'{_'}")
+abbreviation (input) YulDefaultCase where "YulDefaultCase \<equiv> \<lambda> x . YulSwitchCase None x"
+syntax YulDefaultCase :: "yul_block \<Rightarrow> any" ("YUL'_SWITCH'_CASE'{ default _'}")
+syntax YulNonDefaultCase :: "yul_expression \<Rightarrow> yul_block \<Rightarrow> any" ("YUL'_SWITCH'_CASE'{ case _ _'}")
 
 
 abbreviation (input) Singleton where "Singleton \<equiv> \<lambda> x . x#[]"
@@ -185,7 +188,10 @@ syntax "" :: "any \<Rightarrow> yul_statement" ("\<guillemotleft>_\<guillemotrig
 syntax "" :: "any \<Rightarrow> yul_name" ("\<guillemotleft>_\<guillemotright>")
 syntax "" :: "any \<Rightarrow> yul_identifiers" ("\<guillemotleft>_\<guillemotright>")
 syntax "" :: "any \<Rightarrow> yul_expression" ("\<guillemotleft>_\<guillemotright>")
+syntax "" :: "any \<Rightarrow> yul_typed_identifiers" ("\<guillemotleft>_\<guillemotright>")
+syntax "" :: "any \<Rightarrow> yul_block" ("{\<guillemotleft>_\<guillemotright>}")
 syntax "" :: "any \<Rightarrow> yul_function_call_argument_list" ("'(\<guillemotleft>_\<guillemotright>')")
+syntax "" :: "any \<Rightarrow> yul_switch_cases" ("\<guillemotleft>_\<guillemotright>")
 
 term Pair
 
@@ -201,15 +207,17 @@ parse_ast_translation\<open>
 \<close>
 *)
 
-syntax "_YulIdentifierLiteral" :: "id \<Rightarrow> yul_id_part" ("_")
-syntax "" :: "yul_id_part \<Rightarrow> yul_id" ("_")
-syntax "_YulIdPartMerge" :: "yul_id_part \<Rightarrow> yul_id \<Rightarrow> yul_id" ("__")
-syntax "_YulNamePartDollarSign" :: "yul_id_part" ("$")
-syntax "_YulNamePartUnderscore" :: "yul_id_part" ("'_")
-syntax "_YulNamePartDot" :: "yul_id_part" (".")
-syntax "_YulNamePartUnderscores" :: "yul_id_part" ("'_'_")
-(*syntax "_YulIdentifierNumConst" :: "num_const \<Rightarrow> yul_id_part" ("_")*)
-                
+syntax "_YulIdentifierLiteral" :: "id \<Rightarrow> yul_id_beginning" ("_")
+syntax "" :: "yul_id_beginning \<Rightarrow> yul_id_suffix" ("_")
+syntax "" :: "yul_id_beginning \<Rightarrow> yul_id" ("_")
+syntax "_YulIdPartMerge" :: "yul_id \<Rightarrow> yul_id_suffix \<Rightarrow> yul_id" ("__")
+syntax "_YulNamePartDollarSign" :: "yul_id_beginning" ("$")
+syntax "_YulNamePartUnderscore" :: "yul_id_beginning" ("'_")
+syntax "_YulNamePartDot" :: "yul_id_suffix" (".")
+syntax "_YulNamePartUnderscores" :: "yul_id_beginning" ("'_'_")
+syntax "_YulIdentifierNumConst" :: "num_const \<Rightarrow> yul_id_suffix" ("_")
+
+
 parse_ast_translation\<open>
 [
 ("_YulIdentifierLiteral", K (fn [Ast.Variable name] => Ast.Appl [Ast.Constant "_Literal", Ast.Variable ("''"^name^"''")])),
@@ -229,6 +237,7 @@ term \<open>YUL{
  let x,y:uint256 := f(\<guillemotleft>[z,z,z,z]\<guillemotright>)
  z := f( \<guillemotleft>xy\<guillemotright>, \<guillemotleft>YulIdentifier (STR ''a'')\<guillemotright>, \<guillemotleft>z\<guillemotright> )
  b := d
+ \<guillemotleft>xabd\<guillemotright> := \<guillemotleft>ads\<guillemotright>
  c := ''x''
  switch x
  case 1:uint256 {}
@@ -263,8 +272,17 @@ term \<open>YUL{
 }
 }\<close>
 
+term \<open>YUL{
+ 	 let x := 1 let y := 2
+}\<close>
+
 term "YUL_EXPR{ f(a,1) }"
 term "YUL_STMT{ f(a,1) }"
+term "YUL_STMT{ x := y }"
+term "YUL_STMT{ x := \<guillemotleft>y\<guillemotright> }"
+term "YUL_STMT{ \<guillemotleft>x\<guillemotright> := \<guillemotleft>y\<guillemotright> }"
+term "YUL_STMT{ let \<guillemotleft>ids\<guillemotright> := \<guillemotleft>e\<guillemotright> }"
 term "YUL_STMT{ \<guillemotleft>f\<guillemotright>(\<guillemotleft>args\<guillemotright>) }"
+term "YUL_STMT{ {\<guillemotleft>stmt\<guillemotright>} }"
 
 end

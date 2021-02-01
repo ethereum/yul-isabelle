@@ -185,7 +185,6 @@ record ('g, 'v, 't) result =
   (* which functions are currently visible *)
   funs :: "('g, 'v, 't) function_sig locals"
 
-
 datatype ('g, 'v, 't, 'z) YulResult =
   YulResult "('g, 'v, 't, 'z) result_scheme"
   (* errors can optionally carry failed state *)
