@@ -182,6 +182,8 @@ print(sub(x, y))
 
 value "eval prog5"
 
+value "eval prog5"
+
 (* test switch statements *)
 
 (* test function shadowing (should fail) *)

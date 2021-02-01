@@ -201,7 +201,7 @@ fun evalYulExitStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
 | "evalYulExitStatement D (YulAssignmentStatement (YulAssignment ids e)) _ _ (YulResult r) = 
   (if length (vals r) \<noteq> length ids then ErrorResult (STR ''Arity mismatch (exiting assignment)'') (Some r)
    else
-    (case put_values (locals r) ids (rev (take (length ids) (vals r))) of
+    (case put_values (locals r) ids  (take (length ids) (vals r)) of
       None \<Rightarrow> ErrorResult (STR ''Should be dead code (exiting assignment)'') (Some r)
       | Some L1 \<Rightarrow> YulResult (r \<lparr> locals := L1, vals := []\<rparr>)))"
 
@@ -217,7 +217,7 @@ fun evalYulExitStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
     | Some _ \<Rightarrow>
       (if length (vals r) \<noteq> length ids then ErrorResult (STR ''Arity mismatch (variable declaration + assignment)'') (Some r)
        else
-        (case insert_values (locals r) (strip_id_types ids) (rev (take (length ids) (vals r))) of
+        (case insert_values (locals r) (strip_id_types ids) (take (length ids) (vals r)) of
           None \<Rightarrow> ErrorResult (STR ''Duplicate variable declaration'') (Some r)
           | Some L1 \<Rightarrow> YulResult (r \<lparr> locals := L1, vals := []\<rparr>))))"
 
