@@ -4,7 +4,7 @@ theory YulTests
 begin
 
 definition simpleBuiltins :: 
-  "(int list, int, unit) function_sig locals" where
+  "(int list * YulFlag, int, unit) function_sig locals" where
 "simpleBuiltins = make_locals
   [ ( (STR ''add'')
     , \<lparr> f_sig_arguments = [ YulTypedName (STR ''x'') ()
@@ -80,20 +80,25 @@ definition simpleBuiltins ::
     , \<lparr> f_sig_arguments = [ YulTypedName (STR ''x'') ()]
       , f_sig_returns = []
       , f_sig_body = (YulBuiltin 
-                        (\<lambda> g vs .
+                        (\<lambda> st vs .
+                          (case st of (vs, flag) \<Rightarrow>
                           (case vs of
-                            v1#vt \<Rightarrow> Inl (v1#g, [])
-                            | _ \<Rightarrow> Inr (STR ''bad args for print''))))
+                            v1#vt \<Rightarrow> Inl ((vt, flag), [])
+                            | _ \<Rightarrow> Inr (STR ''bad args for print'')))))
       , f_sig_visible = []\<rparr>)]"
     
 
 definition simpleDialect ::
-  "(int list, int, unit) YulDialect" where
+  "(int list * YulFlag, int, unit) YulDialect" where
   "simpleDialect =
     \<lparr> is_truthy = (\<lambda> i . i \<noteq> 0)
-    , init_state = []
+    , init_state = ([], Executing)
     , default_val = 0
-    , builtins = simpleBuiltins \<rparr>"
+    , builtins = simpleBuiltins
+    , set_flag = 
+      (\<lambda> f x . case x of (l, _) \<Rightarrow> (l,  f))
+    , get_flag =
+      (\<lambda> x . case x of (_, f) \<Rightarrow> f)\<rparr>"
 
 
 term "YUL{

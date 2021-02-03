@@ -226,7 +226,20 @@ fun gatherYulFunctions :: "('g, 'v, 't) function_sig locals \<Rightarrow>
      Inl (combine_keep F (map (\<lambda> nfs . (case nfs of
                     (n, fs) \<Rightarrow> (n, (function_sig'.extend fs \<lparr> f_sig_visible = names \<rparr>)))) funcs)))))"
 
-(* get the signature correspond to functions visible from a function of the given name. *)
+(* data type capturing when Yul programs need to terminate early *)
+datatype YulFlag =
+  (* program is executing as normal *)
+  is_Executing : Executing
+  (* interpreter fuel (not gas) has run out *)
+  | FuelOut
+  (* execution halted without return value *)
+  | Halt
+  (* execution halted; global state contains a return value *)
+  | Return
+  (* program has halted and its transaction needs to be reverted *)
+  | Revert
+  (* program has halted; the smart contract to which it corresponds should be destroyed *)
+  | SelfDestruct
 
 (* "locale parameters" passed to Yul semantics
    (capture behaviors needed by certain control primitives) *)
@@ -235,5 +248,7 @@ record ('g, 'v, 't) YulDialect =
   init_state :: "'g"
   default_val :: "'v"
   builtins :: "('g, 'v, 't) function_sig locals"
+  set_flag :: "YulFlag \<Rightarrow> 'g \<Rightarrow> 'g"
+  get_flag :: "'g \<Rightarrow> YulFlag"
 
 end
