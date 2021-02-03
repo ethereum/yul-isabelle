@@ -8,11 +8,17 @@ datatype mode =
   | Continue
   | Leave
 
-(* allow direct access to locals? *)
-datatype ('g, 'v, 't) YulFunctionBody =
-  YulBuiltin "'v list \<Rightarrow> 'g \<Rightarrow> (('g * 'v list) + String.literal)"
-  | YulFunction "('v, 't) YulStatement list"
+(* result type for builtins *)
+datatype 'a Result = Result 'a | Error "String.literal" "'a option"
 
+(* state monad for builtins *)
+type_synonym ('g, 'r) State =
+"'g \<Rightarrow> ('r * 'g)"
+
+(* TODO: allow direct access to locals? *)
+datatype ('g, 'v, 't) YulFunctionBody =
+  YulBuiltin "'v list \<Rightarrow> (('g, 'v list) State) Result"
+  | YulFunction "('v, 't) YulStatement list"
 
 (* function signature data *)
 record ('g, 'v, 't) function_sig' =

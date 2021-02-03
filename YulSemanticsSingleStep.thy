@@ -282,10 +282,12 @@ fun evalYulEnterFunctionCall :: "('g, 'v, 't) YulDialect \<Rightarrow>
   "evalYulEnterFunctionCall D name fsig r = 
   (case f_sig_body fsig of
     YulBuiltin impl \<Rightarrow>
-     (case impl (take (length (f_sig_arguments fsig)) (vals r)) (global r)  of
-           Inr err \<Rightarrow> ErrorResult (STR ''Error in builtin '' @@ (name @@ (STR '' : '' @@ err))) (Some r)
-           | Inl (G', vals') \<Rightarrow>
-                YulResult (r \<lparr> global := G', vals := vals' @ drop (length (f_sig_arguments fsig)) (vals r)  \<rparr>))
+     (case impl (take (length (f_sig_arguments fsig)) (vals r)) of
+           Error err _ \<Rightarrow> ErrorResult (STR ''Error in builtin '' @@ (name @@ (STR '' : '' @@ err))) (Some r)
+           | Result impl' \<Rightarrow>
+            (case impl' (global r) of
+              (vals', G') \<Rightarrow>
+                YulResult (r \<lparr> global := G', vals := vals' @ drop (length (f_sig_arguments fsig)) (vals r)  \<rparr>)))
      | YulFunction body \<Rightarrow>
        (case insert_values locals_empty (strip_id_types (f_sig_arguments fsig)) (take (length (f_sig_arguments fsig)) (vals r)) of
         None \<Rightarrow> ErrorResult (STR ''Arity error when calling function '' @@ name) (Some r)
