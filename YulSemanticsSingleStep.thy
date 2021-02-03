@@ -282,7 +282,7 @@ fun evalYulEnterFunctionCall :: "('g, 'v, 't) YulDialect \<Rightarrow>
   "evalYulEnterFunctionCall D name fsig r = 
   (case f_sig_body fsig of
     YulBuiltin impl \<Rightarrow>
-     (case impl (global r) (take (length (f_sig_arguments fsig)) (vals r)) of
+     (case impl (take (length (f_sig_arguments fsig)) (vals r)) (global r)  of
            Inr err \<Rightarrow> ErrorResult (STR ''Error in builtin '' @@ (name @@ (STR '' : '' @@ err))) (Some r)
            | Inl (G', vals') \<Rightarrow>
                 YulResult (r \<lparr> global := G', vals := vals' @ drop (length (f_sig_arguments fsig)) (vals r)  \<rparr>))

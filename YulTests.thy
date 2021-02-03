@@ -11,7 +11,7 @@ definition simpleBuiltins ::
                           , YulTypedName (STR ''y'') ()]
       , f_sig_returns =   [ YulTypedName (STR ''z'') ()]
       , f_sig_body = (YulBuiltin
-                            (\<lambda> g vs .
+                            (\<lambda> vs g .
                               (case vs of v1#v2#vt \<Rightarrow>
                                 Inl (g, [v1+v2])
                                 | _ \<Rightarrow> Inr (STR ''bad args for add''))))
@@ -21,7 +21,7 @@ definition simpleBuiltins ::
                           , YulTypedName (STR ''y'') ()]
       , f_sig_returns = [ YulTypedName (STR ''z'') ()]
       , f_sig_body = (YulBuiltin
-                        (\<lambda> g vs .
+                        (\<lambda> vs g  .
                           (case vs of v1#v2#vt \<Rightarrow>
                             Inl (g, [v1-v2])
                             | _ \<Rightarrow> Inr (STR ''bad args for sub''))))
@@ -31,7 +31,7 @@ definition simpleBuiltins ::
                           , YulTypedName (STR ''y'') ()]
       , f_sig_returns = [ YulTypedName (STR ''z'') ()]
       , f_sig_body = (YulBuiltin
-                        (\<lambda> g vs .
+                        (\<lambda> vs g  .
                           (case vs of v1#v2#vt \<Rightarrow>
                             Inl (g, [v1*v2])
                             | _ \<Rightarrow> Inr (STR ''bad args for mul''))))
@@ -41,7 +41,7 @@ definition simpleBuiltins ::
                           , YulTypedName (STR ''y'') ()]
       , f_sig_returns = [ YulTypedName (STR ''z'') ()]
       , f_sig_body = (YulBuiltin
-                        (\<lambda> g vs .
+                        (\<lambda> vs g  .
                           (case vs of v1#v2#vt \<Rightarrow>
                             Inl (g, [divide_int_inst.divide_int v1 v2])
                             | _ \<Rightarrow> Inr (STR ''bad args for div''))))
@@ -51,7 +51,7 @@ definition simpleBuiltins ::
                           , YulTypedName (STR ''y'') ()]
       , f_sig_returns = [ YulTypedName (STR ''z'') ()]
       , f_sig_body = (YulBuiltin
-                        (\<lambda> g vs .
+                        (\<lambda> vs g  .
                           (case vs of v1#v2#vt \<Rightarrow>
                             Inl (g, [(if v1 < v2 then 1 else 0)])
                             | _ \<Rightarrow> Inr (STR ''bad args for lt''))))
@@ -61,7 +61,7 @@ definition simpleBuiltins ::
                           , YulTypedName (STR ''y'') ()]
       , f_sig_returns = [ YulTypedName (STR ''z'') ()]
       , f_sig_body = (YulBuiltin
-                        (\<lambda> g vs .
+                        (\<lambda> vs g  .
                           (case vs of v1#v2#vt \<Rightarrow>
                             Inl (g, [(if v1 > v2 then 1 else 0)])
                             | _ \<Rightarrow> Inr (STR ''bad args for gt''))))
@@ -71,7 +71,7 @@ definition simpleBuiltins ::
                           , YulTypedName (STR ''y'') ()]
       , f_sig_returns = [ YulTypedName (STR ''z'') ()]
       , f_sig_body = (YulBuiltin
-                        (\<lambda> g vs .
+                        (\<lambda> vs g  .
                           (case vs of v1#v2#vt \<Rightarrow>
                             Inl (g, [(if v1 = v2 then 1 else 0)])
                             | _ \<Rightarrow> Inr (STR ''bad args for eq''))))
@@ -80,10 +80,10 @@ definition simpleBuiltins ::
     , \<lparr> f_sig_arguments = [ YulTypedName (STR ''x'') ()]
       , f_sig_returns = []
       , f_sig_body = (YulBuiltin 
-                        (\<lambda> st vs .
-                          (case st of (vs, flag) \<Rightarrow>
+                        (\<lambda> vs g  .
+                          (case g of (result, flag) \<Rightarrow>
                           (case vs of
-                            v1#vt \<Rightarrow> Inl ((vt, flag), [])
+                            v1#vt \<Rightarrow> Inl ((v1#result, flag), [])
                             | _ \<Rightarrow> Inr (STR ''bad args for print'')))))
       , f_sig_visible = []\<rparr>)]"
     
@@ -117,7 +117,7 @@ definition prog1 :: "(int, unit) YulStatement" where
   "prog1 \<equiv>
   (YUL{
     let x  := 5 : uint256
-    print(minus(x, 3:uint256))
+    print(sub(x, 3:uint256))
   })"
 
 value prog1

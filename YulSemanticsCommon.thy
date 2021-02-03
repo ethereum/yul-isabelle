@@ -10,7 +10,7 @@ datatype mode =
 
 (* allow direct access to locals? *)
 datatype ('g, 'v, 't) YulFunctionBody =
-  YulBuiltin "'g \<Rightarrow> 'v list \<Rightarrow> (('g * 'v list) + String.literal)"
+  YulBuiltin "'v list \<Rightarrow> 'g \<Rightarrow> (('g * 'v list) + String.literal)"
   | YulFunction "('v, 't) YulStatement list"
 
 
