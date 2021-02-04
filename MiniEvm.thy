@@ -4,6 +4,10 @@ theory MiniEvm
     "HOL-Word.Word"
 begin
 
+(* based on
+https://github.com/ethereum/solidity/blob/develop/libevmasm/Instruction.h
+*)
+
 (* EVM is unityped; everything is 256-bit word *)
 type_synonym eint = "256 word"
 
@@ -15,13 +19,12 @@ record estate =
   flag :: YulFlag
   calldata :: "eint list"
 
-(* *)
-(*
-consts mkBuiltin ::
-  "'x \<Rightarrow> ('v list \<Rightarrow> (('g, 'v list) State) Result)"
-*)
-
-
+definition dummy_estate :: estate where
+"dummy_estate =
+  \<lparr> memory = \<lambda> _ . word_of_int 0
+  , storage = \<lambda> _ . word_of_int 0
+  , flag = Executing
+  , calldata = [] \<rparr>"
 
 consts mkBuiltin ::
   "'x \<Rightarrow> ('g, 'v, 't) function_sig'"
@@ -35,6 +38,10 @@ fun mkNames :: "String.literal list \<Rightarrow> ('t YulTypedName list)"
 | "mkNames (s1 # st) =
   YulTypedName s1 YulDefaultType # mkNames st"
 
+(* TODO: have a version of these thast lifts from
+  ('g, unit) State Result
+  (useful for handling builtins that can fail)
+*)
 definition mkBuiltin_0_0 ::
 "('g, unit) State \<Rightarrow>
  ('g, 'v, 't) function_sig'" where
@@ -176,20 +183,10 @@ adhoc_overloading mkBuiltin
 (*
  * EVM instruction semantics
  *)
+
 (*
-	STOP = 0x00,		///< halts execution
-	ADD,				///< addition operation
-	MUL,				///< multiplication operation
-	SUB,				///< subtraction operation
-	DIV,				///< integer division operation
-	SDIV,				///< signed integer division operation
-	MOD,				///< modulo remainder operation
-	SMOD,				///< signed modulo remainder operation
-	ADDMOD,				///< unsigned modular addition
-	MULMOD,				///< unsigned modular multiplication
-	EXP,				///< exponential operation
-	SIGNEXTEND,			///< extend length of signed integer
-*)
+ * Stop + arithmetic
+ *)
 
 fun stop :: "(estate, unit) State" where
 "stop s = ((), s \<lparr> flag := Halt \<rparr>)"
@@ -218,10 +215,6 @@ definition ssmallest :: "('a :: len0) word" where
 fun word_abs :: "('a :: len) word \<Rightarrow> 'a word" where
 "word_abs w =
   (if sint w < 0 then times_word_inst.times_word (word_of_int (-1)) w else w)"
-
-value "sint (times_word_inst.times_word (word_of_int (-1)) (word_abs (word_of_int (-126)) :: 8 word))"
-
-(* get sign bit *)
 
 (* helper for signed division.
    TODO: double check this is what we want *)
@@ -260,8 +253,157 @@ fun smodu :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "smodu i1 i2 s = 
   (smodu' i1 i2, s)"
 
-(* addmod - these need to be converted out of word, since intermediate results not modded to 2^256*)
-(* mulmod - these need to be converted out of word, since intermediate results not modded to 2^256*)
-(* exp *)
-(* signextend *)
+value "word_of_int (257) :: 8 word"
+
+(* TODO: should we write all the arithmetic operations this way?
+*)
+fun addmod :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"addmod i1 i2 i3 s =
+  (if i3 = word_of_int 0 then (word_of_int 0, s)
+   else
+   (word_of_int ((uint i1) + (uint i2)  mod (uint i3)), s))"
+
+fun mulmod :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"mulmod i1 i2 i3 s =
+  (if i3 = word_of_int 0 then (word_of_int 0, s)
+   else
+   (word_of_int ((uint i1) * (uint i2)  mod (uint i3)), s))"
+
+(* TODO: for large exponents this could be inefficient *)
+fun exp :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"exp i1 i2 s =
+  (word_of_int ((uint i1) ^ (nat (uint i2))), s)"
+
+fun signextend' :: "('a :: len) word \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'a word"
+  where
+"signextend' w b idx 0 = w"
+| "signextend' w b idx signloc =
+   (if idx \<le> signloc then w
+    else signextend' (bit_operations_word_inst.set_bit_word w idx b) b (idx - 1) signloc)"
+
+(* TODO: make sure this does the right thing - I have tested on a couple of cases *)
+fun signextend :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"signextend len w s =
+  (if uint len \<ge> 31 then (w, s)
+   else
+   (let signloc = 8 * (nat (uint len) + 1) - 1 in
+   (let signbit = bit_operations_word_inst.test_bit_word w signloc in
+   (signextend' w signbit (255) signloc, s))))"
+
+(*
+ * Keccak256
+ * TODO: Find a way to port Keccak implementation from the Lem one in Eth-Isabelle
+ * Ideally, without pulling in all of Lem as a dependency.
+ *)
+fun keccak :: "eint \<Rightarrow> (estate, eint) State" where
+"keccak i s =
+  (keccak256 i, s)"
+
+
+(*
+ * Transaction metadata
+ * (Address - Extcodehash)
+ * TODO
+ *)
+
+(*
+	ADDRESS = 0x30,		///< get address of currently executing account
+	BALANCE,			///< get balance of the given account
+	ORIGIN,				///< get execution origination address
+	CALLER,				///< get caller address
+	CALLVALUE,			///< get deposited value by the instruction/transaction responsible for this execution
+	CALLDATALOAD,		///< get input data of current environment
+	CALLDATASIZE,		///< get size of input data in current environment
+	CALLDATACOPY,		///< copy input data in current environment to memory
+	CODESIZE,			///< get size of code running in current environment
+	CODECOPY,			///< copy code running in current environment to memory
+	GASPRICE,			///< get price of gas in current environment
+	EXTCODESIZE,		///< get external code size (from another contract)
+	EXTCODECOPY,		///< copy external code (from another contract)
+	RETURNDATASIZE = 0x3d,	///< get size of return data buffer
+	RETURNDATACOPY = 0x3e,	///< copy return data in current environment to memory
+	EXTCODEHASH = 0x3f,	///< get external code hash (from another contract)
+
+*)
+
+(*
+ * Transaction metadata
+ * (Blockhash - Selfbalance)
+ *)
+
+(*
+	BLOCKHASH = 0x40,	///< get hash of most recent complete block
+	COINBASE,			///< get the block's coinbase address
+	TIMESTAMP,			///< get the block's timestamp
+	NUMBER,				///< get the block's number
+	DIFFICULTY,			///< get the block's difficulty
+	GASLIMIT,			///< get the block's gas limit
+	CHAINID,			///< get the config's chainid param
+	SELFBALANCE,		///< get balance of the current account
+*)
+
+(*
+ * Stack, Memory, Storage, and Control Flow
+ *)
+(*
+	POP = 0x50,			///< remove item from stack
+	MLOAD,				///< load word from memory
+	MSTORE,				///< save word to memory
+	MSTORE8,			///< save byte to memory
+	SLOAD,				///< load word from storage
+	SSTORE,				///< save word to storage
+	JUMP,				///< alter the program counter
+	JUMPI,				///< conditionally alter the program counter
+	PC,					///< get the program counter
+	MSIZE,				///< get the size of active memory
+	GAS,				///< get the amount of available gas
+	JUMPDEST,			///< set a potential jump destination
+*)
+
+(*
+ * Push instructions (not used)
+ * Dup instructions (not used)
+ * Swap instructions (not used)
+ *)
+
+(* 
+ * Log instructions 
+ * TODO
+*)
+
+(*
+	LOG0 = 0xa0,		///< Makes a log entry; no topics.
+	LOG1,				///< Makes a log entry; 1 topic.
+	LOG2,				///< Makes a log entry; 2 topics.
+	LOG3,				///< Makes a log entry; 3 topics.
+	LOG4,				///< Makes a log entry; 4 topics.
+*)
+
+(*
+ * EIP615 instructions (not used)
+ *)
+
+(*
+ * Contract creation and cross-contract calls
+ * (Implement these later)
+ *)
+(*
+	CREATE = 0xf0,		///< create a new account with associated code
+	CALL,				///< message-call into an account
+	CALLCODE,			///< message-call with another account's code only
+	RETURN,				///< halt execution returning output data
+	DELEGATECALL,		///< like CALLCODE but keeps caller's value and sender
+	CREATE2 = 0xf5,		///< create new account with associated code at address `sha3(0xff + sender + salt + init code) % 2**160`
+	STATICCALL = 0xfa,	///< like CALL but disallow state modifications
+*)
+
+(*
+ * Halting instructions
+ *)
+(*
+	REVERT = 0xfd,		///< halt execution, revert state and return output data
+	INVALID = 0xfe,		///< invalid instruction for expressing runtime errors (e.g., division-by-zero)
+	SELFDESTRUCT = 0xff	///< halt execution and register account for later deletion
+*)
+
 end
