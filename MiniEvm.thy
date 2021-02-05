@@ -2,6 +2,7 @@ theory MiniEvm
   imports YulSemanticsCommon
     "HOL-Library.Adhoc_Overloading"
     "HOL-Word.Word"
+    "Keccak/Keccak"
 begin
 
 (* based on
@@ -11,7 +12,16 @@ https://github.com/ethereum/solidity/blob/develop/libevmasm/Instruction.h
 (* EVM is unityped; everything is 256-bit word *)
 type_synonym eint = "256 word"
 
-consts keccak256 :: "eint \<Rightarrow> eint"
+definition keccak256 :: "eint \<Rightarrow> eint" where
+"keccak256 i =
+  Keccak.keccak (Word.word_rsplit i)"
+
+datatype logentry =
+  Log0 "8 word list"
+  | Log1 "8 word list" eint
+  | Log2 "8 word list" eint eint
+  | Log3 "8 word list" eint eint eint
+  | Log4 "8 word list" eint eint eint eint
 
 record estate =
   (* Memory is byte-indexed *)
@@ -20,16 +30,22 @@ record estate =
   storage :: "eint \<Rightarrow> eint"
   flag :: YulFlag
   calldata :: "eint list"
+  outputdata :: "eint list"
+  returndata :: "eint list"
+  log :: "logentry list"
 
 definition dummy_estate :: estate where
 "dummy_estate =
   \<lparr> memory = \<lambda> _ . word_of_int 0
   , storage = \<lambda> _ . word_of_int 0
   , flag = Executing
-  , calldata = [] \<rparr>"
+  , calldata = []
+  , outputdata = []
+  , returndata = []
+  , log = [] \<rparr>"
 
 consts mkBuiltin ::
-  "'x \<Rightarrow> ('g, 'v, 't) function_sig'"
+  "'x \<Rightarrow> ('g, 'v, 't) function_sig"
 
 (* 1st number = number of arguments
    2nd number = number of returns *)
@@ -46,7 +62,7 @@ fun mkNames :: "String.literal list \<Rightarrow> ('t YulTypedName list)"
 *)
 definition mkBuiltin_0_0 ::
 "('g, unit) State \<Rightarrow>
- ('g, 'v, 't) function_sig'" where
+ ('g, 'v, 't) function_sig" where
 "mkBuiltin_0_0 f =
   \<lparr> f_sig_arguments = mkNames []
   , f_sig_returns = mkNames []
@@ -56,11 +72,12 @@ definition mkBuiltin_0_0 ::
               (\<lambda> g . 
                 (case f g of
                   ((), g') \<Rightarrow> ([], g')))
-      | _ \<Rightarrow> Error (STR ''Argument arity error'') None) \<rparr>"
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None)
+  , f_sig_visible = [] \<rparr>"
 
 definition mkBuiltin_1_0 ::
 "('v \<Rightarrow> ('g, unit) State) \<Rightarrow>
- ('g, 'v, 't) function_sig'" where
+ ('g, 'v, 't) function_sig" where
 "mkBuiltin_1_0 f =
   \<lparr> f_sig_arguments = mkNames [STR ''a1'']
     , f_sig_returns = mkNames []
@@ -70,11 +87,12 @@ definition mkBuiltin_1_0 ::
                 (\<lambda> g . 
                   (case f v g of
                     ((), g') \<Rightarrow> ([], g')))
-        | _ \<Rightarrow> Error (STR ''Argument arity error'') None) \<rparr>"
+        | _ \<Rightarrow> Error (STR ''Argument arity error'') None)
+  , f_sig_visible = [] \<rparr>"
 
 definition mkBuiltin_1_1 ::
 "('v \<Rightarrow> ('g, 'v) State) \<Rightarrow>
- ('g, 'v, 't) function_sig'" where
+ ('g, 'v, 't) function_sig" where
 "mkBuiltin_1_1 f =
   \<lparr> f_sig_arguments = mkNames [STR ''a1'']
   , f_sig_returns = mkNames [STR ''r1'']
@@ -84,11 +102,12 @@ definition mkBuiltin_1_1 ::
               (\<lambda> g . 
                 (case f v g of
                   (v', g') \<Rightarrow> ([v'], g')))
-      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))\<rparr>"
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
 
 definition mkBuiltin_2_0 ::
 "('v \<Rightarrow> 'v \<Rightarrow> ('g, unit) State) \<Rightarrow>
- ('g, 'v, 't) function_sig'" where
+ ('g, 'v, 't) function_sig" where
 "mkBuiltin_2_0 f =
   \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'']
   , f_sig_returns = mkNames []
@@ -98,11 +117,12 @@ definition mkBuiltin_2_0 ::
               (\<lambda> g . 
                 (case f v1 v2 g of
                   ((), g') \<Rightarrow> ([], g')))
-      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))\<rparr>"
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
 
 definition mkBuiltin_2_1 ::
 "('v \<Rightarrow> 'v \<Rightarrow> ('g, 'v) State) \<Rightarrow>
- ('g, 'v, 't) function_sig'" where
+ ('g, 'v, 't) function_sig" where
 "mkBuiltin_2_1 f =
   \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'']
   , f_sig_returns = mkNames [STR ''r1'']
@@ -112,11 +132,12 @@ definition mkBuiltin_2_1 ::
               (\<lambda> g . 
                 (case f v1 v2 g of
                   (v', g') \<Rightarrow> ([v'], g')))
-      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))\<rparr>"
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
 
 definition mkBuiltin_2_2 ::
 "('v \<Rightarrow> 'v \<Rightarrow> ('g, ('v * 'v)) State) \<Rightarrow>
- ('g, 'v, 't) function_sig'" where
+ ('g, 'v, 't) function_sig" where
 "mkBuiltin_2_2 f =
   \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'']
   , f_sig_returns = mkNames [STR ''r1'', STR ''r2'']
@@ -126,12 +147,13 @@ definition mkBuiltin_2_2 ::
               (\<lambda> g . 
                 (case f v1 v2 g of
                   ((v'1, v'2), g') \<Rightarrow> ([v'1, v'2], g')))
-      | _ \<Rightarrow> Error (STR ''Argument arity error'') None)) \<rparr>"
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None)) 
+  , f_sig_visible = [] \<rparr>"
 
 
 definition mkBuiltin_3_0 ::
 "('v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> ('g, unit) State) \<Rightarrow>
- ('g, 'v, 't) function_sig'" where
+ ('g, 'v, 't) function_sig" where
 "mkBuiltin_3_0 f =
   \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'', STR ''a3'']
   , f_sig_returns = mkNames []
@@ -141,11 +163,12 @@ definition mkBuiltin_3_0 ::
               (\<lambda> g . 
                 (case f v1 v2 v3 g of
                   ((), g') \<Rightarrow> ([], g')))
-      | _ \<Rightarrow> Error (STR ''Argument arity error'') None)) \<rparr>"
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
 
 definition mkBuiltin_3_1 ::
 "('v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> ('g, 'v) State) \<Rightarrow>
- ('g, 'v, 't) function_sig'" where
+ ('g, 'v, 't) function_sig" where
 "mkBuiltin_3_1 f =
   \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'', STR ''a3'']
   , f_sig_returns = mkNames [STR ''r1'']
@@ -155,11 +178,12 @@ definition mkBuiltin_3_1 ::
               (\<lambda> g . 
                 (case f v1 v2 v3 g of
                   (v', g') \<Rightarrow> ([v'], g')))
-      | _ \<Rightarrow> Error (STR ''Argument arity error'') None)) \<rparr>"
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
 
 definition mkBuiltin_3_2 ::
 "('v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> ('g, ('v * 'v)) State) \<Rightarrow>
- ('g, 'v, 't) function_sig'" where
+ ('g, 'v, 't) function_sig" where
 "mkBuiltin_3_2 f =
   \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'', STR ''a3'']
   , f_sig_returns = mkNames [STR ''r1'', STR ''r2'']
@@ -169,18 +193,76 @@ definition mkBuiltin_3_2 ::
               (\<lambda> g . 
                 (case f v1 v2 v3 g of
                   ((v'1, v'2), g') \<Rightarrow> ([v'1, v'2], g')))
-      | _ \<Rightarrow> Error (STR ''Argument arity error'') None)) \<rparr>"
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>" 
+
+(* log2, log3 and log4 need these, for 4, 5, 6 arguments respectively *)
+definition mkBuiltin_4_0 ::
+"('v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> ('g, unit) State) \<Rightarrow>
+ ('g, 'v, 't) function_sig" where
+"mkBuiltin_4_0 f =
+  \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'', STR ''a3'', STR ''a4'']
+  , f_sig_returns = mkNames []
+  , f_sig_body = YulBuiltin
+    (\<lambda> vs . (case vs of
+      [v1, v2, v3, v4] \<Rightarrow> Result 
+              (\<lambda> g . 
+                (case f v1 v2 v3 v4 g of
+                  ((), g') \<Rightarrow> ([], g')))
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
+
+definition mkBuiltin_5_0 ::
+"('v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> ('g, unit) State) \<Rightarrow>
+ ('g, 'v, 't) function_sig" where
+"mkBuiltin_5_0 f =
+  \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'', STR ''a3'', STR ''a4'', STR ''a5'']
+  , f_sig_returns = mkNames []
+  , f_sig_body = YulBuiltin
+    (\<lambda> vs . (case vs of
+      [v1, v2, v3, v4, v5] \<Rightarrow> Result 
+              (\<lambda> g . 
+                (case f v1 v2 v3 v4 v5 g of
+                  ((), g') \<Rightarrow> ([], g')))
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
+
+definition mkBuiltin_6_0 ::
+"('v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> ('g, unit) State) \<Rightarrow>
+ ('g, 'v, 't) function_sig" where
+"mkBuiltin_6_0 f =
+  \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'', STR ''a3'',
+                               STR ''a4'', STR ''a5'', STR ''a6'']
+  , f_sig_returns = mkNames []
+  , f_sig_body = YulBuiltin
+    (\<lambda> vs . (case vs of
+      [v1, v2, v3, v4, v5, v6] \<Rightarrow> Result 
+              (\<lambda> g . 
+                (case f v1 v2 v3 v4 v5 v6 g of
+                  ((), g') \<Rightarrow> ([], g')))
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
+
 
 adhoc_overloading mkBuiltin
   mkBuiltin_0_0
+
   mkBuiltin_1_0
   mkBuiltin_1_1
+
   mkBuiltin_2_0
   mkBuiltin_2_1
   mkBuiltin_2_2
+
   mkBuiltin_3_0
   mkBuiltin_3_1
   mkBuiltin_3_2
+
+  mkBuiltin_4_0
+
+  mkBuiltin_5_0
+
+  mkBuiltin_6_0
 
 (*
  * EVM instruction semantics
@@ -347,8 +429,6 @@ fun ei_not :: "eint \<Rightarrow> (estate, eint) State" where
 "ei_not i1 s =
   (bit_operations_word_inst.bitNOT_word i1, s)"
 
-value "scast ((word_of_int (-1) :: 8 word)) :: 256 word"
-
 (* note that rsplit goes from most \<rightarrow> least significant digits
    (this is the opposite of how test_bit_word works)
 *)
@@ -381,15 +461,12 @@ fun ei_sar :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_sar i1 i2 s = 
   (sshiftr i1 (nat (uint i2)), s)"
 
-value "sint (sshiftr (word_of_int (-128) :: 8 word) 1)"
 
 (*
  * Keccak256
- * TODO: Find a way to port Keccak implementation from the Lem one in Eth-Isabelle
- * Ideally, without pulling in all of Lem as a dependency.
  *)
-fun ei_keccak :: "eint \<Rightarrow> (estate, eint) State" where
-"ei_keccak i s =
+fun ei_keccak256 :: "eint \<Rightarrow> (estate, eint) State" where
+"ei_keccak256 i s =
   (keccak256 i, s)"
 
 
@@ -503,6 +580,37 @@ fun ei_jumpdest :: "(estate, unit) State" where
  * TODO
 *)
 
+fun ei_log0 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_log0 start end st =
+  (()
+  , (st \<lparr> log := log st @ 
+            [Log0 (get_mrange st (unat start) (unat end - unat start))] \<rparr>))"
+
+fun ei_log1 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_log1 start end t1 st =
+  (()
+  , (st \<lparr> log := log st @ 
+            [Log1 (get_mrange st (unat start) (unat end - unat start)) t1] \<rparr>))"
+
+fun ei_log2 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_log2 start end t1 t2 st =
+  (()
+  , (st \<lparr> log := log st @ 
+            [Log2 (get_mrange st (unat start) (unat end - unat start)) t1 t2] \<rparr>))"
+
+fun ei_log3 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_log3 start end t1 t2 t3 st =
+  (()
+  , (st \<lparr> log := log st @ 
+            [Log3 (get_mrange st (unat start) (unat end - unat start)) t1 t2 t3] \<rparr>))"
+
+fun ei_log4 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State"
+  where
+"ei_log4 start end t1 t2 t3 t4 st =
+  (()
+  , (st \<lparr> log := log st @ 
+            [Log4 (get_mrange st (unat start) (unat end - unat start)) t1 t2 t3 t4] \<rparr>))"
+
 (*
 	LOG0 = 0xa0,		///< Makes a log entry; no topics.
 	LOG1,				///< Makes a log entry; 1 topic.
@@ -547,5 +655,53 @@ fun ei_invalid :: "(estate, unit) State" where
 fun ei_selfdestruct :: "eint \<Rightarrow> (estate, unit) State" where
 "ei_selfdestruct _ st =
   ((), (st \<lparr> flag := SelfDestruct \<rparr>))"
+
+(*
+ * Construct builtins list
+ *)
+definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
+"yulBuiltins = make_locals
+  [ (STR ''stop'', mkBuiltin ei_stop)
+  , (STR ''add'', mkBuiltin ei_add)
+  , (STR ''mul'', mkBuiltin ei_sub)
+  , (STR ''div'', mkBuiltin ei_div)
+  , (STR ''sdiv'', mkBuiltin ei_sdiv)
+  , (STR ''mod'', mkBuiltin ei_mod)
+  , (STR ''smod'', mkBuiltin ei_smod)
+  , (STR ''addmod'', mkBuiltin ei_addmod)
+  , (STR ''mulmod'', mkBuiltin ei_mulmod)
+  , (STR ''exp'', mkBuiltin ei_exp)
+  , (STR ''signextend'', mkBuiltin ei_signextend)
+  , (STR ''lt'', mkBuiltin ei_lt)
+  , (STR ''gt'', mkBuiltin ei_gt)
+  , (STR ''slt'', mkBuiltin ei_slt)
+  , (STR ''sgt'', mkBuiltin ei_sgt)
+  , (STR ''eq'', mkBuiltin ei_eq)
+  , (STR ''iszero'', mkBuiltin ei_iszero)
+  , (STR ''and'', mkBuiltin ei_and)
+  , (STR ''or'', mkBuiltin ei_or)
+  , (STR ''xor'', mkBuiltin ei_xor)
+  , (STR ''not'', mkBuiltin ei_not)
+  , (STR ''byte'', mkBuiltin ei_byte)
+  , (STR ''shl'', mkBuiltin ei_shl)
+  , (STR ''shr'', mkBuiltin ei_shr)
+  , (STR ''sar'', mkBuiltin ei_sar)
+  , (STR ''keccak256'', mkBuiltin ei_keccak256)
+  , (STR ''pop'', mkBuiltin ei_pop)
+  , (STR ''mload'', mkBuiltin ei_mload)
+  , (STR ''mstore'', mkBuiltin ei_mstore)
+  , (STR ''mstore8'', mkBuiltin ei_mstore8)
+  , (STR ''sload'', mkBuiltin ei_sload)
+  , (STR ''sstore'', mkBuiltin ei_sstore)
+  \<comment> \<open>, (STR ''jumpdest'', mkBuiltin ei_jumpdest) \<close>
+  , (STR ''log0'', mkBuiltin ei_log0)
+  , (STR ''log1'', mkBuiltin ei_log1)
+  , (STR ''log2'', mkBuiltin ei_log2)
+  , (STR ''log3'', mkBuiltin ei_log3)
+  , (STR ''log4'', mkBuiltin ei_log4)
+  , (STR ''revert'', mkBuiltin ei_revert)
+  , (STR ''invalid'', mkBuiltin ei_invalid)
+  , (STR ''selfdestruct'', mkBuiltin ei_selfdestruct)
+  ]"
 
 end
