@@ -577,7 +577,6 @@ fun ei_jumpdest :: "(estate, unit) State" where
 
 (* 
  * Log instructions 
- * TODO
 *)
 
 fun ei_log0 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
@@ -610,14 +609,6 @@ fun ei_log4 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<
   (()
   , (st \<lparr> log := log st @ 
             [Log4 (get_mrange st (unat start) (unat end - unat start)) t1 t2 t3 t4] \<rparr>))"
-
-(*
-	LOG0 = 0xa0,		///< Makes a log entry; no topics.
-	LOG1,				///< Makes a log entry; 1 topic.
-	LOG2,				///< Makes a log entry; 2 topics.
-	LOG3,				///< Makes a log entry; 3 topics.
-	LOG4,				///< Makes a log entry; 4 topics.
-*)
 
 (*
  * EIP615 instructions (not used)
@@ -672,6 +663,7 @@ definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
   , (STR ''mulmod'', mkBuiltin ei_mulmod)
   , (STR ''exp'', mkBuiltin ei_exp)
   , (STR ''signextend'', mkBuiltin ei_signextend)
+
   , (STR ''lt'', mkBuiltin ei_lt)
   , (STR ''gt'', mkBuiltin ei_gt)
   , (STR ''slt'', mkBuiltin ei_slt)
@@ -686,7 +678,14 @@ definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
   , (STR ''shl'', mkBuiltin ei_shl)
   , (STR ''shr'', mkBuiltin ei_shr)
   , (STR ''sar'', mkBuiltin ei_sar)
+
   , (STR ''keccak256'', mkBuiltin ei_keccak256)
+
+  \<comment> \<open> address... extcodehash \<close>
+
+  \<comment> \<open> blockhash... selfbalance \<close>
+
+
   , (STR ''pop'', mkBuiltin ei_pop)
   , (STR ''mload'', mkBuiltin ei_mload)
   , (STR ''mstore'', mkBuiltin ei_mstore)
@@ -694,11 +693,15 @@ definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
   , (STR ''sload'', mkBuiltin ei_sload)
   , (STR ''sstore'', mkBuiltin ei_sstore)
   \<comment> \<open>, (STR ''jumpdest'', mkBuiltin ei_jumpdest) \<close>
+
   , (STR ''log0'', mkBuiltin ei_log0)
   , (STR ''log1'', mkBuiltin ei_log1)
   , (STR ''log2'', mkBuiltin ei_log2)
   , (STR ''log3'', mkBuiltin ei_log3)
   , (STR ''log4'', mkBuiltin ei_log4)
+
+  \<comment> \<open> create... staticcall \<close>
+
   , (STR ''revert'', mkBuiltin ei_revert)
   , (STR ''invalid'', mkBuiltin ei_invalid)
   , (STR ''selfdestruct'', mkBuiltin ei_selfdestruct)
