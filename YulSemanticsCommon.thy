@@ -242,8 +242,12 @@ datatype YulFlag =
   | Halt
   (* execution halted; global state contains a return value *)
   | Return
-  (* program has halted and its transaction needs to be reverted *)
+  (* program has halted and its transaction needs to be reverted;
+     refund gas and return a value *)
   | Revert
+  (* program has halted and its transaction needs to be reverted;
+     do not refund gas and do not return a value*)
+  | Throw
   (* program has halted; the smart contract to which it corresponds should be destroyed *)
   | SelfDestruct
 

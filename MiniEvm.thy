@@ -14,7 +14,9 @@ type_synonym eint = "256 word"
 consts keccak256 :: "eint \<Rightarrow> eint"
 
 record estate =
-  memory :: "eint \<Rightarrow> eint"
+  (* Memory is byte-indexed *)
+  memory :: "eint \<Rightarrow> 8 word"
+  (* Storage is word-indexed *)
   storage :: "eint \<Rightarrow> eint"
   flag :: YulFlag
   calldata :: "eint list"
@@ -188,23 +190,23 @@ adhoc_overloading mkBuiltin
  * Stop + arithmetic
  *)
 
-fun stop :: "(estate, unit) State" where
-"stop s = ((), s \<lparr> flag := Halt \<rparr>)"
+fun ei_stop :: "(estate, unit) State" where
+"ei_stop s = ((), s \<lparr> flag := Halt \<rparr>)"
 
 (* TODO: Eth-Isabelle does not directly use HOL-Word primitives for arithmetic
    operations - instead it converts to integers, does integer operations, and then converts back.
    Using the library primitives feels cleaner, but we should make sure the semantics are the same. *)
-fun add :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"add i1 i2 s = (plus_word_inst.plus_word i1 i2, s)"
+fun ei_add :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_add i1 i2 s = (plus_word_inst.plus_word i1 i2, s)"
 
-fun mul :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"mul i1 i2 s = (times_word_inst.times_word i1 i2, s)"
+fun ei_mul :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_mul i1 i2 s = (times_word_inst.times_word i1 i2, s)"
 
-fun sub :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"sub i1 i2 s = (minus_word_inst.minus_word i1 i2, s)"
+fun ei_sub :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_sub i1 i2 s = (minus_word_inst.minus_word i1 i2, s)"
 
-fun divd :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"divd i1 i2 s = (divide_word_inst.divide_word i1 i2, s)"
+fun ei_div :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_div i1 i2 s = (divide_word_inst.divide_word i1 i2, s)"
 
 (* get minimum-valued word (2's complement) *)
 definition ssmallest :: "('a :: len0) word" where
@@ -232,16 +234,16 @@ fun sdivd' :: "('a :: len) word \<Rightarrow> 'a word \<Rightarrow> 'a word" whe
                                  (divide_word_inst.divide_word (word_abs i1) (word_abs i2))
     | _ \<Rightarrow> (divide_word_inst.divide_word (word_abs i1) (word_abs i2))))"
 
-fun sdivd :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"sdivd i1 i2 s = (sdivd' i1 i2, s)"
+fun ei_sdiv :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_sdiv i1 i2 s = (sdivd' i1 i2, s)"
 
 fun modu' :: "('a :: len) word \<Rightarrow> 'a word \<Rightarrow> 'a word" where
 "modu' i1 i2 =
   (if i2 = word_of_int 0 then word_of_int 0
    else modulo_word_inst.modulo_word i1 i2)"
 
-fun modu :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"modu i1 i2 s = (modu' i1 i2, s)"
+fun ei_mod :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_mod i1 i2 s = (modu' i1 i2, s)"
 
 fun smodu' :: "('a :: len) word \<Rightarrow> 'a word \<Rightarrow> 'a word" where
 "smodu' i1 i2 =
@@ -249,29 +251,29 @@ fun smodu' :: "('a :: len) word \<Rightarrow> 'a word \<Rightarrow> 'a word" whe
     times_word_inst.times_word (word_of_int (-1)) (modu' (word_abs i1) (word_abs i2))
    else modu' (word_abs i1) (word_abs i2))"
 
-fun smodu :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"smodu i1 i2 s = 
+fun ei_smod :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_smod i1 i2 s = 
   (smodu' i1 i2, s)"
 
 value "word_of_int (257) :: 8 word"
 
 (* TODO: should we write all the arithmetic operations this way?
 *)
-fun addmod :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"addmod i1 i2 i3 s =
+fun ei_addmod :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_addmod i1 i2 i3 s =
   (if i3 = word_of_int 0 then (word_of_int 0, s)
    else
    (word_of_int ((uint i1) + (uint i2)  mod (uint i3)), s))"
 
-fun mulmod :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"mulmod i1 i2 i3 s =
+fun ei_mulmod :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_mulmod i1 i2 i3 s =
   (if i3 = word_of_int 0 then (word_of_int 0, s)
    else
    (word_of_int ((uint i1) * (uint i2)  mod (uint i3)), s))"
 
 (* TODO: for large exponents this could be inefficient *)
-fun exp :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"exp i1 i2 s =
+fun ei_exp :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_exp i1 i2 s =
   (word_of_int ((uint i1) ^ (nat (uint i2))), s)"
 
 fun signextend' :: "('a :: len) word \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'a word"
@@ -282,8 +284,8 @@ fun signextend' :: "('a :: len) word \<Rightarrow> bool \<Rightarrow> nat \<Righ
     else signextend' (bit_operations_word_inst.set_bit_word w idx b) b (idx - 1) signloc)"
 
 (* TODO: make sure this does the right thing - I have tested on a couple of cases *)
-fun signextend :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"signextend len w s =
+fun ei_signextend :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_signextend len w s =
   (if uint len \<ge> 31 then (w, s)
    else
    (let signloc = 8 * (nat (uint len) + 1) - 1 in
@@ -291,12 +293,103 @@ fun signextend :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" w
    (signextend' w signbit (255) signloc, s))))"
 
 (*
+ * Comparison and Bitwise Operations
+ *)
+fun ei_lt :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_lt i1 i2 s =
+  (if uint i1 < uint i2
+   then (word_of_int 1, s)
+   else (word_of_int 0, s))"
+
+fun ei_gt :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_gt i1 i2 s =
+  (if uint i1 > uint i2
+   then (word_of_int 1, s)
+   else (word_of_int 0, s))"
+
+fun ei_slt :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_slt i1 i2 s =
+  (if sint i1 < sint i2
+   then (word_of_int 1, s)
+   else (word_of_int 0, s))"
+
+fun ei_sgt :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_sgt i1 i2 s =
+  (if sint i1 > sint i2
+   then (word_of_int 1, s)
+   else (word_of_int 0, s))"
+
+fun ei_eq :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_eq i1 i2 s =
+  (if i1 = i2
+   then (word_of_int 1, s)
+   else (word_of_int 0, s))"
+
+fun ei_iszero :: "eint \<Rightarrow> (estate, eint) State" where
+"ei_iszero i1 s =
+  (if i1 = word_of_int 0
+   then (word_of_int 1, s)
+   else (word_of_int 0, s))"
+
+fun ei_and :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_and i1 i2 s =
+  (bit_operations_word_inst.bitAND_word i1 i2, s)"
+
+fun ei_or :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_or i1 i2 s =
+  (bit_operations_word_inst.bitOR_word i1 i2, s)"
+
+fun ei_xor :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_xor i1 i2 s =
+  (bit_operations_word_inst.bitXOR_word i1 i2, s)"
+
+fun ei_not :: "eint \<Rightarrow> (estate, eint) State" where
+"ei_not i1 s =
+  (bit_operations_word_inst.bitNOT_word i1, s)"
+
+value "scast ((word_of_int (-1) :: 8 word)) :: 256 word"
+
+(* note that rsplit goes from most \<rightarrow> least significant digits
+   (this is the opposite of how test_bit_word works)
+*)
+fun ei_byte :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_byte idx word s = 
+  (if (uint idx) \<ge> 32 then (word_of_int 0, s)
+   else
+   (let bytes = (word_rsplit word :: 8 word list) in
+    (ucast (bytes ! nat (uint idx)), s)))"
+
+fun shl_many :: "('a :: len) word \<Rightarrow> int \<Rightarrow> 'a word" where
+"shl_many w n =
+  (if n \<le> 0 then w
+   else shl_many (shiftl1 w) (n-1))"
+
+fun ei_shl :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_shl i1 i2 s = 
+  (shl_many i1 (uint i2), s)"
+
+fun shr_many :: "('a :: len) word \<Rightarrow> int \<Rightarrow> 'a word" where
+"shr_many w n =
+  (if n \<le> 0 then w
+   else shr_many (shiftr1 w) (n-1))"
+
+fun ei_shr :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_shr i1 i2 s = 
+  (shr_many i1 (uint i2), s)"
+
+fun ei_sar :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_sar i1 i2 s = 
+  (sshiftr i1 (nat (uint i2)), s)"
+
+value "sint (sshiftr (word_of_int (-128) :: 8 word) 1)"
+
+(*
  * Keccak256
  * TODO: Find a way to port Keccak implementation from the Lem one in Eth-Isabelle
  * Ideally, without pulling in all of Lem as a dependency.
  *)
-fun keccak :: "eint \<Rightarrow> (estate, eint) State" where
-"keccak i s =
+fun ei_keccak :: "eint \<Rightarrow> (estate, eint) State" where
+"ei_keccak i s =
   (keccak256 i, s)"
 
 
@@ -323,12 +416,12 @@ fun keccak :: "eint \<Rightarrow> (estate, eint) State" where
 	RETURNDATASIZE = 0x3d,	///< get size of return data buffer
 	RETURNDATACOPY = 0x3e,	///< copy return data in current environment to memory
 	EXTCODEHASH = 0x3f,	///< get external code hash (from another contract)
-
 *)
 
 (*
  * Transaction metadata
  * (Blockhash - Selfbalance)
+ * TODO
  *)
 
 (*
@@ -344,21 +437,60 @@ fun keccak :: "eint \<Rightarrow> (estate, eint) State" where
 
 (*
  * Stack, Memory, Storage, and Control Flow
+ * TODO: track memory, storage for gas purposes
  *)
-(*
-	POP = 0x50,			///< remove item from stack
-	MLOAD,				///< load word from memory
-	MSTORE,				///< save word to memory
-	MSTORE8,			///< save byte to memory
-	SLOAD,				///< load word from storage
-	SSTORE,				///< save word to storage
-	JUMP,				///< alter the program counter
-	JUMPI,				///< conditionally alter the program counter
-	PC,					///< get the program counter
-	MSIZE,				///< get the size of active memory
-	GAS,				///< get the amount of available gas
-	JUMPDEST,			///< set a potential jump destination
-*)
+
+fun ei_pop :: "eint \<Rightarrow> (estate, unit) State" where
+"ei_pop i1 s = ((), s)"
+
+fun get_mrange :: "estate \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list" where
+"get_mrange st min_idx 0 = []"
+| "get_mrange st min_idx (Suc num_bytes') =
+   memory st (word_of_int (int min_idx)) # get_mrange st (min_idx + 1) num_bytes'"
+
+(* mload = get 32 bytes from given location in memory *)
+(* TODO: make sure endianness is correct here *)
+fun ei_mload :: "eint \<Rightarrow> (estate, eint) State" where
+"ei_mload i1 s =
+  (let bytes = get_mrange s (nat (uint i1)) 32 in
+  (word_rcat bytes, s))"
+
+(* TODO: this feels like it will be inefficient.
+   We might want to consider a different representation for memory *)
+fun put_mem :: "estate \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> estate" where
+"put_mem st min_idx data =
+ (st \<lparr> memory :=
+       (\<lambda> i . 
+        (if uint i \<ge> int min_idx \<and> uint i < int (min_idx + length data)
+         then data ! (nat (uint i) - min_idx)
+         else memory st i)) \<rparr>)"
+
+fun ei_mstore :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_mstore idx value st =
+  (let bytes = word_rsplit value :: 8 word list in
+   ((), put_mem st (nat (uint idx)) bytes))"
+
+fun ei_mstore8 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_mstore8 idx value st =
+  ((), put_mem st (nat (uint idx)) [(Word.ucast value) :: 8 word])"
+
+fun ei_sload :: "eint \<Rightarrow> (estate, eint) State" where
+"ei_sload idx st =
+ (storage st idx, st)" 
+
+fun ei_sstore :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_sstore idx value st =
+  ((), (st \<lparr> storage := (\<lambda> i . if i = idx then value else storage st i) \<rparr>))"
+
+(* jump, jumpi, pc = not supported here *)
+
+(* msize - TODO *)
+
+(* gas - TODO *)
+
+(* jumpdest = not supported here, unless we need a NOP for some reason *)
+fun ei_jumpdest :: "(estate, unit) State" where
+"ei_jumpdest st = ((), st)"
 
 (*
  * Push instructions (not used)
@@ -385,7 +517,7 @@ fun keccak :: "eint \<Rightarrow> (estate, eint) State" where
 
 (*
  * Contract creation and cross-contract calls
- * (Implement these later)
+ * (Implement these later) TODO
  *)
 (*
 	CREATE = 0xf0,		///< create a new account with associated code
@@ -400,10 +532,20 @@ fun keccak :: "eint \<Rightarrow> (estate, eint) State" where
 (*
  * Halting instructions
  *)
-(*
-	REVERT = 0xfd,		///< halt execution, revert state and return output data
-	INVALID = 0xfe,		///< invalid instruction for expressing runtime errors (e.g., division-by-zero)
-	SELFDESTRUCT = 0xff	///< halt execution and register account for later deletion
-*)
+
+(* TODO: we have not yet implemented return-value *)
+fun ei_revert :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_revert _ _ st =
+  ((), (st \<lparr> flag := Revert \<rparr>))"
+
+(* TODO: it looks like invalid might need to be polymorphic in number of arguments.
+   Treating it as (0, 0) for now, since this will lead to an arity error in other cases. *)
+fun ei_invalid :: "(estate, unit) State" where
+"ei_invalid st = ((), (st \<lparr> flag := Throw \<rparr>))"
+
+(* TODO: make proper use of the argument here *)
+fun ei_selfdestruct :: "eint \<Rightarrow> (estate, unit) State" where
+"ei_selfdestruct _ st =
+  ((), (st \<lparr> flag := SelfDestruct \<rparr>))"
 
 end
