@@ -1,6 +1,7 @@
 theory MiniEvm
   imports YulSemanticsCommon
     "HOL-Library.Adhoc_Overloading"
+    (*"HOL-Library.Word"*)
     "HOL-Word.Word"
     "Keccak/Keccak"
 begin
@@ -11,10 +12,6 @@ https://github.com/ethereum/solidity/blob/develop/libevmasm/Instruction.h
 
 (* EVM is unityped; everything is 256-bit word *)
 type_synonym eint = "256 word"
-
-definition keccak256 :: "eint \<Rightarrow> eint" where
-"keccak256 i =
-  Keccak.keccak (Word.word_rsplit i)"
 
 datatype logentry =
   Log0 "8 word list"
@@ -358,12 +355,27 @@ fun ei_exp :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_exp i1 i2 s =
   (word_of_int ((uint i1) ^ (nat (uint i2))), s)"
 
+(* new sign extend implementation for better compatibility with Isabelle2021 *)
+fun signextend' :: "('a :: len) word \<Rightarrow> nat \<Rightarrow> 'a word" where
+"signextend' w n =
+  (let signloc = 8 * (n + 1) - 1 in
+   \<comment> \<open>all zeroes, except for sign bit we are extending\<close>
+   (let testmask = word_of_int (2 ^ (signloc)) in
+   \<comment> \<open>all ones at bits lower than sign bit we are extending\<close>
+   (let mask = word_of_int (2 ^ (signloc) - 1) in
+    (if w AND testmask = word_of_int 0
+     then w AND mask
+     else w OR (NOT mask)))))"
+
+(*
 fun signextend' :: "('a :: len) word \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'a word"
   where
 "signextend' w b idx 0 = w"
 | "signextend' w b idx signloc =
    (if idx \<le> signloc then w
     else signextend' (bit_operations_word_inst.set_bit_word w idx b) b (idx - 1) signloc)"
+
+
 
 (* TODO: make sure this does the right thing - I have tested on a couple of cases *)
 fun ei_signextend :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
@@ -373,6 +385,15 @@ fun ei_signextend :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State
    (let signloc = 8 * (nat (uint len) + 1) - 1 in
    (let signbit = bit_operations_word_inst.test_bit_word w signloc in
    (signextend' w signbit (255) signloc, s))))"
+*)
+
+(* TODO: make sure this does the right thing - I have tested on a couple of cases *)
+fun ei_signextend :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_signextend len w s =
+  (if uint len \<ge> 31 then (w, s)
+   else
+   (signextend' w (unat len), s))"
+
 
 (*
  * Comparison and Bitwise Operations
@@ -465,9 +486,15 @@ fun ei_sar :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 (*
  * Keccak256
  *)
-fun ei_keccak256 :: "eint \<Rightarrow> (estate, eint) State" where
-"ei_keccak256 i s =
-  (keccak256 i, s)"
+
+fun get_mrange :: "estate \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list" where
+"get_mrange st min_idx 0 = []"
+| "get_mrange st min_idx (Suc num_bytes') =
+   memory st (word_of_int (int min_idx)) # get_mrange st (min_idx + 1) num_bytes'"
+
+fun ei_keccak256 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_keccak256 idx sz st =
+  (Keccak.keccak (get_mrange st (unat idx) (unat sz)), st)"
 
 
 (*
@@ -519,11 +546,6 @@ fun ei_keccak256 :: "eint \<Rightarrow> (estate, eint) State" where
 
 fun ei_pop :: "eint \<Rightarrow> (estate, unit) State" where
 "ei_pop i1 s = ((), s)"
-
-fun get_mrange :: "estate \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list" where
-"get_mrange st min_idx 0 = []"
-| "get_mrange st min_idx (Suc num_bytes') =
-   memory st (word_of_int (int min_idx)) # get_mrange st (min_idx + 1) num_bytes'"
 
 (* mload = get 32 bytes from given location in memory *)
 (* TODO: make sure endianness is correct here *)
