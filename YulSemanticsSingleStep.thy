@@ -90,7 +90,8 @@ fun yulContinue :: "('g, 'v, 't) YulDialect \<Rightarrow>
     ErrorResult (STR ''Continue outside loop body (inside function body)'') (Some r)"
 | "yulContinue D (Expression cond1 # 
                   ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' # ct) r =
-   YulResult (r \<lparr> cont := Expression cond1 #
+   YulResult (r \<lparr> cont := EnterStatement YUL_STMT{ {\<guillemotleft>post\<guillemotright>} } #
+                          Expression cond1 #
                           ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' 
                           # ct \<rparr>)"
 
