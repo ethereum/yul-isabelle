@@ -1,5 +1,5 @@
 theory YulSyntax
-  imports Main "HOL-Word.Word"
+  imports Main (*"HOL-Library.Word"*) "HOL-Word.Word"
 begin
 
 

@@ -13,6 +13,11 @@ https://github.com/ethereum/solidity/blob/develop/libevmasm/Instruction.h
 (* EVM is unityped; everything is 256-bit word *)
 type_synonym eint = "256 word"
 
+(* ethereum addresses are 160 bits *)
+type_synonym eaddr = "160 word"
+
+type_synonym ebyte = "8 word"
+
 datatype logentry =
   Log0 "8 word list"
   | Log1 "8 word list" eint
@@ -20,26 +25,90 @@ datatype logentry =
   | Log3 "8 word list" eint eint eint
   | Log4 "8 word list" eint eint eint eint
 
-record estate =
+record estate_core =
   (* Memory is byte-indexed *)
-  memory :: "eint \<Rightarrow> 8 word"
+  e_memory :: "8 word list"
   (* Storage is word-indexed *)
-  storage :: "eint \<Rightarrow> eint"
-  flag :: YulFlag
-  calldata :: "eint list"
-  outputdata :: "eint list"
-  returndata :: "eint list"
-  log :: "logentry list"
+  e_storage :: "eint \<Rightarrow> eint"
+  e_flag :: YulFlag
+  e_log :: "logentry list"
 
+record estate_resource = estate_core +
+  e_msize :: eint
+  e_gas :: eint  
+
+record estate_data = estate_resource +
+  e_codedata :: "8 word list"
+  e_calldata :: "8 word list"
+  e_outputdata :: "8 word list"
+  e_returndata :: "8 word list"
+
+record estate_metadata = estate_data +
+  e_address :: eint
+  e_origin :: eint
+  e_caller :: eint
+  e_callvalue :: eint
+  e_gasprice :: eint
+  e_blockhash :: eint
+  e_coinbase :: eint
+  e_timestamp :: eint
+  e_blocknumber :: eint
+  e_difficulty :: eint
+  e_gaslimit :: eint
+  e_chainid :: eint
+  e_selfbalance :: eint
+
+(* TODO: we could also add external programs as
+   Isabelle functions here
+ *)
+record estate = estate_metadata +
+  e_extcode :: "eaddr \<Rightarrow> 8 word list"
+  e_balances :: "eaddr \<Rightarrow> eint"
+  (* tracking account existence is needed for balance *)
+  e_acct_exists :: "eaddr \<Rightarrow> bool"
+  (* tracking "dead"-ness of accounts is needed for extcodehash *)
+  e_acct_live :: "eaddr \<Rightarrow> bool"
+  
+  
+(*
+record estate_core_resource = estate_core_data +
+  msize :: eint
+  gas :: eint
+*)
+
+(* record estate_core_intercontract = ... *)
 definition dummy_estate :: estate where
 "dummy_estate =
-  \<lparr> memory = \<lambda> _ . word_of_int 0
-  , storage = \<lambda> _ . word_of_int 0
-  , flag = Executing
-  , calldata = []
-  , outputdata = []
-  , returndata = []
-  , log = [] \<rparr>"
+  \<lparr> e_memory = []
+  , e_storage = \<lambda> _ . word_of_int 0  
+  , e_flag = Executing
+  , e_log = []
+  , e_msize = word_of_int 0
+  , e_gas = word_of_int 0
+  , e_codedata = []
+  , e_calldata = []
+  , e_outputdata = []
+  , e_returndata = []
+  , e_address = word_of_int 0
+  , e_origin = word_of_int 0
+  , e_caller = word_of_int 0
+  , e_callvalue = word_of_int 0
+  , e_gasprice = word_of_int 0
+  , e_blockhash = word_of_int 0
+  , e_coinbase = word_of_int 0
+  , e_timestamp = word_of_int 0
+  , e_blocknumber = word_of_int 0
+  , e_difficulty = word_of_int 0
+  , e_gaslimit = word_of_int 0
+  , e_chainid = word_of_int 0
+  , e_selfbalance = word_of_int 0 
+  , e_extcode = (\<lambda> _ . [])
+  , e_balances = (\<lambda> _ . word_of_int 0)
+  , e_acct_exists = (\<lambda> _ . False)
+  , e_acct_live = (\<lambda> _ . False)
+
+  \<rparr>"
+
 
 consts mkBuiltin ::
   "'x \<Rightarrow> ('g, 'v, 't) function_sig"
@@ -69,6 +138,21 @@ definition mkBuiltin_0_0 ::
               (\<lambda> g . 
                 (case f g of
                   ((), g') \<Rightarrow> ([], g')))
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None)
+  , f_sig_visible = [] \<rparr>"
+
+definition mkBuiltin_0_1 ::
+"('g, 'v) State \<Rightarrow>
+ ('g, 'v, 't) function_sig" where
+"mkBuiltin_0_1 f =
+  \<lparr> f_sig_arguments = mkNames []
+  , f_sig_returns = mkNames [STR ''r1'']
+  , f_sig_body = YulBuiltin
+    (\<lambda> vs . case vs of
+      [] \<Rightarrow> Result 
+              (\<lambda> g . 
+                (case f g of
+                  (v, g') \<Rightarrow> ([v], g')))
       | _ \<Rightarrow> Error (STR ''Argument arity error'') None)
   , f_sig_visible = [] \<rparr>"
 
@@ -243,6 +327,7 @@ definition mkBuiltin_6_0 ::
 
 adhoc_overloading mkBuiltin
   mkBuiltin_0_0
+  mkBuiltin_0_1
 
   mkBuiltin_1_0
   mkBuiltin_1_1
@@ -270,7 +355,7 @@ adhoc_overloading mkBuiltin
  *)
 
 fun ei_stop :: "(estate, unit) State" where
-"ei_stop s = ((), s \<lparr> flag := Halt \<rparr>)"
+"ei_stop s = ((), s \<lparr> e_flag := Halt \<rparr>)"
 
 (* TODO: Eth-Isabelle does not directly use HOL-Word primitives for arithmetic
    operations - instead it converts to integers, does integer operations, and then converts back.
@@ -487,62 +572,141 @@ fun ei_sar :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
  * Keccak256
  *)
 
-fun get_mrange :: "estate \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list" where
-"get_mrange st min_idx 0 = []"
-| "get_mrange st min_idx (Suc num_bytes') =
-   memory st (word_of_int (int min_idx)) # get_mrange st (min_idx + 1) num_bytes'"
+(* helper for pulling values from a list, adding default value if the end is reached *)
+fun take_default :: "nat \<Rightarrow> 'a \<Rightarrow> 'a list \<Rightarrow> 'a list" where
+"take_default n dfl ls =
+  take n ls @ (replicate (n - length ls) dfl)"
+
+(* helper for pulling word values from a list, adding zero-word value if the end is reached *)
+fun take_padded :: "nat \<Rightarrow> ('a :: len) word list \<Rightarrow> 'a word list" where
+"take_padded n ls = take_default n (word_of_int 0) ls"
 
 fun ei_keccak256 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_keccak256 idx sz st =
-  (Keccak.keccak (get_mrange st (unat idx) (unat sz)), st)"
+  (Keccak.keccak (take_padded (unat sz) (drop (unat idx) (e_memory st))), st)"
 
 
 (*
  * Transaction metadata
  * (Address - Extcodehash)
- * TODO
  *)
 
-(*
-	ADDRESS = 0x30,		///< get address of currently executing account
-	BALANCE,			///< get balance of the given account
-	ORIGIN,				///< get execution origination address
-	CALLER,				///< get caller address
-	CALLVALUE,			///< get deposited value by the instruction/transaction responsible for this execution
-	CALLDATALOAD,		///< get input data of current environment
-	CALLDATASIZE,		///< get size of input data in current environment
-	CALLDATACOPY,		///< copy input data in current environment to memory
-	CODESIZE,			///< get size of code running in current environment
-	CODECOPY,			///< copy code running in current environment to memory
-	GASPRICE,			///< get price of gas in current environment
-	EXTCODESIZE,		///< get external code size (from another contract)
-	EXTCODECOPY,		///< copy external code (from another contract)
-	RETURNDATASIZE = 0x3d,	///< get size of return data buffer
-	RETURNDATACOPY = 0x3e,	///< copy return data in current environment to memory
-	EXTCODEHASH = 0x3f,	///< get external code hash (from another contract)
-*)
+fun ei_address :: "(estate, eint) State" where
+"ei_address s = (e_address s, s)"
+
+fun ei_balance :: "eint \<Rightarrow> (estate, eint) State" where
+"ei_balance acctid s = 
+  ((if e_acct_exists s (ucast acctid)
+    then e_balances s (ucast acctid) 
+    else word_of_int 0)
+  , s)"
+
+fun ei_origin :: "(estate, eint) State" where
+"ei_origin s = (e_origin s, s)"
+
+fun ei_caller :: "(estate, eint) State" where
+"ei_caller s = (e_caller s, s)"
+
+fun ei_callvalue :: "(estate, eint) State" where
+"ei_callvalue s = (e_callvalue s, s)"
+
+(* Helper for calldataload.
+   Pad call data, then return 32 bytes starting at byte n *)
+fun bulk_load :: "nat \<Rightarrow> 8 word list \<Rightarrow> eint" where
+"bulk_load n wl = word_rcat (take_padded 32 (drop n wl))"
+
+fun ei_calldataload :: "eint \<Rightarrow> (estate, eint) State" where
+"ei_calldataload loc s = 
+ (bulk_load (unat loc) (e_calldata s), s)"
+
+fun ei_calldatasize :: "(estate, eint) State" where
+"ei_calldatasize s = (Word.word_of_int (int (length (e_calldata s))), s)"
+
+(* helper for calldatacopy, extcodecopy, returndatacopy *)
+fun bulk_copy :: 
+"nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list \<Rightarrow> 8 word list" where
+"bulk_copy to_idx from_idx n_bytes mem ext_data =
+ (let loaded_bytes = take_padded n_bytes (drop from_idx ext_data) in
+  take to_idx mem @ loaded_bytes @ drop (to_idx + n_bytes) mem)"
+
+fun ei_calldatacopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_calldatacopy to_idx from_idx n_bytes s = 
+ ((), (s \<lparr> e_memory := bulk_copy (unat to_idx) (unat from_idx) (unat n_bytes)
+                                 (e_memory s) (e_calldata s) \<rparr>))"
+
+fun ei_codesize :: "(estate, eint) State" where
+"ei_codesize s = (Word.word_of_int (int (length (e_codedata s))), s)"
+
+fun ei_codecopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_codecopy to_idx from_idx n_bytes s =
+  ((), (s \<lparr> e_memory := bulk_copy (unat to_idx) (unat from_idx) (unat n_bytes)
+                                  (e_memory s) (e_codedata s) \<rparr>))"
+
+fun ei_gasprice :: "(estate, eint) State" where
+"ei_gasprice s = (e_gasprice s, s)"
+
+fun ei_extcodesize :: "eint \<Rightarrow> (estate, eint) State" where
+"ei_extcodesize acctid s = (word_of_int (int (length (e_extcode s (ucast acctid)))), s)"
+
+fun ei_extcodecopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_extcodecopy acctid to_idx from_idx n_bytes s =
+  ((), (s \<lparr> e_memory := bulk_copy (unat to_idx) (unat from_idx) (unat n_bytes)
+                                  (e_memory s) (e_extcode s (ucast acctid)) \<rparr>))"
+
+fun ei_returndatasize :: "(estate, eint) State" where
+"ei_returndatasize s =
+  (word_of_int (int (length (e_returndata s))), s)"
+
+fun ei_returndatacopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_returndatacopy to_idx from_idx n_bytes s = 
+  ((), (s \<lparr> e_memory := bulk_copy (unat to_idx) (unat from_idx) (unat n_bytes)
+                                  (e_memory s) (e_returndata s) \<rparr>))"
+
+fun ei_extcodehash :: "eint \<Rightarrow> (estate, eint) State" where
+"ei_extcodehash acctid s =
+ ((if e_acct_live s (ucast acctid)
+   then Keccak.keccak (e_extcode s (ucast acctid))
+   else word_of_int 0)
+ , s)"
 
 (*
  * Transaction metadata
  * (Blockhash - Selfbalance)
- * TODO
  *)
 
-(*
-	BLOCKHASH = 0x40,	///< get hash of most recent complete block
-	COINBASE,			///< get the block's coinbase address
-	TIMESTAMP,			///< get the block's timestamp
-	NUMBER,				///< get the block's number
-	DIFFICULTY,			///< get the block's difficulty
-	GASLIMIT,			///< get the block's gas limit
-	CHAINID,			///< get the config's chainid param
-	SELFBALANCE,		///< get balance of the current account
-*)
+fun ei_blockhash :: "(estate, eint) State" where
+"ei_blockhash st = (e_blockhash st, st)"
+
+fun ei_coinbase :: "(estate, eint) State" where
+"ei_coinbase st = (e_coinbase st, st)"
+
+fun ei_timestamp :: "(estate, eint) State" where
+"ei_timestamp st = (e_timestamp st, st)"
+
+fun ei_number :: "(estate, eint) State" where
+"ei_number st = (e_blocknumber st, st)"
+
+fun ei_difficulty :: "(estate, eint) State" where
+"ei_difficulty st = (e_difficulty st, st)"
+
+fun ei_gaslimit :: "(estate, eint) State" where
+"ei_gaslimit st = (e_gaslimit st, st)"
+
+fun ei_chainid :: "(estate, eint) State" where
+"ei_chainid st = (e_chainid st, st)"
+
+fun ei_selfbalance :: "(estate, eint) State" where
+"ei_selfbalance st = (e_selfbalance st, st)"
 
 (*
  * Stack, Memory, Storage, and Control Flow
  * TODO: track memory, storage for gas purposes
  *)
+
+(* another helper for accessing memory *)
+fun get_mrange :: "estate \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> ebyte list" where
+"get_mrange st idx sz =
+  (take_padded sz (drop idx (e_memory st)))"
 
 fun ei_pop :: "eint \<Rightarrow> (estate, unit) State" where
 "ei_pop i1 s = ((), s)"
@@ -554,38 +718,37 @@ fun ei_mload :: "eint \<Rightarrow> (estate, eint) State" where
   (let bytes = get_mrange s (nat (uint i1)) 32 in
   (word_rcat bytes, s))"
 
-(* TODO: this feels like it will be inefficient.
-   We might want to consider a different representation for memory *)
-fun put_mem :: "estate \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> estate" where
-"put_mem st min_idx data =
- (st \<lparr> memory :=
-       (\<lambda> i . 
-        (if uint i \<ge> int min_idx \<and> uint i < int (min_idx + length data)
-         then data ! (nat (uint i) - min_idx)
-         else memory st i)) \<rparr>)"
-
 fun ei_mstore :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_mstore idx value st =
   (let bytes = word_rsplit value :: 8 word list in
-   ((), put_mem st (nat (uint idx)) bytes))"
+  ((),
+   (st \<lparr> e_memory := bulk_copy (unat idx) 0 32 (e_memory st) bytes \<rparr>)))"
 
 fun ei_mstore8 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_mstore8 idx value st =
-  ((), put_mem st (nat (uint idx)) [(Word.ucast value) :: 8 word])"
+  (let bytes = [(Word.ucast value) :: 8 word] in
+  ((),
+   (st \<lparr> e_memory := bulk_copy (unat idx) 0 32 (e_memory st) bytes \<rparr>)))"
 
 fun ei_sload :: "eint \<Rightarrow> (estate, eint) State" where
 "ei_sload idx st =
- (storage st idx, st)" 
+ (e_storage st idx, st)" 
 
 fun ei_sstore :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_sstore idx value st =
-  ((), (st \<lparr> storage := (\<lambda> i . if i = idx then value else storage st i) \<rparr>))"
+  ((), (st \<lparr> e_storage := (\<lambda> i . if i = idx then value else e_storage st i) \<rparr>))"
 
 (* jump, jumpi, pc = not supported here *)
 
-(* msize - TODO *)
+(* msize -
+   TODO currently the implementation does not actually update this field *)
+fun ei_msize :: "(estate, eint) State" where
+"ei_msize st = (e_msize st, st)"
 
-(* gas - TODO *)
+(* gas -
+   TODO currently the implementation does not actually update this field *)
+fun ei_gas :: "(estate, eint) State" where
+"ei_gas st = (e_gas st, st)"
 
 (* jumpdest = not supported here, unless we need a NOP for some reason *)
 fun ei_jumpdest :: "(estate, unit) State" where
@@ -604,32 +767,32 @@ fun ei_jumpdest :: "(estate, unit) State" where
 fun ei_log0 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_log0 start end st =
   (()
-  , (st \<lparr> log := log st @ 
+  , (st \<lparr> e_log := e_log st @ 
             [Log0 (get_mrange st (unat start) (unat end - unat start))] \<rparr>))"
 
 fun ei_log1 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_log1 start end t1 st =
   (()
-  , (st \<lparr> log := log st @ 
+  , (st \<lparr> e_log := e_log st @ 
             [Log1 (get_mrange st (unat start) (unat end - unat start)) t1] \<rparr>))"
 
 fun ei_log2 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_log2 start end t1 t2 st =
   (()
-  , (st \<lparr> log := log st @ 
+  , (st \<lparr> e_log := e_log st @ 
             [Log2 (get_mrange st (unat start) (unat end - unat start)) t1 t2] \<rparr>))"
 
 fun ei_log3 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_log3 start end t1 t2 t3 st =
   (()
-  , (st \<lparr> log := log st @ 
+  , (st \<lparr> e_log := e_log st @ 
             [Log3 (get_mrange st (unat start) (unat end - unat start)) t1 t2 t3] \<rparr>))"
 
 fun ei_log4 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State"
   where
 "ei_log4 start end t1 t2 t3 t4 st =
   (()
-  , (st \<lparr> log := log st @ 
+  , (st \<lparr> e_log := e_log st @ 
             [Log4 (get_mrange st (unat start) (unat end - unat start)) t1 t2 t3 t4] \<rparr>))"
 
 (*
@@ -650,6 +813,10 @@ fun ei_log4 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<
 	STATICCALL = 0xfa,	///< like CALL but disallow state modifications
 *)
 
+fun ei_return :: "(estate, unit) State" where
+"ei_return s =
+  ((), (s \<lparr> e_flag := Return \<rparr>))"
+
 (*
  * Halting instructions
  *)
@@ -657,17 +824,17 @@ fun ei_log4 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<
 (* TODO: we have not yet implemented return-value *)
 fun ei_revert :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_revert _ _ st =
-  ((), (st \<lparr> flag := Revert \<rparr>))"
+  ((), (st \<lparr> e_flag := Revert \<rparr>))"
 
 (* TODO: it looks like invalid might need to be polymorphic in number of arguments.
    Treating it as (0, 0) for now, since this will lead to an arity error in other cases. *)
 fun ei_invalid :: "(estate, unit) State" where
-"ei_invalid st = ((), (st \<lparr> flag := Throw \<rparr>))"
+"ei_invalid st = ((), (st \<lparr> e_flag := Throw \<rparr>))"
 
 (* TODO: make proper use of the argument here *)
 fun ei_selfdestruct :: "eint \<Rightarrow> (estate, unit) State" where
 "ei_selfdestruct _ st =
-  ((), (st \<lparr> flag := SelfDestruct \<rparr>))"
+  ((), (st \<lparr> e_flag := SelfDestruct \<rparr>))"
 
 (*
  * Construct builtins list
@@ -703,17 +870,41 @@ definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
 
   , (STR ''keccak256'', mkBuiltin ei_keccak256)
 
-  \<comment> \<open> address... extcodehash \<close>
+  , (STR ''address'', mkBuiltin ei_address)
+  , (STR ''balance'', mkBuiltin ei_balance)
+  , (STR ''origin'', mkBuiltin ei_origin)
+  , (STR ''caller'', mkBuiltin ei_caller)
+  , (STR ''callvalue'', mkBuiltin ei_callvalue)
+  , (STR ''calldataload'', mkBuiltin ei_calldataload)
+  , (STR ''calldatasize'', mkBuiltin ei_calldatasize)
+  , (STR ''calldatacopy'', mkBuiltin ei_calldatacopy)
+  , (STR ''codesize'', mkBuiltin ei_codesize)
+  , (STR ''codecopy'', mkBuiltin ei_codecopy)
+  , (STR ''gasprice'', mkBuiltin ei_gasprice)
+  , (STR ''extcodesize'', mkBuiltin ei_extcodesize)
+  , (STR ''extcodecopy'', mkBuiltin ei_extcodecopy)
+  , (STR ''returndatasize'', mkBuiltin ei_returndatacopy)
+  , (STR ''extcodehash'', mkBuiltin ei_extcodehash)
 
-  \<comment> \<open> blockhash... selfbalance \<close>
+  , (STR ''blockhash'', mkBuiltin ei_blockhash)
+  , (STR ''coinbase'', mkBuiltin ei_coinbase)
+  , (STR ''timestamp'', mkBuiltin ei_timestamp)
+  , (STR ''number'', mkBuiltin ei_number)
+  , (STR ''difficulty'', mkBuiltin ei_difficulty)
+  , (STR ''gaslimit'', mkBuiltin ei_gaslimit)
+  , (STR ''chainid'', mkBuiltin ei_chainid)
+  , (STR ''selfbalance'', mkBuiltin ei_selfbalance)
 
-
+  \<comment> \<open> pop ... jumpdest \<close>
   , (STR ''pop'', mkBuiltin ei_pop)
   , (STR ''mload'', mkBuiltin ei_mload)
   , (STR ''mstore'', mkBuiltin ei_mstore)
   , (STR ''mstore8'', mkBuiltin ei_mstore8)
   , (STR ''sload'', mkBuiltin ei_sload)
   , (STR ''sstore'', mkBuiltin ei_sstore)
+  , (STR ''msize'', mkBuiltin ei_msize)
+  , (STR ''gas'', mkBuiltin ei_gas)
+
   \<comment> \<open>, (STR ''jumpdest'', mkBuiltin ei_jumpdest) \<close>
 
   , (STR ''log0'', mkBuiltin ei_log0)
@@ -722,7 +913,10 @@ definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
   , (STR ''log3'', mkBuiltin ei_log3)
   , (STR ''log4'', mkBuiltin ei_log4)
 
-  \<comment> \<open> create... staticcall \<close>
+  \<comment> \<open> eip615_jumpto... eip615_getlocal \<close>
+
+  \<comment> \<open> create... staticcall (just return for now) \<close>
+  , (STR ''return'', mkBuiltin ei_return)
 
   , (STR ''revert'', mkBuiltin ei_revert)
   , (STR ''invalid'', mkBuiltin ei_invalid)
