@@ -40,7 +40,7 @@ record estate_resource = estate_core +
 record estate_data = estate_resource +
   e_codedata :: "8 word list"
   e_calldata :: "8 word list"
-  e_outputdata :: "8 word list"
+(*  e_outputdata :: "8 word list" *)
   e_returndata :: "8 word list"
 
 record estate_metadata = estate_data +
@@ -63,13 +63,19 @@ record estate_metadata = estate_data +
  *)
 record estate = estate_metadata +
   e_extcode :: "eaddr \<Rightarrow> 8 word list"
+  (* e_extcode_sem :: *)
   e_balances :: "eaddr \<Rightarrow> eint"
   (* tracking account existence is needed for balance *)
   e_acct_exists :: "eaddr \<Rightarrow> bool"
   (* tracking "dead"-ness of accounts is needed for extcodehash *)
   e_acct_live :: "eaddr \<Rightarrow> bool"
-  
-  
+
+(*
+  this can't be in estate because of positivity constraint 
+*)
+record estate_ext_sem = estate +
+  e_extcode_sem :: "eaddr \<Rightarrow> (estate, unit) State"
+
 (*
 record estate_core_resource = estate_core_data +
   msize :: eint
@@ -87,7 +93,7 @@ definition dummy_estate :: estate where
   , e_gas = word_of_int 0
   , e_codedata = []
   , e_calldata = []
-  , e_outputdata = []
+\<comment> \<open>  , e_outputdata = [] \<close>
   , e_returndata = []
   , e_address = word_of_int 0
   , e_origin = word_of_int 0
