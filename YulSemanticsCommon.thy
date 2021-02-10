@@ -1,4 +1,5 @@
-theory YulSemanticsCommon imports YulSyntax
+theory YulSemanticsCommon imports YulSyntax     "HOL-Word.Word"
+
 begin
 
 (* Primitives common to both small and big step Yul semantics *)
@@ -232,16 +233,43 @@ fun gatherYulFunctions :: "('g, 'v, 't) function_sig locals \<Rightarrow>
      Inl (combine_keep F (map (\<lambda> nfs . (case nfs of
                     (n, fs) \<Rightarrow> (n, (function_sig'.extend fs \<lparr> f_sig_visible = names \<rparr>)))) funcs)))))"
 
-(* data type capturing when Yul programs need to terminate early *)
+
+(* EVM is unityped; everything is 256-bit word *)
+type_synonym eint = "256 word"
+
+(* ethereum addresses are 160 bits *)
+type_synonym eaddr = "160 word"
+
+type_synonym ebyte = "8 word"
+
+
+(* data type capturing whether Yul program has terminated, and why *)
+(* TODO: figure out if we need to change target addresses to eaddr
+   (I don't see explicit casts in Yellowpaper here)
+*)
 datatype YulFlag =
   (* program is executing as normal *)
   is_Executing : Executing
   (* interpreter fuel (not gas) has run out *)
   | FuelOut
+  (* EVM gas has run out (does this need to be its own flag?) *)
+  | GasOut
   (* execution halted without return value *)
   | Halt
-  (* execution halted; global state contains a return value *)
-  | Return
+  (* execution halted with value *)
+  | Return "8 word list"
+  (* gas, target address, value, input data, output memory offset, output size *)
+  | Call "eint" "eint" "eint" "8 word list" "eint" "eint"
+  (* gas, target address, value, input data, output memory offset, output size *)
+  | CallCode "eint" "eint" "eint" "8 word list" "eint" "eint"
+  (* gas, target address, input data, output memory offset, output size *)
+  | StaticCall "eint" "eint" "8 word list" "eint" "eint"
+  (* gas, target address, input data, output memory offset, output size *)
+  | DelegateCall "eint" "eint" "8 word list" "eint" "eint"
+  (* value, byte-array of contract to create (plus optional semantics) *)
+  | Create "eint" "8 word list"
+  (* same as create, but with provided salt *)
+  | Create2 "eint" "8 word list" "eint"
   (* program has halted and its transaction needs to be reverted;
      refund gas and return a value *)
   | Revert

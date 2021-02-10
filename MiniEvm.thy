@@ -10,13 +10,6 @@ begin
 https://github.com/ethereum/solidity/blob/develop/libevmasm/Instruction.h
 *)
 
-(* EVM is unityped; everything is 256-bit word *)
-type_synonym eint = "256 word"
-
-(* ethereum addresses are 160 bits *)
-type_synonym eaddr = "160 word"
-
-type_synonym ebyte = "8 word"
 
 datatype logentry =
   Log0 "8 word list"
@@ -283,7 +276,6 @@ definition mkBuiltin_3_2 ::
       | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
   , f_sig_visible = [] \<rparr>" 
 
-(* log2, log3 and log4 need these, for 4, 5, 6 arguments respectively *)
 definition mkBuiltin_4_0 ::
 "('v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> ('g, unit) State) \<Rightarrow>
  ('g, 'v, 't) function_sig" where
@@ -296,6 +288,21 @@ definition mkBuiltin_4_0 ::
               (\<lambda> g . 
                 (case f v1 v2 v3 v4 g of
                   ((), g') \<Rightarrow> ([], g')))
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
+
+definition mkBuiltin_4_1 ::
+"('v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> ('g, 'v) State) \<Rightarrow>
+ ('g, 'v, 't) function_sig" where
+"mkBuiltin_4_1 f =
+  \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'', STR ''a3'', STR ''a4'']
+  , f_sig_returns = mkNames [STR ''r1'']
+  , f_sig_body = YulBuiltin
+    (\<lambda> vs . (case vs of
+      [v1, v2, v3, v4] \<Rightarrow> Result 
+              (\<lambda> g . 
+                (case f v1 v2 v3 v4 g of
+                  (v', g') \<Rightarrow> ([v'], g')))
       | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
   , f_sig_visible = [] \<rparr>"
 
@@ -330,6 +337,39 @@ definition mkBuiltin_6_0 ::
       | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
   , f_sig_visible = [] \<rparr>"
 
+definition mkBuiltin_6_1 ::
+"('v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> ('g, 'v) State) \<Rightarrow>
+ ('g, 'v, 't) function_sig" where
+"mkBuiltin_6_1 f =
+  \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'', STR ''a3'',
+                               STR ''a4'', STR ''a5'', STR ''a6'']
+  , f_sig_returns = mkNames [STR ''r1'']
+  , f_sig_body = YulBuiltin
+    (\<lambda> vs . (case vs of
+      [v1, v2, v3, v4, v5, v6] \<Rightarrow> Result 
+              (\<lambda> g . 
+                (case f v1 v2 v3 v4 v5 v6 g of
+                  (v', g') \<Rightarrow> ([v'], g')))
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
+
+definition mkBuiltin_7_1 ::
+"('v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> 'v \<Rightarrow> ('g, 'v) State) \<Rightarrow>
+ ('g, 'v, 't) function_sig" where
+"mkBuiltin_7_1 f =
+  \<lparr> f_sig_arguments = mkNames [STR ''a1'', STR ''a2'', STR ''a3'',
+                               STR ''a4'', STR ''a5'', STR ''a6'', STR ''a7'']
+  , f_sig_returns = mkNames [STR ''r1'']
+  , f_sig_body = YulBuiltin
+    (\<lambda> vs . (case vs of
+      [v1, v2, v3, v4, v5, v6, v7] \<Rightarrow> Result 
+              (\<lambda> g . 
+                (case f v1 v2 v3 v4 v5 v6 v7 g of
+                  (v', g') \<Rightarrow> ([v'], g')))
+      | _ \<Rightarrow> Error (STR ''Argument arity error'') None))
+  , f_sig_visible = [] \<rparr>"
+
+
 
 adhoc_overloading mkBuiltin
   mkBuiltin_0_0
@@ -347,10 +387,14 @@ adhoc_overloading mkBuiltin
   mkBuiltin_3_2
 
   mkBuiltin_4_0
+  mkBuiltin_4_1
 
   mkBuiltin_5_0
 
   mkBuiltin_6_0
+  mkBuiltin_6_1
+
+  mkBuiltin_7_1
 
 (*
  * EVM instruction semantics
@@ -807,7 +851,6 @@ fun ei_log4 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<
 
 (*
  * Contract creation and cross-contract calls
- * (Implement these later) TODO
  *)
 (*
 	CREATE = 0xf0,		///< create a new account with associated code
@@ -819,10 +862,43 @@ fun ei_log4 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<
 	STATICCALL = 0xfa,	///< like CALL but disallow state modifications
 *)
 
-fun ei_return :: "(estate, unit) State" where
-"ei_return s =
-  ((), (s \<lparr> e_flag := Return \<rparr>))"
+(* TODO: where to generate the new address? It might be ideal to do this in
+   the global semantics. For now we just always return 0. Global semantics
+   should probably replace this with the correct value. *)
+fun ei_create :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_create value idx sz s =
+  (word_of_int 0
+  , (s \<lparr> e_flag := Create value (get_mrange s (unat idx) (unat sz)) \<rparr>))"
 
+fun ei_call :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_call gas target value in_idx in_sz out_idx out_sz s =
+  (word_of_int 0
+  , (s \<lparr> e_flag := Call gas target value (get_mrange s (unat in_idx) (unat in_sz)) out_idx out_sz \<rparr> ))"
+
+fun ei_callcode :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_callcode gas target value in_idx in_sz out_idx out_sz s =
+  (word_of_int 0
+  , (s \<lparr> e_flag := CallCode gas target value (get_mrange s (unat in_idx) (unat in_sz)) out_idx out_sz \<rparr> ))"
+
+fun ei_return :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
+"ei_return idx sz s =
+  (()
+  , (s \<lparr> e_flag := Return (get_mrange s (unat idx) (unat sz)) \<rparr>))"
+
+fun ei_delegatecall ::  "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_delegatecall gas target in_idx in_sz out_idx out_sz s =
+  (word_of_int 0
+  , (s \<lparr> e_flag := DelegateCall gas target (get_mrange s (unat in_idx) (unat in_sz)) out_idx out_sz \<rparr> ))"
+
+fun ei_create2 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_create2 value idx sz salt s =
+  (word_of_int 0
+  , (s \<lparr> e_flag := Create2 value (get_mrange s (unat idx) (unat sz)) salt \<rparr>))"
+
+fun ei_staticcall ::  "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
+"ei_staticcall gas target in_idx in_sz out_idx out_sz s =
+  (word_of_int 0, 
+  (s \<lparr> e_flag := StaticCall gas target (get_mrange s (unat in_idx) (unat in_sz)) out_idx out_sz \<rparr>))"
 (*
  * Halting instructions
  *)
@@ -922,7 +998,13 @@ definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
   \<comment> \<open> eip615_jumpto... eip615_getlocal \<close>
 
   \<comment> \<open> create... staticcall (just return for now) \<close>
+  , (STR ''create'', mkBuiltin ei_create)
+  , (STR ''call'', mkBuiltin ei_call)
+  , (STR ''callcode'', mkBuiltin ei_callcode)
   , (STR ''return'', mkBuiltin ei_return)
+  , (STR ''delegatecall'', mkBuiltin ei_delegatecall)
+  , (STR ''create2'', mkBuiltin ei_create2)
+\<comment> \<open>  , (STR ''staticcall'', mkBuiltin ei_staticcall) \<close>
 
   , (STR ''revert'', mkBuiltin ei_revert)
   , (STR ''invalid'', mkBuiltin ei_invalid)
