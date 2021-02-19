@@ -14,9 +14,9 @@ setup_lifting type_definition_inst
 (* 
  * STOP
  *)
-definition stop_codes  :: "nat set"  where "stop_codes = {0 :: nat}" 
+definition stop_codes  :: "nat list"  where "stop_codes = [0 :: nat]" 
 declare stop_codes_def [simp add]
-typedef stop_inst = "stop_codes" by auto
+typedef stop_inst = "set stop_codes" by auto
 setup_lifting type_definition_stop_inst
 
 lift_definition STOP_INST :: "stop_inst \<Rightarrow> inst" is id by auto
@@ -31,11 +31,11 @@ definition is_STOP :: "stop_inst \<Rightarrow> bool" where
 (*
  * Arithmetic
  *)
-definition arith_codes :: "nat set" where 
-"arith_codes = set (List.upt 0x01 0x0c)"
+definition arith_codes :: "nat list" where 
+"arith_codes = (List.upt 0x01 0x0c)"
 
 declare arith_codes_def [simp add]
-typedef arith_inst = "arith_codes" by auto
+typedef arith_inst = "set arith_codes" by auto
 setup_lifting type_definition_arith_inst
 
 lift_definition ARITH_INST :: "arith_inst \<Rightarrow> inst" is id by auto
@@ -103,114 +103,98 @@ fun is_arith_SIGNEXTEND :: "arith_inst => bool" where
 
 
 (* 
- * Comparisons
+ * Bits + Comparisons
  *)
-definition compare_codes :: "nat set" where 
-  "compare_codes = set (List.upt 0x10 0x16)"
-declare compare_codes_def [simp add]
-typedef compare_inst = "compare_codes" by auto
-setup_lifting type_definition_compare_inst
+definition bits_compare_codes :: "nat list" where 
+  "bits_compare_codes = (List.upt 0x10 0x1e)"
+declare bits_compare_codes_def [simp add]
+typedef bits_compare_inst = "set bits_compare_codes" by auto
+setup_lifting type_definition_bits_compare_inst
 
-lift_definition COMPARE_LT     :: "compare_inst" is "0x10" by auto
-lift_definition COMPARE_GT     :: "compare_inst" is "0x11" by auto
-lift_definition COMPARE_SLT    :: "compare_inst" is "0x12" by auto
-lift_definition COMPARE_SGT    :: "compare_inst" is "0x13" by auto
-lift_definition COMPARE_EQ     :: "compare_inst" is "0x14" by auto
-lift_definition COMPARE_ISZERO :: "compare_inst" is "0x15" by auto
+lift_definition BITS_COMPARE_LT     :: "bits_compare_inst" is "0x10" by auto
+lift_definition BITS_COMPARE_GT     :: "bits_compare_inst" is "0x11" by auto
+lift_definition BITS_COMPARE_SLT    :: "bits_compare_inst" is "0x12" by auto
+lift_definition BITS_COMPARE_SGT    :: "bits_compare_inst" is "0x13" by auto
+lift_definition BITS_COMPARE_EQ     :: "bits_compare_inst" is "0x14" by auto
+lift_definition BITS_COMPARE_ISZERO :: "bits_compare_inst" is "0x15" by auto
+lift_definition BITS_COMPARE_AND    :: "bits_compare_inst" is "0x16" by auto
+lift_definition BITS_COMPARE_OR     :: "bits_compare_inst" is "0x17" by auto
+lift_definition BITS_COMPARE_XOR    :: "bits_compare_inst" is "0x18" by auto
+lift_definition BITS_COMPARE_NOT    :: "bits_compare_inst" is "0x19" by auto
+lift_definition BITS_COMPARE_BYTE   :: "bits_compare_inst" is "0x1a" by auto
+lift_definition BITS_COMPARE_SHL    :: "bits_compare_inst" is "0x1b" by auto
+lift_definition BITS_COMPARE_SHR    :: "bits_compare_inst" is "0x1c" by auto
+lift_definition BITS_COMPARE_SAR    :: "bits_compare_inst" is "0x1d" by auto
 
-lift_definition COMPARE_INST :: "compare_inst \<Rightarrow> inst" is id by auto
+
+lift_definition BITS_COMPARE_INST :: "bits_compare_inst \<Rightarrow> inst" is id by auto
 
 free_constructors cases_compare_inst for
-  COMPARE_LT
-| COMPARE_GT
-| COMPARE_SLT
-| COMPARE_SGT
-| COMPARE_EQ
-| COMPARE_ISZERO
+  BITS_COMPARE_LT
+| BITS_COMPARE_GT
+| BITS_COMPARE_SLT
+| BITS_COMPARE_SGT
+| BITS_COMPARE_EQ
+| BITS_COMPARE_ISZERO
+| BITS_COMPARE_AND
+| BITS_COMPARE_OR
+| BITS_COMPARE_XOR
+| BITS_COMPARE_NOT
+| BITS_COMPARE_BYTE
+| BITS_COMPARE_SHL
+| BITS_COMPARE_SHR
+| BITS_COMPARE_SAR
   by(transfer;
      auto simp del:set_upt simp add:List.upt_def)+
 
-fun "is_compare_LT" :: "compare_inst => bool" where
-"is_compare_LT COMPARE_LT = True"
-| "is_compare_LT _ = False"
-fun "is_compare_GT" :: "compare_inst => bool" where
-"is_compare_GT COMPARE_GT = True"
-| "is_compare_GT _ = False"
-fun "is_compare_SLT" :: "compare_inst => bool" where
-"is_compare_SLT COMPARE_SLT = True"
-| "is_compare_SLT _ = False"
-fun "is_compare_SGT" :: "compare_inst => bool" where
-"is_compare_SGT COMPARE_SGT = True"
-| "is_compare_SGT _ = False"
-fun "is_compare_EQ" :: "compare_inst => bool" where
-"is_compare_EQ COMPARE_EQ = True"
-| "is_compare_EQ _ = False"
-fun "is_compare_ISZERO" :: "compare_inst => bool" where
-"is_compare_ISZERO COMPARE_ISZERO = True"
-| "is_compare_ISZERO _ = False"
-
-
-(* 
- * bits
- *)
-definition bits_codes :: "nat set" where "bits_codes = set (List.upt 0x16 0x1e)"
-declare bits_codes_def [simp add]
-typedef bits_inst = "bits_codes" by auto
-setup_lifting type_definition_bits_inst
-
-lift_definition BITS_AND  :: "bits_inst" is "0x16" by auto
-lift_definition BITS_OR   :: "bits_inst" is "0x17" by auto
-lift_definition BITS_XOR  :: "bits_inst" is "0x18" by auto
-lift_definition BITS_NOT  :: "bits_inst" is "0x19" by auto
-lift_definition BITS_BYTE :: "bits_inst" is "0x1a" by auto
-lift_definition BITS_SHL  :: "bits_inst" is "0x1b" by auto
-lift_definition BITS_SHR  :: "bits_inst" is "0x1c" by auto
-lift_definition BITS_SAR  :: "bits_inst" is "0x1d" by auto
-
-lift_definition BITS_INST :: "bits_inst \<Rightarrow> inst" is id by auto
-
-free_constructors cases_bits_inst for
-  BITS_AND
-| BITS_OR
-| BITS_XOR
-| BITS_NOT
-| BITS_BYTE
-| BITS_SHL
-| BITS_SHR
-| BITS_SAR
-  by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
-
-fun "is_bits_AND" :: "bits_inst => bool" where
-"is_bits_AND BITS_AND = True"
-| "is_bits_AND _ = False"
-fun "is_bits_OR" :: "bits_inst => bool" where
-"is_bits_OR BITS_OR = True"
-| "is_bits_OR _ = False"
-fun "is_bits_XOR" :: "bits_inst => bool" where
-"is_bits_XOR BITS_XOR = True"
-| "is_bits_XOR _ = False"
-fun "is_bits_NOT" :: "bits_inst => bool" where
-"is_bits_NOT BITS_NOT = True"
-| "is_bits_NOT _ = False"
-fun "is_bits_BYTE" :: "bits_inst => bool" where
-"is_bits_BYTE BITS_BYTE = True"
-| "is_bits_BYTE _ = False"
-fun "is_bits_SHL" :: "bits_inst => bool" where
-"is_bits_SHL BITS_SHL = True"
-| "is_bits_SHL _ = False"
-fun "is_bits_SHR" :: "bits_inst => bool" where
-"is_bits_SHR BITS_SHR = True"
-| "is_bits_SHR _ = False"
-fun "is_bits_SAR" :: "bits_inst => bool" where
-"is_bits_SAR BITS_SAR = True"
-| "is_bits_SAR _ = False"
+fun "is_bits_compare_LT" :: "bits_compare_inst => bool" where
+"is_bits_compare_LT BITS_COMPARE_LT = True"
+| "is_bits_compare_LT _ = False"
+fun "is_bits_compare_GT" :: "bits_compare_inst => bool" where
+"is_bits_compare_GT BITS_COMPARE_GT = True"
+| "is_bits_compare_GT _ = False"
+fun "is_bits_compare_SLT" :: "bits_compare_inst => bool" where
+"is_bits_compare_SLT BITS_COMPARE_SLT = True"
+| "is_bits_compare_SLT _ = False"
+fun "is_bits_compare_SGT" :: "bits_compare_inst => bool" where
+"is_bits_compare_SGT BITS_COMPARE_SGT = True"
+| "is_bits_compare_SGT _ = False"
+fun "is_bits_compare_EQ" :: "bits_compare_inst => bool" where
+"is_bits_compare_EQ BITS_COMPARE_EQ = True"
+| "is_bits_compare_EQ _ = False"
+fun "is_bits_compare_ISZERO" :: "bits_compare_inst => bool" where
+"is_bits_compare_ISZERO BITS_COMPARE_ISZERO = True"
+| "is_bits_compare_ISZERO _ = False"
+fun "is_bits_compare_AND" :: "bits_compare_inst => bool" where
+"is_bits_compare_AND BITS_COMPARE_AND = True"
+| "is_bits_compare_AND _ = False"
+fun "is_bits_compare_OR" :: "bits_compare_inst => bool" where
+"is_bits_compare_OR BITS_COMPARE_OR = True"
+| "is_bits_compare_OR _ = False"
+fun "is_bits_compare_XOR" :: "bits_compare_inst => bool" where
+"is_bits_compare_XOR BITS_COMPARE_XOR = True"
+| "is_bits_compare_XOR _ = False"
+fun "is_bits_compare_NOT" :: "bits_compare_inst => bool" where
+"is_bits_compare_NOT BITS_COMPARE_NOT = True"
+| "is_bits_compare_NOT _ = False"
+fun "is_bits_compare_BYTE" :: "bits_compare_inst => bool" where
+"is_bits_compare_BYTE BITS_COMPARE_BYTE = True"
+| "is_bits_compare_BYTE _ = False"
+fun "is_bits_compare_SHL" :: "bits_compare_inst => bool" where
+"is_bits_compare_SHL BITS_COMPARE_SHL = True"
+| "is_bits_compare_SHL _ = False"
+fun "is_bits_compare_SHR" :: "bits_compare_inst => bool" where
+"is_bits_compare_SHR BITS_COMPARE_SHR = True"
+| "is_bits_compare_SHR _ = False"
+fun "is_bits_compare_SAR" :: "bits_compare_inst => bool" where
+"is_bits_compare_SAR BITS_COMPARE_SAR = True"
+| "is_bits_compare_SAR _ = False"
 
 
 (* keccak256 *)
-definition keccak256_codes  :: "nat set"  where "keccak256_codes = {0x20 :: nat}" 
+definition keccak256_codes  :: "nat list"  where "keccak256_codes = [0x20 :: nat]" 
 declare keccak256_codes_def [simp add]
-typedef keccak256_inst = "keccak256_codes" by auto
+typedef keccak256_inst = "set keccak256_codes" by auto
 setup_lifting type_definition_keccak256_inst
 
 lift_definition KECCAK256_KECCAK256 :: keccak256_inst is "0x20 :: nat" by auto
@@ -227,11 +211,11 @@ fun "is_keccak256_KECCAK256" :: "keccak256_inst => bool" where
 (* 
  * transaction-specific data instructions
  *)
-definition tx_data_codes :: "nat set"
+definition tx_data_codes :: "nat list"
   where 
-  "tx_data_codes = set (List.upt 0x30 0x40)"
+  "tx_data_codes = (List.upt 0x30 0x40)"
 declare tx_data_codes_def[simp add]
-typedef tx_data_inst = tx_data_codes by auto
+typedef tx_data_inst = "set tx_data_codes" by auto
 setup_lifting type_definition_tx_data_inst
 
 lift_definition TX_DATA_ADDRESS        :: "tx_data_inst" is "0x30" by auto
@@ -326,11 +310,11 @@ fun "is_tx_data_EXTCODEHASH" :: "tx_data_inst => bool" where
 (* 
  * chain-specific data instructions
  *)
-definition chain_data_codes :: "nat set"
+definition chain_data_codes :: "nat list"
   where
-  "chain_data_codes = set (List.upt 0x40 0x47)"
+  "chain_data_codes = List.upt 0x40 0x48"
 declare chain_data_codes_def[simp add]
-typedef chain_data_inst = chain_data_codes by auto
+typedef chain_data_inst = "set chain_data_codes" by auto
 setup_lifting type_definition_chain_data_inst
 
 lift_definition CHAIN_DATA_BLOCKHASH   :: "chain_data_inst" is "0x40" by auto
@@ -338,8 +322,9 @@ lift_definition CHAIN_DATA_COINBASE    :: "chain_data_inst" is "0x41" by auto
 lift_definition CHAIN_DATA_TIMESTAMP   :: "chain_data_inst" is "0x42" by auto
 lift_definition CHAIN_DATA_NUMBER      :: "chain_data_inst" is "0x43" by auto
 lift_definition CHAIN_DATA_DIFFICULTY  :: "chain_data_inst" is "0x44" by auto
-lift_definition CHAIN_DATA_CHAINID     :: "chain_data_inst" is "0x45" by auto
-lift_definition CHAIN_DATA_SELFBALANCE :: "chain_data_inst" is "0x46" by auto
+lift_definition CHAIN_DATA_GASLIMIT    :: "chain_data_inst" is "0x45" by auto
+lift_definition CHAIN_DATA_CHAINID     :: "chain_data_inst" is "0x46" by auto
+lift_definition CHAIN_DATA_SELFBALANCE :: "chain_data_inst" is "0x47" by auto
 
 lift_definition CHAIN_DATA_INST :: "chain_data_inst \<Rightarrow> inst" is id by auto
 
@@ -349,6 +334,7 @@ CHAIN_DATA_BLOCKHASH
 | CHAIN_DATA_TIMESTAMP
 | CHAIN_DATA_NUMBER
 | CHAIN_DATA_DIFFICULTY
+| CHAIN_DATA_GASLIMIT
 | CHAIN_DATA_CHAINID
 | CHAIN_DATA_SELFBALANCE
   by(transfer;
@@ -372,6 +358,9 @@ fun "is_chain_data_DIFFICULTY" :: "chain_data_inst => bool" where
 fun "is_chain_data_CHAINID" :: "chain_data_inst => bool" where
 "is_chain_data_CHAINID CHAIN_DATA_CHAINID = True"
 | "is_chain_data_CHAINID _ = False"
+fun "is_chain_data_GASLIMIT" :: "chain_data_inst => bool" where
+"is_chain_data_GASLIMIT CHAIN_DATA_GASLIMIT = True"
+| "is_chain_data_GASLIMIT _ = False"
 fun "is_chain_data_SELFBALANCE" :: "chain_data_inst => bool" where
 "is_chain_data_SELFBALANCE CHAIN_DATA_SELFBALANCE = True"
 | "is_chain_data_SELFBALANCE _ = False"
@@ -386,10 +375,10 @@ fun "is_chain_data_SELFBALANCE" :: "chain_data_inst => bool" where
 - storage ops
 - resource queries
 - control flow *)
-definition state_control_codes :: "nat set" where
-"state_control_codes = set (List.upt 0x50 0x5c)"
+definition state_control_codes :: "nat list" where
+"state_control_codes = (List.upt 0x50 0x5c)"
 declare state_control_codes_def[simp add]
-typedef state_control_inst = state_control_codes by auto
+typedef state_control_inst = "set state_control_codes" by auto
 setup_lifting type_definition_state_control_inst
 
 lift_definition STATE_CONTROL_POP      :: "state_control_inst" is "0x50" by auto
@@ -464,223 +453,32 @@ fun "is_state_control_JUMPDEST" :: "state_control_inst => bool" where
 (* 
  * push instructions
  *)
-definition push_codes :: "nat set" where
-"push_codes = set (List.upt 0x60 0x80)"
+definition push_codes :: "nat list" where
+"push_codes = (List.upt 0x60 0x80)"
 declare push_codes_def[simp add]
-typedef push_inst = push_codes by auto
+typedef push_inst = "set push_codes" by auto
 setup_lifting type_definition_push_inst
 
-(* we split push into two sub-groups to avoid having a 32-way free_constructors theorem *)
-(* push few = (1-16) *)
-definition push_few_codes :: "nat set" where
-"push_few_codes = set (List.upt 0x60 0x70)"
-declare push_few_codes_def[simp add]
-typedef push_few_inst = push_few_codes by auto
-setup_lifting type_definition_push_few_inst
+lift_definition PUSH_INST :: "push_inst \<Rightarrow> inst" is id by auto
 
-lift_definition PUSH_FEW_PUSH1  :: "push_few_inst" is "0x60" by auto
-lift_definition PUSH_FEW_PUSH2  :: "push_few_inst" is "0x61" by auto
-lift_definition PUSH_FEW_PUSH3  :: "push_few_inst" is "0x62" by auto
-lift_definition PUSH_FEW_PUSH4  :: "push_few_inst" is "0x63" by auto
-lift_definition PUSH_FEW_PUSH5  :: "push_few_inst" is "0x64" by auto
-lift_definition PUSH_FEW_PUSH6  :: "push_few_inst" is "0x65" by auto
-lift_definition PUSH_FEW_PUSH7  :: "push_few_inst" is "0x66" by auto
-lift_definition PUSH_FEW_PUSH8  :: "push_few_inst" is "0x67" by auto
-lift_definition PUSH_FEW_PUSH9  :: "push_few_inst" is "0x68" by auto
-lift_definition PUSH_FEW_PUSH10 :: "push_few_inst" is "0x69" by auto
-lift_definition PUSH_FEW_PUSH11 :: "push_few_inst" is "0x6a" by auto
-lift_definition PUSH_FEW_PUSH12 :: "push_few_inst" is "0x6b" by auto
-lift_definition PUSH_FEW_PUSH13 :: "push_few_inst" is "0x6c" by auto
-lift_definition PUSH_FEW_PUSH14 :: "push_few_inst" is "0x6d" by auto
-lift_definition PUSH_FEW_PUSH15 :: "push_few_inst" is "0x6e" by auto
-lift_definition PUSH_FEW_PUSH16 :: "push_few_inst" is "0x6f" by auto
+typedef nat32 = "{x :: nat . x < 32}"
+proof
+  have "0 < (32 :: nat)" by auto
+  thus "0 \<in> {x :: nat . x < 32}" by(auto)
+qed
+setup_lifting type_definition_nat32
 
-lift_definition PUSH_FEW_INST :: "push_few_inst => inst" is id by auto
+lift_definition nat_of_nat32 :: "nat32 \<Rightarrow> nat" is id done
 
-free_constructors cases_push_few_inst for
-PUSH_FEW_PUSH1
-| PUSH_FEW_PUSH2
-| PUSH_FEW_PUSH3
-| PUSH_FEW_PUSH4
-| PUSH_FEW_PUSH5
-| PUSH_FEW_PUSH6
-| PUSH_FEW_PUSH7
-| PUSH_FEW_PUSH8
-| PUSH_FEW_PUSH9
-| PUSH_FEW_PUSH10
-| PUSH_FEW_PUSH11
-| PUSH_FEW_PUSH12
-| PUSH_FEW_PUSH13
-| PUSH_FEW_PUSH14
-| PUSH_FEW_PUSH15
-| PUSH_FEW_PUSH16
-  by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+lift_definition nat32_of_nat :: "nat \<Rightarrow> nat32" is "(\<lambda> n . n mod 32)"
+  using pos_mod_bound[of 32 n] by auto
 
-fun "is_push_few_PUSH1" :: "push_few_inst => bool" where
-"is_push_few_PUSH1 PUSH_FEW_PUSH1 = True"
-| "is_push_few_PUSH1 _ = False"
-fun "is_push_few_PUSH2" :: "push_few_inst => bool" where
-"is_push_few_PUSH2 PUSH_FEW_PUSH2 = True"
-| "is_push_few_PUSH2 _ = False"
-fun "is_push_few_PUSH3" :: "push_few_inst => bool" where
-"is_push_few_PUSH3 PUSH_FEW_PUSH3 = True"
-| "is_push_few_PUSH3 _ = False"
-fun "is_push_few_PUSH4" :: "push_few_inst => bool" where
-"is_push_few_PUSH4 PUSH_FEW_PUSH4 = True"
-| "is_push_few_PUSH4 _ = False"
-fun "is_push_few_PUSH5" :: "push_few_inst => bool" where
-"is_push_few_PUSH5 PUSH_FEW_PUSH5 = True"
-| "is_push_few_PUSH5 _ = False"
-fun "is_push_few_PUSH6" :: "push_few_inst => bool" where
-"is_push_few_PUSH6 PUSH_FEW_PUSH6 = True"
-| "is_push_few_PUSH6 _ = False"
-fun "is_push_few_PUSH7" :: "push_few_inst => bool" where
-"is_push_few_PUSH7 PUSH_FEW_PUSH7 = True"
-| "is_push_few_PUSH7 _ = False"
-fun "is_push_few_PUSH8" :: "push_few_inst => bool" where
-"is_push_few_PUSH8 PUSH_FEW_PUSH8 = True"
-| "is_push_few_PUSH8 _ = False"
-fun "is_push_few_PUSH9" :: "push_few_inst => bool" where
-"is_push_few_PUSH9 PUSH_FEW_PUSH9 = True"
-| "is_push_few_PUSH9 _ = False"
-fun "is_push_few_PUSH10" :: "push_few_inst => bool" where
-"is_push_few_PUSH10 PUSH_FEW_PUSH10 = True"
-| "is_push_few_PUSH10 _ = False"
-fun "is_push_few_PUSH11" :: "push_few_inst => bool" where
-"is_push_few_PUSH11 PUSH_FEW_PUSH11 = True"
-| "is_push_few_PUSH11 _ = False"
-fun "is_push_few_PUSH12" :: "push_few_inst => bool" where
-"is_push_few_PUSH12 PUSH_FEW_PUSH12 = True"
-| "is_push_few_PUSH12 _ = False"
-fun "is_push_few_PUSH13" :: "push_few_inst => bool" where
-"is_push_few_PUSH13 PUSH_FEW_PUSH13 = True"
-| "is_push_few_PUSH13 _ = False"
-fun "is_push_few_PUSH14" :: "push_few_inst => bool" where
-"is_push_few_PUSH14 PUSH_FEW_PUSH14 = True"
-| "is_push_few_PUSH14 _ = False"
-fun "is_push_few_PUSH15" :: "push_few_inst => bool" where
-"is_push_few_PUSH15 PUSH_FEW_PUSH15 = True"
-| "is_push_few_PUSH15 _ = False"
-fun "is_push_few_PUSH16" :: "push_few_inst => bool" where
-"is_push_few_PUSH16 PUSH_FEW_PUSH16 = True"
-| "is_push_few_PUSH16 _ = False"
-
-
-(* "push many" = 17-32 *)
-definition push_many_codes :: "nat set" where
-"push_many_codes = set (List.upt 0x70 0x80)"
-declare push_many_codes_def[simp add]
-typedef push_many_inst = push_many_codes by auto
-setup_lifting type_definition_push_many_inst
-
-lift_definition PUSH_MANY_PUSH17 :: "push_many_inst" is "0x70" by auto
-lift_definition PUSH_MANY_PUSH18 :: "push_many_inst" is "0x71" by auto
-lift_definition PUSH_MANY_PUSH19 :: "push_many_inst" is "0x72" by auto
-lift_definition PUSH_MANY_PUSH20 :: "push_many_inst" is "0x73" by auto
-lift_definition PUSH_MANY_PUSH21 :: "push_many_inst" is "0x74" by auto
-lift_definition PUSH_MANY_PUSH22 :: "push_many_inst" is "0x75" by auto
-lift_definition PUSH_MANY_PUSH23 :: "push_many_inst" is "0x76" by auto
-lift_definition PUSH_MANY_PUSH24 :: "push_many_inst" is "0x77" by auto
-lift_definition PUSH_MANY_PUSH25 :: "push_many_inst" is "0x78" by auto
-lift_definition PUSH_MANY_PUSH26 :: "push_many_inst" is "0x79" by auto
-lift_definition PUSH_MANY_PUSH27 :: "push_many_inst" is "0x7a" by auto
-lift_definition PUSH_MANY_PUSH28 :: "push_many_inst" is "0x7b" by auto
-lift_definition PUSH_MANY_PUSH29 :: "push_many_inst" is "0x7c" by auto
-lift_definition PUSH_MANY_PUSH30 :: "push_many_inst" is "0x7d" by auto
-lift_definition PUSH_MANY_PUSH31 :: "push_many_inst" is "0x7e" by auto
-lift_definition PUSH_MANY_PUSH32 :: "push_many_inst" is "0x7f" by auto
-
-lift_definition PUSH_MANY_INST :: "push_many_inst => inst" is id by auto
-
-free_constructors cases_push_many_inst for
-PUSH_MANY_PUSH17
-| PUSH_MANY_PUSH18
-| PUSH_MANY_PUSH19
-| PUSH_MANY_PUSH20
-| PUSH_MANY_PUSH21
-| PUSH_MANY_PUSH22
-| PUSH_MANY_PUSH23
-| PUSH_MANY_PUSH24
-| PUSH_MANY_PUSH25
-| PUSH_MANY_PUSH26
-| PUSH_MANY_PUSH27
-| PUSH_MANY_PUSH28
-| PUSH_MANY_PUSH29
-| PUSH_MANY_PUSH30
-| PUSH_MANY_PUSH31
-| PUSH_MANY_PUSH32
-  by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
-
-fun "is_push_many_PUSH17" :: "push_many_inst => bool" where
-"is_push_many_PUSH17 PUSH_MANY_PUSH17 = True"
-| "is_push_many_PUSH17 _ = False"
-fun "is_push_many_PUSH18" :: "push_many_inst => bool" where
-"is_push_many_PUSH18 PUSH_MANY_PUSH18 = True"
-| "is_push_many_PUSH18 _ = False"
-fun "is_push_many_PUSH19" :: "push_many_inst => bool" where
-"is_push_many_PUSH19 PUSH_MANY_PUSH19 = True"
-| "is_push_many_PUSH19 _ = False"
-fun "is_push_many_PUSH20" :: "push_many_inst => bool" where
-"is_push_many_PUSH20 PUSH_MANY_PUSH20 = True"
-| "is_push_many_PUSH20 _ = False"
-fun "is_push_many_PUSH21" :: "push_many_inst => bool" where
-"is_push_many_PUSH21 PUSH_MANY_PUSH21 = True"
-| "is_push_many_PUSH21 _ = False"
-fun "is_push_many_PUSH22" :: "push_many_inst => bool" where
-"is_push_many_PUSH22 PUSH_MANY_PUSH22 = True"
-| "is_push_many_PUSH22 _ = False"
-fun "is_push_many_PUSH23" :: "push_many_inst => bool" where
-"is_push_many_PUSH23 PUSH_MANY_PUSH23 = True"
-| "is_push_many_PUSH23 _ = False"
-fun "is_push_many_PUSH24" :: "push_many_inst => bool" where
-"is_push_many_PUSH24 PUSH_MANY_PUSH24 = True"
-| "is_push_many_PUSH24 _ = False"
-fun "is_push_many_PUSH25" :: "push_many_inst => bool" where
-"is_push_many_PUSH25 PUSH_MANY_PUSH25 = True"
-| "is_push_many_PUSH25 _ = False"
-fun "is_push_many_PUSH26" :: "push_many_inst => bool" where
-"is_push_many_PUSH26 PUSH_MANY_PUSH26 = True"
-| "is_push_many_PUSH26 _ = False"
-fun "is_push_many_PUSH27" :: "push_many_inst => bool" where
-"is_push_many_PUSH27 PUSH_MANY_PUSH27 = True"
-| "is_push_many_PUSH27 _ = False"
-fun "is_push_many_PUSH28" :: "push_many_inst => bool" where
-"is_push_many_PUSH28 PUSH_MANY_PUSH28 = True"
-| "is_push_many_PUSH28 _ = False"
-fun "is_push_many_PUSH29" :: "push_many_inst => bool" where
-"is_push_many_PUSH29 PUSH_MANY_PUSH29 = True"
-| "is_push_many_PUSH29 _ = False"
-fun "is_push_many_PUSH30" :: "push_many_inst => bool" where
-"is_push_many_PUSH30 PUSH_MANY_PUSH30 = True"
-| "is_push_many_PUSH30 _ = False"
-fun "is_push_many_PUSH31" :: "push_many_inst => bool" where
-"is_push_many_PUSH31 PUSH_MANY_PUSH31 = True"
-| "is_push_many_PUSH31 _ = False"
-fun "is_push_many_PUSH32" :: "push_many_inst => bool" where
-"is_push_many_PUSH32 PUSH_MANY_PUSH32 = True"
-| "is_push_many_PUSH32 _ = False"
-
-
-(* putting together the pieces *)
-lift_definition PUSH_FEW :: "push_few_inst \<Rightarrow> push_inst" is id by auto
-lift_definition PUSH_MANY :: "push_many_inst \<Rightarrow> push_inst" is id by auto
-
-free_constructors cases_push_inst for
-PUSH_FEW
-| PUSH_MANY
-  by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
-
-(* general version for use when not case-splitting.
-   we could have one of these each for PUSH_MANY and PUSH_FEW, but because that is an
-   artificial distinction anyway there doesn't seem to be much point *)
-fun push_gen :: "nat \<Rightarrow> nat" where
-"push_gen n =
+(* helper for building push instructions *)
+fun make_push :: "nat \<Rightarrow> nat" where
+"make_push n =
   0x60 + (n mod 32)"
 
-lift_definition PUSH_GEN :: "nat \<Rightarrow> push_inst" is push_gen
+lift_definition MAKE_PUSH :: "nat \<Rightarrow> push_inst" is make_push
 proof-
   fix n :: nat
 
@@ -694,111 +492,71 @@ proof-
   hence Mapped : "(0x60 + (n mod 32)) \<in> set (map (\<lambda> x . x + 0x60) (List.upt 0 32))"
     by auto
 
-  then show "push_gen n \<in> push_codes"
+  then show "make_push n \<in> set push_codes"
     using List.map_add_upt by auto
 qed
 
-(* dup instructions *)
-definition dup_codes :: "nat set" where
-"dup_codes = set (List.upt 0x80 0x90)"
+lift_definition PUSH_PUSH :: "nat32 \<Rightarrow> push_inst" is make_push
+proof-
+  fix n :: nat
+  assume "n < 32"
+
+  have "n mod 32 < 32" using pos_mod_bound[of 32 n] by auto
+
+  hence Upt32: "n mod 32 \<in> set (List.upt 0 32)" by auto
+
+  hence "(0x60 + (n mod 32)) \<in> ((\<lambda> x . x + 0x60) ` set (List.upt 0 32))"
+    using Set.imageI[OF Upt32, of "(\<lambda> x . x + 0x60)"] by auto
+
+  hence Mapped : "(0x60 + (n mod 32)) \<in> set (map (\<lambda> x . x + 0x60) (List.upt 0 32))"
+    by auto
+
+  then show "make_push n \<in> set push_codes"
+    using List.map_add_upt by auto
+qed
+
+free_constructors cases_push_inst for PUSH_PUSH
+  by(transfer;
+     auto simp del:set_upt simp add:List.upt_def)+ 
+
+fun is_PUSH_PUSH :: "push_inst \<Rightarrow> bool" where
+"is_PUSH_PUSH (PUSH_PUSH _) = True"
+
+fun get_PUSH_PUSH :: "push_inst \<Rightarrow> nat" where
+"get_PUSH_PUSH (PUSH_PUSH x) = nat_of_nat32 x"
+
+fun is_PUSH_PUSH_n :: "push_inst \<Rightarrow> nat \<Rightarrow> bool" where
+"is_PUSH_PUSH_n i x = (get_PUSH_PUSH i = x)"
+
+(* 
+ * dup instructions 
+ *)
+definition dup_codes :: "nat list" where
+"dup_codes = (List.upt 0x80 0x90)"
 declare dup_codes_def[simp add]
-typedef dup_inst = dup_codes by auto
+typedef dup_inst = "set dup_codes" by auto
 setup_lifting type_definition_dup_inst
 
-lift_definition DUP_DUP1  :: "dup_inst" is "0x80" by auto
-lift_definition DUP_DUP2  :: "dup_inst" is "0x81" by auto
-lift_definition DUP_DUP3  :: "dup_inst" is "0x82" by auto 
-lift_definition DUP_DUP4  :: "dup_inst" is "0x83" by auto
-lift_definition DUP_DUP5  :: "dup_inst" is "0x84" by auto
-lift_definition DUP_DUP6  :: "dup_inst" is "0x85" by auto
-lift_definition DUP_DUP7  :: "dup_inst" is "0x86" by auto
-lift_definition DUP_DUP8  :: "dup_inst" is "0x87" by auto
-lift_definition DUP_DUP9  :: "dup_inst" is "0x88" by auto
-lift_definition DUP_DUP10 :: "dup_inst" is "0x89" by auto
-lift_definition DUP_DUP11 :: "dup_inst" is "0x8a" by auto
-lift_definition DUP_DUP12 :: "dup_inst" is "0x8b" by auto
-lift_definition DUP_DUP13 :: "dup_inst" is "0x8c" by auto
-lift_definition DUP_DUP14 :: "dup_inst" is "0x8d" by auto
-lift_definition DUP_DUP15 :: "dup_inst" is "0x8e" by auto
-lift_definition DUP_DUP16 :: "dup_inst" is "0x8f" by auto
+typedef nat16 = "{x :: nat . x < 16}"
+proof
+  have "0 < (16 :: nat)" by auto
+  thus "0 \<in> {x :: nat . x < 16}" by(auto)
+qed
+setup_lifting type_definition_nat16
 
 lift_definition DUP_INST :: "dup_inst => inst" is id by auto
 
-free_constructors cases_dup_inst for
-DUP_DUP1
-| DUP_DUP2
-| DUP_DUP3
-| DUP_DUP4
-| DUP_DUP5
-| DUP_DUP6
-| DUP_DUP7
-| DUP_DUP8
-| DUP_DUP9
-| DUP_DUP10
-| DUP_DUP11
-| DUP_DUP12
-| DUP_DUP13
-| DUP_DUP14
-| DUP_DUP15
-| DUP_DUP16
-  by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+lift_definition nat_of_nat16 :: "nat16 \<Rightarrow> nat" is id done
 
-fun "is_dup_DUP1" :: "dup_inst => bool" where
-"is_dup_DUP1 DUP_DUP1 = True"
-| "is_dup_DUP1 _ = False"
-fun "is_dup_DUP2" :: "dup_inst => bool" where
-"is_dup_DUP2 DUP_DUP2 = True"
-| "is_dup_DUP2 _ = False"
-fun "is_dup_DUP3" :: "dup_inst => bool" where
-"is_dup_DUP3 DUP_DUP3 = True"
-| "is_dup_DUP3 _ = False"
-fun "is_dup_DUP4" :: "dup_inst => bool" where
-"is_dup_DUP4 DUP_DUP4 = True"
-| "is_dup_DUP4 _ = False"
-fun "is_dup_DUP5" :: "dup_inst => bool" where
-"is_dup_DUP5 DUP_DUP5 = True"
-| "is_dup_DUP5 _ = False"
-fun "is_dup_DUP6" :: "dup_inst => bool" where
-"is_dup_DUP6 DUP_DUP6 = True"
-| "is_dup_DUP6 _ = False"
-fun "is_dup_DUP7" :: "dup_inst => bool" where
-"is_dup_DUP7 DUP_DUP7 = True"
-| "is_dup_DUP7 _ = False"
-fun "is_dup_DUP8" :: "dup_inst => bool" where
-"is_dup_DUP8 DUP_DUP8 = True"
-| "is_dup_DUP8 _ = False"
-fun "is_dup_DUP9" :: "dup_inst => bool" where
-"is_dup_DUP9 DUP_DUP9 = True"
-| "is_dup_DUP9 _ = False"
-fun "is_dup_DUP10" :: "dup_inst => bool" where
-"is_dup_DUP10 DUP_DUP10 = True"
-| "is_dup_DUP10 _ = False"
-fun "is_dup_DUP11" :: "dup_inst => bool" where
-"is_dup_DUP11 DUP_DUP11 = True"
-| "is_dup_DUP11 _ = False"
-fun "is_dup_DUP12" :: "dup_inst => bool" where
-"is_dup_DUP12 DUP_DUP12 = True"
-| "is_dup_DUP12 _ = False"
-fun "is_dup_DUP13" :: "dup_inst => bool" where
-"is_dup_DUP13 DUP_DUP13 = True"
-| "is_dup_DUP13 _ = False"
-fun "is_dup_DUP14" :: "dup_inst => bool" where
-"is_dup_DUP14 DUP_DUP14 = True"
-| "is_dup_DUP14 _ = False"
-fun "is_dup_DUP15" :: "dup_inst => bool" where
-"is_dup_DUP15 DUP_DUP15 = True"
-| "is_dup_DUP15 _ = False"
-fun "is_dup_DUP16" :: "dup_inst => bool" where
-"is_dup_DUP16 DUP_DUP16 = True"
-| "is_dup_DUP16 _ = False"
+lift_definition nat16_of_nat :: "nat \<Rightarrow> nat16" is "(\<lambda> n . n mod 16)"
+  using pos_mod_bound[of 16 ] by auto
 
-(* general version for use when not case-splitting *)
-fun dup_gen :: "nat \<Rightarrow> nat" where
-"dup_gen n =
+(* helper for building dup instructions *)
+fun make_dup :: "nat \<Rightarrow> nat" where
+"make_dup n =
   0x80 + (n mod 16)"
 
-lift_definition DUP_GEN :: "nat \<Rightarrow> dup_inst" is dup_gen
+lift_definition MAKE_DUP :: "nat \<Rightarrow> dup_inst" is make_dup
 proof-
   fix n :: nat
 
@@ -812,113 +570,58 @@ proof-
   hence Mapped : "(0x80 + (n mod 16)) \<in> set (map (\<lambda> x . x + 0x80) (List.upt 0 16))"
     by auto
 
-  then show "dup_gen n \<in> dup_codes"
+  then show "make_dup n \<in> set dup_codes"
     using List.map_add_upt by auto
 qed
+
+lift_definition DUP_DUP :: "nat16 \<Rightarrow> dup_inst" is make_dup
+proof-
+  fix n :: nat
+
+  have "n mod 16 < 16" using pos_mod_bound[of 16 n] by auto
+
+  hence Upt32: "n mod 16 \<in> set (List.upt 0 16)" by auto
+
+  hence "(0x80 + (n mod 16)) \<in> ((\<lambda> x . x + 0x80) ` set (List.upt 0 16))"
+    using Set.imageI[OF Upt32, of "(\<lambda> x . x + 0x80)"] by auto
+
+  hence Mapped : "(0x80 + (n mod 16)) \<in> set (map (\<lambda> x . x + 0x80) (List.upt 0 16))"
+    by auto
+
+  then show "make_dup n \<in> set dup_codes"
+    using List.map_add_upt by auto
+qed
+
+free_constructors cases_dup_inst for DUP_DUP
+  by(transfer;
+     auto simp del:set_upt simp add:List.upt_def)+ 
+
+fun is_DUP_DUP :: "dup_inst \<Rightarrow> bool" where
+"is_DUP_DUP (DUP_DUP _) = True"
+
+fun get_DUP_DUP :: "dup_inst \<Rightarrow> nat" where
+"get_DUP_DUP (DUP_DUP x) = nat_of_nat16 x"
+
+fun is_DUP_DUP_n :: "dup_inst \<Rightarrow> nat \<Rightarrow> bool" where
+"is_DUP_DUP_n i x = (get_DUP_DUP i = x)"
 
 (* 
  * swap instructions 
  *)
-definition swap_codes :: "nat set" where
-"swap_codes = set (List.upt 0x90 0xa0)"
+definition swap_codes :: "nat list" where
+"swap_codes = (List.upt 0x90 0xa0)"
 declare swap_codes_def[simp add]
-typedef swap_inst = swap_codes by auto
+typedef swap_inst = "set swap_codes" by auto
 setup_lifting type_definition_swap_inst
-
-lift_definition SWAP_SWAP1  :: "swap_inst" is "0x90" by auto
-lift_definition SWAP_SWAP2  :: "swap_inst" is "0x91" by auto
-lift_definition SWAP_SWAP3  :: "swap_inst" is "0x92" by auto 
-lift_definition SWAP_SWAP4  :: "swap_inst" is "0x93" by auto
-lift_definition SWAP_SWAP5  :: "swap_inst" is "0x94" by auto
-lift_definition SWAP_SWAP6  :: "swap_inst" is "0x95" by auto
-lift_definition SWAP_SWAP7  :: "swap_inst" is "0x96" by auto
-lift_definition SWAP_SWAP8  :: "swap_inst" is "0x97" by auto
-lift_definition SWAP_SWAP9  :: "swap_inst" is "0x98" by auto
-lift_definition SWAP_SWAP10 :: "swap_inst" is "0x99" by auto
-lift_definition SWAP_SWAP11 :: "swap_inst" is "0x9a" by auto
-lift_definition SWAP_SWAP12 :: "swap_inst" is "0x9b" by auto
-lift_definition SWAP_SWAP13 :: "swap_inst" is "0x9c" by auto
-lift_definition SWAP_SWAP14 :: "swap_inst" is "0x9d" by auto
-lift_definition SWAP_SWAP15 :: "swap_inst" is "0x9e" by auto
-lift_definition SWAP_SWAP16 :: "swap_inst" is "0x9f" by auto
 
 lift_definition SWAP_INST :: "swap_inst => inst" is id by auto
 
-free_constructors cases_swap_inst for
-SWAP_SWAP1
-| SWAP_SWAP2
-| SWAP_SWAP3
-| SWAP_SWAP4
-| SWAP_SWAP5
-| SWAP_SWAP6
-| SWAP_SWAP7
-| SWAP_SWAP8
-| SWAP_SWAP9
-| SWAP_SWAP10
-| SWAP_SWAP11
-| SWAP_SWAP12
-| SWAP_SWAP13
-| SWAP_SWAP14
-| SWAP_SWAP15
-| SWAP_SWAP16
-  by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
-
-fun "is_swap_SWAP1" :: "swap_inst => bool" where
-"is_swap_SWAP1 SWAP_SWAP1 = True"
-| "is_swap_SWAP1 _ = False"
-fun "is_swap_SWAP2" :: "swap_inst => bool" where
-"is_swap_SWAP2 SWAP_SWAP2 = True"
-| "is_swap_SWAP2 _ = False"
-fun "is_swap_SWAP3" :: "swap_inst => bool" where
-"is_swap_SWAP3 SWAP_SWAP3 = True"
-| "is_swap_SWAP3 _ = False"
-fun "is_swap_SWAP4" :: "swap_inst => bool" where
-"is_swap_SWAP4 SWAP_SWAP4 = True"
-| "is_swap_SWAP4 _ = False"
-fun "is_swap_SWAP5" :: "swap_inst => bool" where
-"is_swap_SWAP5 SWAP_SWAP5 = True"
-| "is_swap_SWAP5 _ = False"
-fun "is_swap_SWAP6" :: "swap_inst => bool" where
-"is_swap_SWAP6 SWAP_SWAP6 = True"
-| "is_swap_SWAP6 _ = False"
-fun "is_swap_SWAP7" :: "swap_inst => bool" where
-"is_swap_SWAP7 SWAP_SWAP7 = True"
-| "is_swap_SWAP7 _ = False"
-fun "is_swap_SWAP8" :: "swap_inst => bool" where
-"is_swap_SWAP8 SWAP_SWAP8 = True"
-| "is_swap_SWAP8 _ = False"
-fun "is_swap_SWAP9" :: "swap_inst => bool" where
-"is_swap_SWAP9 SWAP_SWAP9 = True"
-| "is_swap_SWAP9 _ = False"
-fun "is_swap_SWAP10" :: "swap_inst => bool" where
-"is_swap_SWAP10 SWAP_SWAP10 = True"
-| "is_swap_SWAP10 _ = False"
-fun "is_swap_SWAP11" :: "swap_inst => bool" where
-"is_swap_SWAP11 SWAP_SWAP11 = True"
-| "is_swap_SWAP11 _ = False"
-fun "is_swap_SWAP12" :: "swap_inst => bool" where
-"is_swap_SWAP12 SWAP_SWAP12 = True"
-| "is_swap_SWAP12 _ = False"
-fun "is_swap_SWAP13" :: "swap_inst => bool" where
-"is_swap_SWAP13 SWAP_SWAP13 = True"
-| "is_swap_SWAP13 _ = False"
-fun "is_swap_SWAP14" :: "swap_inst => bool" where
-"is_swap_SWAP14 SWAP_SWAP14 = True"
-| "is_swap_SWAP14 _ = False"
-fun "is_swap_SWAP15" :: "swap_inst => bool" where
-"is_swap_SWAP15 SWAP_SWAP15 = True"
-| "is_swap_SWAP15 _ = False"
-fun "is_swap_SWAP16" :: "swap_inst => bool" where
-"is_swap_SWAP16 SWAP_SWAP16 = True"
-| "is_swap_SWAP16 _ = False"
-
-(* general version for use when not case-splitting *)
-fun swap_gen :: "nat \<Rightarrow> nat" where
-"swap_gen n =
+(* helper for building swap instructions *)
+fun make_swap :: "nat \<Rightarrow> nat" where
+"make_swap n =
   0x90 + (n mod 16)"
 
-lift_definition SWAP_GEN :: "nat \<Rightarrow> swap_inst" is swap_gen
+lift_definition MAKE_SWAP :: "nat \<Rightarrow> swap_inst" is make_swap
 proof-
   fix n :: nat
 
@@ -932,18 +635,48 @@ proof-
   hence Mapped : "(0x90 + (n mod 16)) \<in> set (map (\<lambda> x . x + 0x90) (List.upt 0 16))"
     by auto
 
-  then show "swap_gen n \<in> swap_codes"
+  then show "make_swap n \<in> set swap_codes"
     using List.map_add_upt by auto
 qed
 
+lift_definition SWAP_SWAP :: "nat16 \<Rightarrow> swap_inst" is make_swap
+proof-
+  fix n :: nat
+
+  have "n mod 16 < 16" using pos_mod_bound[of 16 n] by auto
+
+  hence Upt32: "n mod 16 \<in> set (List.upt 0 16)" by auto
+
+  hence "(0x90 + (n mod 16)) \<in> ((\<lambda> x . x + 0x90) ` set (List.upt 0 16))"
+    using Set.imageI[OF Upt32, of "(\<lambda> x . x + 0x90)"] by auto
+
+  hence Mapped : "(0x90 + (n mod 16)) \<in> set (map (\<lambda> x . x + 0x90) (List.upt 0 16))"
+    by auto
+
+  then show "make_swap n \<in> set swap_codes"
+    using List.map_add_upt by auto
+qed
+
+free_constructors cases_swap_inst for SWAP_SWAP
+  by(transfer;
+     auto simp del:set_upt simp add:List.upt_def)+
+
+fun is_SWAP_SWAP :: "swap_inst \<Rightarrow> bool" where
+"is_SWAP_SWAP (SWAP_SWAP _) = True"
+
+fun get_SWAP_SWAP :: "swap_inst \<Rightarrow> nat" where
+"get_SWAP_SWAP (SWAP_SWAP x) = nat_of_nat16 x"
+
+fun is_SWAP_SWAP_n :: "swap_inst \<Rightarrow> nat \<Rightarrow> bool" where
+"is_SWAP_SWAP_n i x = (get_SWAP_SWAP i = x)"
 
 (* 
  * log instructions 
  *)
 definition log_codes where
-"log_codes = set (List.upt 0xa0 0xa5)"
+"log_codes = (List.upt 0xa0 0xa5)"
 declare log_codes_def[simp]
-typedef log_inst = log_codes by auto
+typedef log_inst = "set log_codes" by auto
 setup_lifting type_definition_log_inst
 
 lift_definition LOG_LOG0 :: "log_inst" is "0xa0" by auto
@@ -979,11 +712,13 @@ fun "is_log_LOG4" :: "log_inst => bool" where
 "is_log_LOG4 LOG_LOG4 = True"
 | "is_log_LOG4 _ = False"
 
-(* EIP615 instructions *)
+(* 
+ * EIP615 instructions 
+ *)
 definition eip615_codes where
-"eip615_codes = set (List.upt 0xb0 0xba)"
+"eip615_codes = (List.upt 0xb0 0xba)"
 declare eip615_codes_def[simp]
-typedef eip615_inst = eip615_codes by auto
+typedef eip615_inst = "set eip615_codes" by auto
 setup_lifting type_definition_eip615_inst
 
 lift_definition EIP615_JUMPTO    :: "eip615_inst" is "0xb0" by auto
@@ -1048,9 +783,9 @@ fun "is_eip615_GETLOCAL" :: "eip615_inst => bool" where
  * cross-contract communication instructions
  *)
 definition comms_codes where
-"comms_codes = set (List.upt 0xf0 0xf6) \<union> {0xfa}"
+"comms_codes = (List.upt 0xf0 0xf6) @ [0xfa]"
 declare comms_codes_def[simp]
-typedef comms_inst = comms_codes by auto
+typedef comms_inst = "set comms_codes" by auto
 setup_lifting type_definition_comms_inst
 
 lift_definition COMMS_CREATE       :: "comms_inst" is "0xf0" by auto
@@ -1101,9 +836,9 @@ fun "is_comms_STATICCALL" :: "comms_inst => bool" where
  * special halting instructions
  *)
 definition special_halt_codes where
-"special_halt_codes = set (List.upt 0xfd 0x100)"
+"special_halt_codes = (List.upt 0xfd 0x100)"
 declare special_halt_codes_def[simp]
-typedef special_halt_inst = special_halt_codes by auto
+typedef special_halt_inst = "set special_halt_codes" by auto
 setup_lifting type_definition_special_halt_inst
 
 lift_definition SPECIAL_HALT_REVERT       :: "special_halt_inst" is "0xfd" by auto
@@ -1135,119 +870,275 @@ fun "is_special_halt_SELFDESTRUCT" :: "special_halt_inst => bool" where
  *)
 
 (* we are leaving out EIP615 *)
-definition good_codes :: "nat set" where
+definition good_codes :: "nat list" where
 "good_codes = 
-  stop_codes \<union>
-  arith_codes \<union>
-  compare_codes \<union>
-  bits_codes \<union>
-  keccak256_codes \<union>
-  tx_data_codes \<union>
-  chain_data_codes \<union>
-  state_control_codes \<union>
-  push_few_codes \<union>
-  push_many_codes \<union>
-  dup_codes \<union>
-  swap_codes \<union>
-  log_codes \<union>
-  comms_codes \<union>
+  stop_codes @
+  arith_codes @
+  bits_compare_codes @
+  keccak256_codes @
+  tx_data_codes @
+  chain_data_codes @
+  state_control_codes @
+  push_codes @
+  dup_codes @
+  swap_codes @
+  log_codes @
+  comms_codes @
   special_halt_codes"
 
-typedef good_inst = good_codes
+typedef good_inst = "set good_codes"
   by(auto simp add: good_codes_def)
 setup_lifting type_definition_good_inst
 
 lift_definition GOOD_INST :: "good_inst \<Rightarrow> inst" is id
   by(auto simp add: good_codes_def)
 
-definition bad_codes :: "nat set" where
-"bad_codes = 
-  {x . x < 256} - good_codes"
+(* "more computable" approach to set differencing -
+still not fast enough*)
 
-(* TODO: this will have to change if this constant becomes used as an opcode in the future *)
-definition bad_code :: "nat" where
-"bad_code = 0xcc"
+(*
+fun list_diff :: "'a list \<Rightarrow> 'a list \<Rightarrow> 'a list" where
+"list_diff l [] = l"
+| "list_diff l (x#xs) =
+   list_diff (remove1 x l) xs"
 
-typedef bad_inst = bad_codes
-proof-
-  have "bad_code \<in> bad_codes" 
-    unfolding good_codes_def bad_codes_def bad_code_def
+lemma list_diff_set :
+  assumes H : "distinct l1"
+  shows "set (list_diff l1 l2) = set l1 - set l2" using assms
+proof(induction l2 arbitrary: l1)
+case Nil
+  then show ?case by auto
+next
+  case (Cons a l2)
+  then show ?case 
     by(auto)
-  thus "\<exists>x. x \<in> bad_codes" by auto
 qed
+*)
+(*
+definition bad_codes :: "nat list" where
+"bad_codes = 
+  list_diff (List.upt 0 256) good_codes"
+
+lemma bad_codes_spec :
+  shows "set bad_codes = set (List.upt 0 (256 :: nat)) - set good_codes"
+  unfolding bad_codes_def list_diff_set[OF distinct_upt]
+  by auto
+*)
+
+(* TODO: doing this by hand was pretty painful.
+   If we had a better data structure than lists readily available,
+   we could probably compute this in a reasonable way *)
+definition bad_codes :: "nat list" where
+"bad_codes =
+  [0x0c, 0x0d, 0x0e, 0x0f,
+   0x1e, 0x1f,
+   0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
+   0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f,
+   0x5c, 0x5d, 0x5e, 0x5f,
+   0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf,
+   0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xbb, 0xbc, 0xbd, 0xbe, 0xbf,
+   0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf,
+   0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xdb, 0xdc, 0xdd, 0xde, 0xdf,
+   0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef,
+   0xf6, 0xf7, 0xf8, 0xf9,
+   0xfb, 0xfc]"
+
+typedef bad_inst = "set bad_codes" by(auto simp add: bad_codes_def)
 setup_lifting type_definition_bad_inst
 
 lift_definition BAD_INST :: "bad_inst \<Rightarrow> inst" is id by(auto simp add: bad_codes_def)
 
-lemma good_are_insts : "good_codes \<subseteq> {x . x < 256}"
+lemma good_are_insts : "set good_codes \<subseteq> {x . x < 256}"
   by(auto simp add: good_codes_def)
 
-lemma good_bad : "good_codes \<union> bad_codes = {x . x < 256}"
-  using good_are_insts unfolding bad_codes_def
-  by blast
-
+(*
+lemma good_bad : "set good_codes \<union> set bad_codes = {x . x < 256}"
+  unfolding bad_codes_def good_codes_def
+  apply(auto)
+*)
+  
 lemma cases_inst_helper :
-"\<And>P y. y < 256 \<Longrightarrow>
-           (\<And>x1. x1 \<in> stop_codes \<Longrightarrow> y = id x1 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x2. x2 \<in> arith_codes \<Longrightarrow> y = id x2 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x3. x3 \<in> compare_codes \<Longrightarrow> y = id x3 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x4. x4 \<in> bits_codes \<Longrightarrow> y = id x4 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x5. x5 \<in> keccak256_codes \<Longrightarrow> y = id x5 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x6. x6 \<in> tx_data_codes \<Longrightarrow> y = id x6 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x7. x7 \<in> chain_data_codes \<Longrightarrow> y = id x7 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x8. x8 \<in> state_control_codes \<Longrightarrow> y = id x8 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x9. x9 \<in> push_few_codes \<Longrightarrow> y = id x9 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x10. x10 \<in> push_many_codes \<Longrightarrow> y = id x10 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x11. x11 \<in> dup_codes \<Longrightarrow> y = id x11 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x12. x12 \<in> swap_codes \<Longrightarrow> y = id x12 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x13. x13 \<in> log_codes \<Longrightarrow> y = id x13 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x14. x14 \<in> eip615_codes \<Longrightarrow> y = id x14 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x15. x15 \<in> comms_codes \<Longrightarrow> y = id x15 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x16. x16 \<in> special_halt_codes \<Longrightarrow> y = id x16 \<Longrightarrow> P) \<Longrightarrow>
-           (\<And>x17. x17 \<in> bad_codes \<Longrightarrow> y = id x17 \<Longrightarrow> P) \<Longrightarrow> P"
+  assumes Hy :  "(y :: nat) < 256"
+  assumes H1 :  "(\<And>x1. x1 \<in> set stop_codes \<Longrightarrow> y = id x1 \<Longrightarrow> P)"
+  assumes H2 :  "(\<And>x2. x2 \<in> set arith_codes \<Longrightarrow> y = id x2 \<Longrightarrow> P)"
+  assumes H4 :  "(\<And>x4. x4 \<in> set bits_compare_codes \<Longrightarrow> y = id x4 \<Longrightarrow> P)"
+  assumes H5 :  "(\<And>x5. x5 \<in> set keccak256_codes \<Longrightarrow> y = id x5 \<Longrightarrow> P)"
+  assumes H6 :  "(\<And>x6. x6 \<in> set tx_data_codes \<Longrightarrow> y = id x6 \<Longrightarrow> P)"
+  assumes H7 :  "(\<And>x7. x7 \<in> set chain_data_codes \<Longrightarrow> y = id x7 \<Longrightarrow> P)"
+  assumes H8 :  "(\<And>x8. x8 \<in> set state_control_codes \<Longrightarrow> y = id x8 \<Longrightarrow> P)"
+  assumes H9 :  "(\<And>x9. x9 \<in> set push_codes \<Longrightarrow> y = id x9 \<Longrightarrow> P)"
+  assumes H10 : "(\<And>x10. x10 \<in> set dup_codes \<Longrightarrow> y = id x10 \<Longrightarrow> P)"
+  assumes H11 : "(\<And>x11. x11 \<in> set swap_codes \<Longrightarrow> y = id x11 \<Longrightarrow> P)"
+  assumes H12 : "(\<And>x12. x12 \<in> set log_codes \<Longrightarrow> y = id x12 \<Longrightarrow> P)"
+  assumes H13 : "(\<And>x13. x13 \<in> set comms_codes \<Longrightarrow> y = id x13 \<Longrightarrow> P)"
+  assumes H14 : "(\<And>x14. x14 \<in> set special_halt_codes \<Longrightarrow> y = id x14 \<Longrightarrow> P)"
+  assumes H15 : "(\<And>x15. x15 \<in> set bad_codes \<Longrightarrow> y = id x15 \<Longrightarrow> P)"
+shows P
   sorry
 
+(*
 
 (* "constructors" for each instruction type *)
 free_constructors cases_inst for
 STOP_INST
 | ARITH_INST
-| COMPARE_INST
-| BITS_INST
+| BITS_COMPARE_INST
 | KECCAK256_INST
 | TX_DATA_INST
 | CHAIN_DATA_INST
 | STATE_CONTROL_INST
-| PUSH_FEW_INST
-| PUSH_MANY_INST
+| PUSH_INST
 | DUP_INST
 | SWAP_INST
 | LOG_INST
-| EIP615_INST
 | COMMS_INST
 | SPECIAL_HALT_INST
 | BAD_INST
 
-(*
                       apply(transfer)
-  apply(rule cases_inst_helper; blast)
+  defer
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
 
-  apply(transfer; force  simp only: bad_codes_def good_codes_def
-List.upt_def
-stop_codes_def arith_codes_def compare_codes_def bits_codes_def keccak256_codes_def
-tx_data_codes_def chain_data_codes_def state_control_codes_def
-push_few_codes_def push_many_codes_def dup_codes_def
-swap_codes_def log_codes_def eip615_codes_def comms_codes_def
-special_halt_codes_def 
-)+
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
 
-  apply(transfer; simp only: bad_codes_def good_codes_def
-List.upt_def
-stop_codes_def arith_codes_def compare_codes_def bits_codes_def keccak256_codes_def
-tx_data_codes_def chain_data_codes_def state_control_codes_def
-push_few_codes_def push_many_codes_def dup_codes_def
-swap_codes_def log_codes_def eip615_codes_def comms_codes_def
-special_halt_codes_def Nat.nat.rec; force)+
+(* apply(rule cases_inst_helper; blast) *)
+
+
+(*
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
+*)
+
+(*
+  by (transfer; auto simp: bad_codes_spec good_codes_def; fail)+
+*)
+
+(*
+                      apply(transfer;
+  match conclusion in "x = y" for x y \<Rightarrow> \<open>transfer; 
+  fastforce simp add: bad_codes_def good_codes_def
+List.upt_def simp del: set_upt\<close>
+      | match conclusion in"x \<noteq> y" for x y \<Rightarrow>  \<open>transfer; 
+  fastforce simp add: bad_codes_def good_codes_def
+List.upt_def simp del: set_upt\<close>
+      | rule cases_inst_helper; blast)
+*)
+
+
+                   
+
+
 (*
                       apply(transfer;
   fastforce simp add: bad_codes_def good_codes_def
@@ -1266,7 +1157,7 @@ List.upt_def simp del: set_upt; fail)+
                       defer
                apply(transfer; force)+
   *)
-*)
 
 
 end
+  

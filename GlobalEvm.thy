@@ -2,6 +2,8 @@ theory GlobalEvm
   imports MiniEvm
 begin
 
+(* need global EVM stack elements. *)
+
 (* 
 
 EVM global state (as needed for transaction execution)
@@ -68,6 +70,29 @@ fun update_acct_with_estate ::
   (a \<lparr> ea_balance := e_selfbalance e
      , ea_storage := e_storage e \<rparr> )"
 
-(* what else do we need? *)
+(* to invoke a transaction, we submit
+   address, calldata, value, gas,  *)
+(* TODO: nonce, GasPrice, GasLimit, v/r/s (EIP155) *)
+(*
+   idea:
+   - get code from address
+   - construct estate
+   - run until we hit a flag/end
+   - potential problem: dealing with
+     termination issues inside contracts this way
+*)
+
+(*
+fun eval_global_step ::
+  "eaddr \<Rightarrow> 
+   ebyte list \<Rightarrow>
+   eint \<Rightarrow>
+   eint \<Rightarrow>
+   eglobal \<Rightarrow> 
+   nat \<Rightarrow>
+   eglobal" where
+"eval_global_step addr calldata value gas state =
+ *)
+
 
 end

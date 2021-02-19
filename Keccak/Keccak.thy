@@ -174,13 +174,20 @@ definition word8_to_word64  :: " 8 word \<Rightarrow> 64 word "  where
 definition update_byte  :: " 8 word \<Rightarrow> nat \<Rightarrow>( 64 word)list \<Rightarrow>( 64 word)list "  where 
      " update_byte i p st = ( setf st (p div( 8 :: nat)) ((get st (p div( 8 :: nat))) XOR ((word8_to_word64 i) << (( 8 :: nat) * (p mod( 8 :: nat))))))"
 
-
+(*
 function (sequential,domintros)  sha3_update  :: "( 8 word)list \<Rightarrow> nat \<Rightarrow>( 64 word)list \<Rightarrow> nat*( 64 word)list "  where 
      " sha3_update ([]) pos st = ( (pos, st))"
 |" sha3_update (c # rest) pos st = (
     if (pos \<le> rsiz) then sha3_update rest (pos +( 1 :: nat)) (update_byte c pos st)
    else sha3_update rest(( 0 :: nat)) (keccakf (update_byte c pos st)))" 
 by pat_completeness auto
+*)
+
+fun sha3_update  :: "( 8 word)list \<Rightarrow> nat \<Rightarrow>( 64 word)list \<Rightarrow> nat*( 64 word)list "  where 
+     " sha3_update ([]) pos st = ( (pos, st))"
+|" sha3_update (c # rest) pos st = (
+    if (pos \<le> rsiz) then sha3_update rest (pos +( 1 :: nat)) (update_byte c pos st)
+   else sha3_update rest(( 0 :: nat)) (keccakf (update_byte c pos st)))" 
 
 
 definition keccak_final  :: " nat \<Rightarrow>( 64 word)list \<Rightarrow>( 8 word)list "  where 

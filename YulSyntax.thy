@@ -67,11 +67,23 @@ consts YulCase :: "YulLiteral \<Rightarrow> YulStatement list \<Rightarrow> YulS
 (* consts YulTypedName :: "YulIdentifier \<Rightarrow> YulType \<Rightarrow> YulTypedName" *)
 abbreviation (input) YulZero where "YulZero \<equiv> 0"
 abbreviation (input) YulOne where "YulOne \<equiv> 1"
+
+(*
 consts YulLiteralNumber :: "256 word \<Rightarrow> 'v YulLiteralValue"
-consts YulUserDefinedType :: "String.literal \<Rightarrow> 't"
 consts YulTypeUint256 :: 't
-consts YulTypeBool :: 't
 consts YulDefaultType :: 't
+
+*)
+definition YulLiteralNumber :: "256 word \<Rightarrow> 256 word YulLiteralValue"
+  where
+"YulLiteralNumber = id"
+definition YulTypeUint256 :: unit 
+  where "YulTypeUint256 = ()"
+definition YulDefaultType :: unit
+  where "YulDefaultType = ()"
+
+consts YulUserDefinedType :: "String.literal \<Rightarrow> 't"
+consts YulTypeBool :: 't
 consts YulStringLiteral :: "String.literal \<Rightarrow> 'v YulLiteralValue"
 consts YulBoolTrueLiteral :: "'v YulLiteralValue"
 consts YulBoolFalseLiteral :: "'v YulLiteralValue"
