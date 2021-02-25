@@ -9,6 +9,9 @@ begin
 https://github.com/ethereum/solidity/blob/develop/libevmasm/Instruction.h
 *)
 
+(*
+data structure access API. Insert + update
+*)
 
 datatype logentry =
   Log0 "8 word list"
