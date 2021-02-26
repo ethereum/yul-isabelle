@@ -1,0 +1,11 @@
+chapter AFP
+
+session Word_Lib (AFP) = HOL +
+  options [timeout = 300]
+  sessions
+    "HOL-Eisbach"
+  theories
+    Guide
+    Examples
+  document_files
+    "root.tex"

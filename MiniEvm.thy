@@ -1,7 +1,6 @@
 theory MiniEvm
   imports YulDialect
-    (*"HOL-Library.Word"*)
-    "HOL-Word.Word"
+    "HOL-Library.Word"
     "Keccak/Keccak"
 begin
 
@@ -138,7 +137,7 @@ fun ei_div :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_div i1 i2 s = (divide_word_inst.divide_word i1 i2, s)"
 
 (* get minimum-valued word (2's complement) *)
-definition ssmallest :: "('a :: len0) word" where
+definition ssmallest :: "('a :: len) word" where
 "ssmallest =
  (Word.setBit (Word.word_of_int 0 :: 'a word) (size (Word.word_of_int 0 :: 'a word) - 1))"
 
@@ -286,19 +285,19 @@ fun ei_iszero :: "eint \<Rightarrow> (estate, eint) State" where
 
 fun ei_and :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_and i1 i2 s =
-  (bit_operations_word_inst.bitAND_word i1 i2, s)"
+  (semiring_bit_operations_word_inst.and_word i1 i2, s)"
 
 fun ei_or :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_or i1 i2 s =
-  (bit_operations_word_inst.bitOR_word i1 i2, s)"
+  (semiring_bit_operations_word_inst.or_word i1 i2, s)"
 
 fun ei_xor :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_xor i1 i2 s =
-  (bit_operations_word_inst.bitXOR_word i1 i2, s)"
+  (semiring_bit_operations_word_inst.xor_word i1 i2, s)"
 
 fun ei_not :: "eint \<Rightarrow> (estate, eint) State" where
 "ei_not i1 s =
-  (bit_operations_word_inst.bitNOT_word i1, s)"
+  (ring_bit_operations_word_inst.not_word i1, s)"
 
 (* note that rsplit goes from most \<rightarrow> least significant digits
    (this is the opposite of how test_bit_word works)

@@ -1,6 +1,6 @@
 theory BasicDialect
 imports
-  YulDialect "HOL-Word.Word"
+  YulDialect "HOL-Library.Word"
 begin
 
 (* see if type_synonym vs record helps *)

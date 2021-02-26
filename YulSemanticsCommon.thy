@@ -1,4 +1,4 @@
-theory YulSemanticsCommon imports YulSyntax     "HOL-Word.Word"
+theory YulSemanticsCommon imports YulSyntax     "HOL-Library.Word"
 
 begin
 
@@ -32,37 +32,10 @@ record ('g, 'v, 't) function_sig' =
 record ('g, 'v, 't) function_sig = "('g, 'v, 't) function_sig'" +
   f_sig_visible :: "YulIdentifier list"
 
-
-
-(*
-datatype ('g, 'v, 't) function_sig =
-  YulFunctionSig
-  (YulFunctionSigArguments: "'t YulTypedName list")
-  (YulFunctionSigReturnValues: "'t YulTypedName list")
-  (YulFunctionSigBody: "('g, 'v, 't) YulFunctionBody")
-  (* for each function, we must store the set of functions in scope at its definition site. *)
-  (YulVisibleFunctions : "YulIdentifier list")
-*)
-(*
-type_synonym 'v locals = "YulIdentifier \<Rightarrow> 'v option"
-*)
-
 type_synonym 'v locals = "(YulIdentifier * 'v) list"
-
-
-
-(* TODO: changes here
-   - locals should no longer be a list. just single locals + list of visible vars (?)
-   - maybe funs also doesn't need to be a list. can just be a local also.
- *)
 
 type_synonym vset = "unit locals"
 
-(* for nested function calls, we need a stack of
-   - result value lists
-   - locals
-do we also need a set of fun. defs.?
-*)
 type_synonym 'v frame =
   "('v list * 'v locals)"
 
@@ -244,9 +217,6 @@ type_synonym ebyte = "8 word"
 
 
 (* data type capturing whether Yul program has terminated, and why *)
-(* TODO: figure out if we need to change target addresses to eaddr
-   (I don't see explicit casts in Yellowpaper here)
-*)
 datatype YulFlag =
   (* program is executing as normal *)
   is_Executing : Executing

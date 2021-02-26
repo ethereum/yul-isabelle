@@ -1,4 +1,6 @@
-theory WordUtils imports "HOL-Word.Word"
+theory WordUtils imports 
+"HOL-Library.Word"
+"Word_Lib/Rsplit"
 
 begin
 

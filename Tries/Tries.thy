@@ -573,7 +573,6 @@ definition word_rx_size :
 "rx_size (n :: ('a :: len) word) =
   unat n"
 
-declare [[show_sorts]] declare [[show_types]]
 instance proof
   fix x x' :: "'a word"
   show "rx_divmod x = rx_divmod x' \<Longrightarrow> x = x'"
@@ -710,8 +709,17 @@ fun str'_of_lit :: "String.literal \<Rightarrow> str'" where
 "str'_of_lit l =
   (S (String.explode l) None)"
 
-(* TODO: instance for string keys *)
-(*
-instantiation String.literal :: rx_key begin
-*)
+instantiation str' :: rx_key begin
+definition str'_rx_divmod :
+  "rx_divmod (s :: str') = str'_divmod s"
+
+definition str'_rx_emp :
+"rx_emp = S [] None"
+
+definition str'_rx_size :
+"rx_size (n :: str') = str'_size n"
+
+instance sorry
+end
+
 end

@@ -5,9 +5,14 @@ theory "Keccak"
 imports
   Main
   (* HOL-Library.Word *)
-  "HOL-Word.Word"
+  "HOL-Library.Word"
+  "../Word_Lib/Traditional_Infix_Syntax"
+  "../Word_Lib/Rsplit"
+  "../Word_Lib/Reversed_Bit_Lists"
 
 begin 
+
+
 
 (* Copyright 2016 Sami MÃ¤kelÃ¤
  Licensed under the Apache License; Version 2.0 (the "License"); 
@@ -32,13 +37,13 @@ definition rotl64  :: " 64 word \<Rightarrow> nat \<Rightarrow> 64 word "  where
 *)
 
 definition big  :: " 64 word "  where 
-     " big = (((word_of_int 1) ::  64 word) <<( 63 :: nat))"
+     "big = (((word_of_int 1) ::  64 word) <<( 63 :: nat))"
 
 definition two31  :: " 64 word "  where 
-     " two31 = (((word_of_int 1) ::  64 word) <<( 31 :: nat))"
+     "two31 = (((word_of_int 1) ::  64 word) <<( 31 :: nat))"
 
 definition two15  :: " 64 word "  where 
-     " two15 = (((word_of_int 1) ::  64 word) <<( 15 :: nat))"
+     "two15 = (((word_of_int 1) ::  64 word) <<( 15 :: nat))"
 
 definition keccakf_randc  :: "( 64 word)list "  where 
      " keccakf_randc = ( [((word_of_int 1) ::  64 word),(((word_of_int 130) ::  64 word) OR two15),((((word_of_int 138) ::  64 word) OR big) OR two15),(((((word_of_int 0) ::  64 word) OR big) OR two31) OR two15),(((word_of_int 139) ::  64 word) OR two15),(((word_of_int 1) ::  64 word) OR two31),(((((word_of_int 129) ::  64 word) OR big) OR two31) OR two15),((((word_of_int 9) ::  64 word) OR big) OR two15),((word_of_int 138) ::  64 word),((word_of_int 136) ::  64 word),((((word_of_int 9) ::  64 word) OR two31) OR two15),(((word_of_int 10) ::  64 word)  OR two31),((((word_of_int 139) ::  64 word) OR two31) OR two15),(((word_of_int 139) ::  64 word) OR big),((((word_of_int 137) ::  64 word) OR big) OR two15),((((word_of_int 3) ::  64 word) OR big) OR two15),((((word_of_int 2) ::  64 word) OR big) OR two15),(((word_of_int 128) ::  64 word) OR big),(((word_of_int 10) ::  64 word) OR two15),((((word_of_int 10) ::  64 word) OR big) OR two31),(((((word_of_int 129) ::  64 word) OR big) OR two31) OR two15),((((word_of_int 128) ::  64 word) OR big) OR two15),(((word_of_int 1) ::  64 word) OR two31),(((((word_of_int 8) ::  64 word) OR big) OR two31) OR two15)
