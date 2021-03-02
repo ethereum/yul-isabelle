@@ -37,15 +37,32 @@ YUL{
 }"
 *)
 
+(*
+  is the issue here with the post-loop statement?
+*)
 definition loop_yul :: "(eint, unit) YulStatement" where
 "loop_yul \<equiv>
 YUL{
     for { let x := 2 } lt(x, 10) { x := add(x, 1) } {
-        mstore(mul(x, 5), mul(x, 0x1000))
+        mstore(mul(x, 5), mul(x, 0x1))
     }
-}
-"
+}"
 
+(*
+value "
+(case (eval loop_yul) of
+  Inl x \<Rightarrow> edata_gets 0 72 (e_memory x))"
+*)
+
+definition memtest_yul :: "(eint, unit) YulStatement" where
+"memtest_yul \<equiv>
+YUL{mstore(40, 22)}"
+
+value "
+(case (eval memtest_yul) of
+  Inl x \<Rightarrow> edata_gets 0 72 (e_memory x))"
+
+term "0 :: nat"
 
 (*
 *)

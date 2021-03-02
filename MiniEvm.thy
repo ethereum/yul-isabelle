@@ -2,15 +2,15 @@ theory MiniEvm
   imports YulDialect
     "HOL-Library.Word"
     "Keccak/Keccak"
+    "Word_Lib/Bits_Int"
 begin
 
 (* based on
 https://github.com/ethereum/solidity/blob/develop/libevmasm/Instruction.h
 *)
 
-(*
-data structure access API. Insert + update
-*)
+type_synonym edata = "eint \<Rightarrow> 8 word"
+
 
 datatype logentry =
   Log0 "8 word list"
@@ -21,7 +21,8 @@ datatype logentry =
 
 record estate_core =
   (* Memory is byte-indexed *)
-  e_memory :: "8 word list"
+  (* e_memory :: "8 word list" *)
+  e_memory :: "edata"
   (* Storage is word-indexed *)
   e_storage :: "eint \<Rightarrow> eint"
   e_flag :: YulFlag
@@ -32,10 +33,12 @@ record estate_resource = estate_core +
   e_gas :: eint  
 
 record estate_data = estate_resource +
-  e_codedata :: "8 word list"
-  e_calldata :: "8 word list"
-(*  e_outputdata :: "8 word list" *)
-  e_returndata :: "8 word list"
+  e_codedata :: "edata"
+  e_codedatasize :: "eint"
+  e_calldata :: "edata"
+  e_calldatasize :: "eint"
+  e_returndata :: "edata"
+  e_returndatasize :: "eint"
 
 record estate_metadata = estate_data +
   e_address :: eint
@@ -56,7 +59,8 @@ record estate_metadata = estate_data +
    Isabelle functions here
  *)
 record estate = estate_metadata +
-  e_extcode :: "eaddr \<Rightarrow> 8 word list"
+  e_extcode :: "eaddr \<Rightarrow> edata"
+  e_extcodesize :: "eaddr \<Rightarrow> eint"
   (* e_extcode_sem :: *)
   e_balances :: "eaddr \<Rightarrow> eint"
   (* tracking account existence is needed for balance *)
@@ -70,25 +74,22 @@ record estate = estate_metadata +
 record estate_ext_sem = estate +
   e_extcode_sem :: "eaddr \<Rightarrow> (estate, unit) State"
 
-(*
-record estate_core_resource = estate_core_data +
-  msize :: eint
-  gas :: eint
-*)
-
 (* record estate_core_intercontract = ... *)
 definition dummy_estate :: estate where
 "dummy_estate =
-  \<lparr> e_memory = []
+  \<lparr> e_memory = \<lambda> _ . word_of_int 0
   , e_storage = \<lambda> _ . word_of_int 0  
   , e_flag = Executing
   , e_log = []
   , e_msize = word_of_int 0
   , e_gas = word_of_int 0
-  , e_codedata = []
-  , e_calldata = []
+  , e_codedata = \<lambda> _ . word_of_int 0
+  , e_codedatasize = 0
+  , e_calldata = \<lambda> _ . word_of_int 0
+  , e_calldatasize = 0
 \<comment> \<open>  , e_outputdata = [] \<close>
-  , e_returndata = []
+  , e_returndata = \<lambda> _ . word_of_int 0
+  , e_returndatasize = 0
   , e_address = word_of_int 0
   , e_origin = word_of_int 0
   , e_caller = word_of_int 0
@@ -102,14 +103,143 @@ definition dummy_estate :: estate where
   , e_gaslimit = word_of_int 0
   , e_chainid = word_of_int 0
   , e_selfbalance = word_of_int 0 
-  , e_extcode = (\<lambda> _ . [])
+  , e_extcode = (\<lambda> _ . \<lambda> _ . word_of_int 0)
+  , e_extcodesize = (\<lambda> _ . 0)
   , e_balances = (\<lambda> _ . word_of_int 0)
   , e_acct_exists = (\<lambda> _ . False)
   , e_acct_live = (\<lambda> _ . False)
 
   \<rparr>"
 
+(*
+ * Helper functions for EVM instruction semantics
+ *)
 
+definition ssmallest :: "('a :: len) word" where
+"ssmallest =
+  word_of_int (2 ^ (LENGTH('a) - 1))"
+
+(* absolute value - NB this does not work for minimum signed value*)
+fun word_abs :: "('a :: len) word \<Rightarrow> 'a word" where
+"word_abs w =
+  (if sint w < 0 then times_word_inst.times_word (word_of_int (-1)) w else w)"
+
+(* helper for signed division.
+   TODO: double check this is what we want *)
+fun sdivd' :: "('a :: len) word \<Rightarrow> 'a word \<Rightarrow> 'a word" where
+"sdivd' i1 i2 = 
+  (if (i1 = ssmallest \<and> i2 = Word.word_of_int(-1))
+   then ssmallest
+   else 
+   (case ((sint i1 < 0), (sint i2 < 0)) of
+    (True, True) \<Rightarrow>
+      times_word_inst.times_word (word_of_int (-1)) 
+                                 (divide_word_inst.divide_word (word_abs i1) (word_abs i2))
+    | (False, False) \<Rightarrow>
+      times_word_inst.times_word (word_of_int (-1)) 
+                                 (divide_word_inst.divide_word (word_abs i1) (word_abs i2))
+    | _ \<Rightarrow> (divide_word_inst.divide_word (word_abs i1) (word_abs i2))))"
+
+fun modu' :: "('a :: len) word \<Rightarrow> 'a word \<Rightarrow> 'a word" where
+"modu' i1 i2 =
+  (if i2 = word_of_int 0 then word_of_int 0
+   else modulo_word_inst.modulo_word i1 i2)"
+
+fun smodu' :: "('a :: len) word \<Rightarrow> 'a word \<Rightarrow> 'a word" where
+"smodu' i1 i2 =
+  (if sint i1 < 0 then
+    times_word_inst.times_word (word_of_int (-1)) (modu' (word_abs i1) (word_abs i2))
+   else modu' (word_abs i1) (word_abs i2))"
+
+(* new sign extend implementation for better compatibility with Isabelle2021 *)
+fun signextend' :: "('a :: len) word \<Rightarrow> nat \<Rightarrow> 'a word" where
+"signextend' w n =
+  (let signloc = 8 * (n + 1) - 1 in
+   \<comment> \<open>all zeroes, except for sign bit we are extending\<close>
+   (let testmask = word_of_int (2 ^ (signloc)) in
+   \<comment> \<open>all ones at bits lower than sign bit we are extending\<close>
+   (let mask = word_of_int (2 ^ (signloc) - 1) in
+    (if w AND testmask = word_of_int 0
+     then w AND mask
+     else w OR (NOT mask)))))"
+
+fun shl_many :: "('a :: len) word \<Rightarrow> int \<Rightarrow> 'a word" where
+"shl_many w n =
+  (if n \<le> 0 then w
+   else shl_many (shiftl1 w) (n-1))"
+
+fun shr_many :: "('a :: len) word \<Rightarrow> int \<Rightarrow> 'a word" where
+"shr_many w n =
+  (if n \<le> 0 then w
+   else shr_many (shiftr1 w) (n-1))"
+
+(* helper for pulling values from a list, adding default value if the end is reached *)
+(*
+fun take_default :: "nat \<Rightarrow> 'a \<Rightarrow> 'a list \<Rightarrow> 'a list" where
+"take_default n dfl ls =
+  take n ls @ (replicate (n - length ls) dfl)"
+*)
+
+(* still need take_padded for keccak *)
+
+(* helper for pulling word values from a list, adding zero-word value if the end is reached *)
+(*
+fun take_padded :: "nat \<Rightarrow> ('a :: len) word list \<Rightarrow> 'a word list" where
+"take_padded n ls = take_default n (word_of_int 0) ls"
+*)
+
+(* get sz number of bytes starting at start*)
+fun edata_gets :: "nat \<Rightarrow> nat \<Rightarrow> edata \<Rightarrow> 8 word list" where
+"edata_gets start 0 d = []"
+| "edata_gets start sz d =
+   d (word_of_int (int start)) # edata_gets (start + 1) (sz - 1) d"
+
+(* get bytes from start to (end - 1) *)
+fun edata_gets_range :: "nat \<Rightarrow> nat \<Rightarrow> edata \<Rightarrow> 8 word list" where
+"edata_gets_range start end d =
+ (edata_gets start (end - start) d)"
+
+(*
+fun bulk_load :: "nat \<Rightarrow> 8 word list \<Rightarrow> eint" where
+"bulk_load n wl = word_rcat (take_padded 32 (drop n wl))"
+*)
+
+(* Helper for calldataload.
+   return eint of 32 bytes starting at byte n *)
+fun bulk_load :: "nat \<Rightarrow> edata \<Rightarrow> eint" where
+"bulk_load n d = word_rcat (edata_gets n 32 d)"
+
+(* helper for calldatacopy, extcodecopy, returndatacopy *)
+fun bulk_copy :: 
+"nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> edata \<Rightarrow> edata \<Rightarrow> edata" where
+"bulk_copy to_idx from_idx n_bytes mem ext_data =
+ (\<lambda> idx .
+  (if to_idx \<le> unat idx \<and> unat idx < to_idx + n_bytes
+   then ext_data (word_of_int (int (from_idx + (unat idx - to_idx))))
+   else mem idx))"
+
+fun byte_list_to_edata :: "8 word list \<Rightarrow> edata" where
+"byte_list_to_edata l n =
+  (if unat n < length l then l ! unat n
+   else 0)"
+(*
+fun memdump :: "estate \<Rightarrow> 8 word list" where
+"memdump e =
+  edata_gets 0 (e_msize e) (e_memory e)"
+*)
+(*
+fun bulk_copy :: 
+"nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> edata \<Rightarrow> edata \<Rightarrow> edata" where
+"bulk_copy to_idx from_idx n_bytes mem ext_data =
+ (let loaded_bytes = take_padded n_bytes (drop from_idx ext_data) in
+  take to_idx mem @ loaded_bytes @ drop (to_idx + n_bytes) mem)"
+*)
+(* another helper for accessing memory *)
+(*
+fun get_mrange :: "estate \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> ebyte list" where
+"get_mrange st idx sz =
+  (take_padded sz (drop idx (e_memory st)))"
+*)
 (*
  * EVM instruction semantics
  *)
@@ -137,53 +267,23 @@ fun ei_div :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_div i1 i2 s = (divide_word_inst.divide_word i1 i2, s)"
 
 (* get minimum-valued word (2's complement) *)
+(*
 definition ssmallest :: "('a :: len) word" where
 "ssmallest =
  (Word.setBit (Word.word_of_int 0 :: 'a word) (size (Word.word_of_int 0 :: 'a word) - 1))"
+*)
 
-(* absolute value - NB this does not work for minimum signed value*)
-fun word_abs :: "('a :: len) word \<Rightarrow> 'a word" where
-"word_abs w =
-  (if sint w < 0 then times_word_inst.times_word (word_of_int (-1)) w else w)"
-
-(* helper for signed division.
-   TODO: double check this is what we want *)
-fun sdivd' :: "('a :: len) word \<Rightarrow> 'a word \<Rightarrow> 'a word" where
-"sdivd' i1 i2 = 
-  (if (i1 = ssmallest \<and> i2 = Word.word_of_int(-1))
-   then ssmallest
-   else 
-   (case ((sint i1 < 0), (sint i2 < 0)) of
-    (True, True) \<Rightarrow>
-      times_word_inst.times_word (word_of_int (-1)) 
-                                 (divide_word_inst.divide_word (word_abs i1) (word_abs i2))
-    | (False, False) \<Rightarrow>
-      times_word_inst.times_word (word_of_int (-1)) 
-                                 (divide_word_inst.divide_word (word_abs i1) (word_abs i2))
-    | _ \<Rightarrow> (divide_word_inst.divide_word (word_abs i1) (word_abs i2))))"
 
 fun ei_sdiv :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_sdiv i1 i2 s = (sdivd' i1 i2, s)"
 
-fun modu' :: "('a :: len) word \<Rightarrow> 'a word \<Rightarrow> 'a word" where
-"modu' i1 i2 =
-  (if i2 = word_of_int 0 then word_of_int 0
-   else modulo_word_inst.modulo_word i1 i2)"
-
 fun ei_mod :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_mod i1 i2 s = (modu' i1 i2, s)"
-
-fun smodu' :: "('a :: len) word \<Rightarrow> 'a word \<Rightarrow> 'a word" where
-"smodu' i1 i2 =
-  (if sint i1 < 0 then
-    times_word_inst.times_word (word_of_int (-1)) (modu' (word_abs i1) (word_abs i2))
-   else modu' (word_abs i1) (word_abs i2))"
 
 fun ei_smod :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_smod i1 i2 s = 
   (smodu' i1 i2, s)"
 
-value "word_of_int (257) :: 8 word"
 
 (* TODO: should we write all the arithmetic operations this way?
 *)
@@ -204,45 +304,12 @@ fun ei_exp :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_exp i1 i2 s =
   (word_of_int ((uint i1) ^ (nat (uint i2))), s)"
 
-(* new sign extend implementation for better compatibility with Isabelle2021 *)
-fun signextend' :: "('a :: len) word \<Rightarrow> nat \<Rightarrow> 'a word" where
-"signextend' w n =
-  (let signloc = 8 * (n + 1) - 1 in
-   \<comment> \<open>all zeroes, except for sign bit we are extending\<close>
-   (let testmask = word_of_int (2 ^ (signloc)) in
-   \<comment> \<open>all ones at bits lower than sign bit we are extending\<close>
-   (let mask = word_of_int (2 ^ (signloc) - 1) in
-    (if w AND testmask = word_of_int 0
-     then w AND mask
-     else w OR (NOT mask)))))"
-
-(*
-fun signextend' :: "('a :: len) word \<Rightarrow> bool \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 'a word"
-  where
-"signextend' w b idx 0 = w"
-| "signextend' w b idx signloc =
-   (if idx \<le> signloc then w
-    else signextend' (bit_operations_word_inst.set_bit_word w idx b) b (idx - 1) signloc)"
-
-
-
-(* TODO: make sure this does the right thing - I have tested on a couple of cases *)
-fun ei_signextend :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
-"ei_signextend len w s =
-  (if uint len \<ge> 31 then (w, s)
-   else
-   (let signloc = 8 * (nat (uint len) + 1) - 1 in
-   (let signbit = bit_operations_word_inst.test_bit_word w signloc in
-   (signextend' w signbit (255) signloc, s))))"
-*)
-
 (* TODO: make sure this does the right thing - I have tested on a couple of cases *)
 fun ei_signextend :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_signextend len w s =
   (if uint len \<ge> 31 then (w, s)
    else
    (signextend' w (unat len), s))"
-
 
 (*
  * Comparison and Bitwise Operations
@@ -309,19 +376,9 @@ fun ei_byte :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" wher
    (let bytes = (word_rsplit word :: 8 word list) in
     (ucast (bytes ! nat (uint idx)), s)))"
 
-fun shl_many :: "('a :: len) word \<Rightarrow> int \<Rightarrow> 'a word" where
-"shl_many w n =
-  (if n \<le> 0 then w
-   else shl_many (shiftl1 w) (n-1))"
-
 fun ei_shl :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_shl i1 i2 s = 
   (shl_many i1 (uint i2), s)"
-
-fun shr_many :: "('a :: len) word \<Rightarrow> int \<Rightarrow> 'a word" where
-"shr_many w n =
-  (if n \<le> 0 then w
-   else shr_many (shiftr1 w) (n-1))"
 
 fun ei_shr :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_shr i1 i2 s = 
@@ -331,23 +388,13 @@ fun ei_sar :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_sar i1 i2 s = 
   (sshiftr i1 (nat (uint i2)), s)"
 
-
 (*
  * Keccak256
  *)
 
-(* helper for pulling values from a list, adding default value if the end is reached *)
-fun take_default :: "nat \<Rightarrow> 'a \<Rightarrow> 'a list \<Rightarrow> 'a list" where
-"take_default n dfl ls =
-  take n ls @ (replicate (n - length ls) dfl)"
-
-(* helper for pulling word values from a list, adding zero-word value if the end is reached *)
-fun take_padded :: "nat \<Rightarrow> ('a :: len) word list \<Rightarrow> 'a word list" where
-"take_padded n ls = take_default n (word_of_int 0) ls"
-
 fun ei_keccak256 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_keccak256 idx sz st =
-  (Keccak.keccak (take_padded (unat sz) (drop (unat idx) (e_memory st))), st)"
+  (Keccak.keccak (edata_gets (unat idx) (unat sz) (e_memory st)), st)"
 
 
 (*
@@ -374,24 +421,12 @@ fun ei_caller :: "(estate, eint) State" where
 fun ei_callvalue :: "(estate, eint) State" where
 "ei_callvalue s = (e_callvalue s, s)"
 
-(* Helper for calldataload.
-   Pad call data, then return 32 bytes starting at byte n *)
-fun bulk_load :: "nat \<Rightarrow> 8 word list \<Rightarrow> eint" where
-"bulk_load n wl = word_rcat (take_padded 32 (drop n wl))"
-
 fun ei_calldataload :: "eint \<Rightarrow> (estate, eint) State" where
 "ei_calldataload loc s = 
  (bulk_load (unat loc) (e_calldata s), s)"
 
 fun ei_calldatasize :: "(estate, eint) State" where
-"ei_calldatasize s = (Word.word_of_int (int (length (e_calldata s))), s)"
-
-(* helper for calldatacopy, extcodecopy, returndatacopy *)
-fun bulk_copy :: 
-"nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list \<Rightarrow> 8 word list \<Rightarrow> 8 word list" where
-"bulk_copy to_idx from_idx n_bytes mem ext_data =
- (let loaded_bytes = take_padded n_bytes (drop from_idx ext_data) in
-  take to_idx mem @ loaded_bytes @ drop (to_idx + n_bytes) mem)"
+"ei_calldatasize s = (e_calldatasize s, s)"
 
 fun ei_calldatacopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_calldatacopy to_idx from_idx n_bytes s = 
@@ -399,7 +434,7 @@ fun ei_calldatacopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow>
                                  (e_memory s) (e_calldata s) \<rparr>))"
 
 fun ei_codesize :: "(estate, eint) State" where
-"ei_codesize s = (Word.word_of_int (int (length (e_codedata s))), s)"
+"ei_codesize s = (e_codedatasize s, s)"
 
 fun ei_codecopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_codecopy to_idx from_idx n_bytes s =
@@ -410,7 +445,7 @@ fun ei_gasprice :: "(estate, eint) State" where
 "ei_gasprice s = (e_gasprice s, s)"
 
 fun ei_extcodesize :: "eint \<Rightarrow> (estate, eint) State" where
-"ei_extcodesize acctid s = (word_of_int (int (length (e_extcode s (ucast acctid)))), s)"
+"ei_extcodesize acctid s = (e_extcodesize s (ucast acctid), s)"
 
 fun ei_extcodecopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_extcodecopy acctid to_idx from_idx n_bytes s =
@@ -419,7 +454,7 @@ fun ei_extcodecopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> 
 
 fun ei_returndatasize :: "(estate, eint) State" where
 "ei_returndatasize s =
-  (word_of_int (int (length (e_returndata s))), s)"
+  (e_returndatasize s, s)"
 
 fun ei_returndatacopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_returndatacopy to_idx from_idx n_bytes s = 
@@ -429,7 +464,8 @@ fun ei_returndatacopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarro
 fun ei_extcodehash :: "eint \<Rightarrow> (estate, eint) State" where
 "ei_extcodehash acctid s =
  ((if e_acct_live s (ucast acctid)
-   then Keccak.keccak (e_extcode s (ucast acctid))
+   then Keccak.keccak (edata_gets  0 (unat (e_extcodesize s (ucast acctid)))
+                                     (e_extcode s (ucast acctid)))
    else word_of_int 0)
  , s)"
 
@@ -467,11 +503,6 @@ fun ei_selfbalance :: "(estate, eint) State" where
  * TODO: track memory, storage for gas purposes
  *)
 
-(* another helper for accessing memory *)
-fun get_mrange :: "estate \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> ebyte list" where
-"get_mrange st idx sz =
-  (take_padded sz (drop idx (e_memory st)))"
-
 fun ei_pop :: "eint \<Rightarrow> (estate, unit) State" where
 "ei_pop i1 s = ((), s)"
 
@@ -479,20 +510,22 @@ fun ei_pop :: "eint \<Rightarrow> (estate, unit) State" where
 (* TODO: make sure endianness is correct here *)
 fun ei_mload :: "eint \<Rightarrow> (estate, eint) State" where
 "ei_mload i1 s =
-  (let bytes = get_mrange s (nat (uint i1)) 32 in
+  (let bytes = edata_gets (nat (uint i1)) 32 (e_memory s)  in
   (word_rcat bytes, s))"
 
 fun ei_mstore :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_mstore idx value st =
   (let bytes = word_rsplit value :: 8 word list in
   ((),
-   (st \<lparr> e_memory := bulk_copy (unat idx) 0 32 (e_memory st) bytes \<rparr>)))"
+   (st \<lparr> e_memory := bulk_copy (unat idx) 0 32 (e_memory st)
+                               (byte_list_to_edata bytes)  \<rparr>)))"
 
 fun ei_mstore8 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_mstore8 idx value st =
   (let bytes = [(Word.ucast value) :: 8 word] in
   ((),
-   (st \<lparr> e_memory := bulk_copy (unat idx) 0 32 (e_memory st) bytes \<rparr>)))"
+   (st \<lparr> e_memory := bulk_copy (unat idx) 0 32 (e_memory st) 
+                               (byte_list_to_edata bytes) \<rparr>)))"
 
 fun ei_sload :: "eint \<Rightarrow> (estate, eint) State" where
 "ei_sload idx st =
@@ -528,36 +561,38 @@ fun ei_jumpdest :: "(estate, unit) State" where
  * Log instructions 
 *)
 
+(* edata_gets (unat start) (unat end - unat start) (e_memory st) *)
+
 fun ei_log0 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_log0 start end st =
   (()
   , (st \<lparr> e_log := e_log st @ 
-            [Log0 (get_mrange st (unat start) (unat end - unat start))] \<rparr>))"
+            [Log0 (edata_gets (unat start) (unat end - unat start) (e_memory st))] \<rparr>))"
 
 fun ei_log1 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_log1 start end t1 st =
   (()
   , (st \<lparr> e_log := e_log st @ 
-            [Log1 (get_mrange st (unat start) (unat end - unat start)) t1] \<rparr>))"
+            [Log1 (edata_gets (unat start) (unat end - unat start) (e_memory st)) t1] \<rparr>))"
 
 fun ei_log2 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_log2 start end t1 t2 st =
   (()
   , (st \<lparr> e_log := e_log st @ 
-            [Log2 (get_mrange st (unat start) (unat end - unat start)) t1 t2] \<rparr>))"
+            [Log2 (edata_gets (unat start) (unat end - unat start) (e_memory st)) t1 t2] \<rparr>))"
 
 fun ei_log3 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_log3 start end t1 t2 t3 st =
   (()
   , (st \<lparr> e_log := e_log st @ 
-            [Log3 (get_mrange st (unat start) (unat end - unat start)) t1 t2 t3] \<rparr>))"
+            [Log3 (edata_gets (unat start) (unat end - unat start) (e_memory st)) t1 t2 t3] \<rparr>))"
 
 fun ei_log4 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State"
   where
 "ei_log4 start end t1 t2 t3 t4 st =
   (()
   , (st \<lparr> e_log := e_log st @ 
-            [Log4 (get_mrange st (unat start) (unat end - unat start)) t1 t2 t3 t4] \<rparr>))"
+            [Log4 (edata_gets (unat start) (unat end - unat start) (e_memory st)) t1 t2 t3 t4] \<rparr>))"
 
 (*
  * EIP615 instructions (not used)
@@ -582,37 +617,37 @@ fun ei_log4 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<
 fun ei_create :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_create value idx sz s =
   (word_of_int 0
-  , (s \<lparr> e_flag := Create value (get_mrange s (unat idx) (unat sz)) \<rparr>))"
-
+  , (s \<lparr> e_flag := Create value (edata_gets (unat idx) (unat sz) (e_memory s)) \<rparr>))"
+(* edata_gets (unat start) (unat end - unat start) (e_memory st) *)
 fun ei_call :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_call gas target value in_idx in_sz out_idx out_sz s =
   (word_of_int 0
-  , (s \<lparr> e_flag := Call gas target value (get_mrange s (unat in_idx) (unat in_sz)) out_idx out_sz \<rparr> ))"
+  , (s \<lparr> e_flag := Call gas target value (edata_gets (unat in_idx) (unat in_sz) (e_memory s)) out_idx out_sz \<rparr> ))"
 
 fun ei_callcode :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_callcode gas target value in_idx in_sz out_idx out_sz s =
   (word_of_int 0
-  , (s \<lparr> e_flag := CallCode gas target value (get_mrange s (unat in_idx) (unat in_sz)) out_idx out_sz \<rparr> ))"
+  , (s \<lparr> e_flag := CallCode gas target value (edata_gets (unat in_idx) (unat in_sz) (e_memory s)) out_idx out_sz \<rparr> ))"
 
 fun ei_return :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_return idx sz s =
   (()
-  , (s \<lparr> e_flag := Return (get_mrange s (unat idx) (unat sz)) \<rparr>))"
+  , (s \<lparr> e_flag := Return (edata_gets (unat idx) (unat sz) (e_memory s)) \<rparr>))"
 
 fun ei_delegatecall ::  "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_delegatecall gas target in_idx in_sz out_idx out_sz s =
   (word_of_int 0
-  , (s \<lparr> e_flag := DelegateCall gas target (get_mrange s (unat in_idx) (unat in_sz)) out_idx out_sz \<rparr> ))"
+  , (s \<lparr> e_flag := DelegateCall gas target (edata_gets (unat in_idx) (unat in_sz) (e_memory s)) out_idx out_sz \<rparr> ))"
 
 fun ei_create2 :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_create2 value idx sz salt s =
   (word_of_int 0
-  , (s \<lparr> e_flag := Create2 value (get_mrange s (unat idx) (unat sz)) salt \<rparr>))"
+  , (s \<lparr> e_flag := Create2 value (edata_gets (unat idx) (unat sz) (e_memory s)) salt \<rparr>))"
 
 fun ei_staticcall ::  "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, eint) State" where
 "ei_staticcall gas target in_idx in_sz out_idx out_sz s =
   (word_of_int 0, 
-  (s \<lparr> e_flag := StaticCall gas target (get_mrange s (unat in_idx) (unat in_sz)) out_idx out_sz \<rparr>))"
+  (s \<lparr> e_flag := StaticCall gas target (edata_gets (unat in_idx) (unat in_sz) (e_memory s)) out_idx out_sz \<rparr>))"
 (*
  * Halting instructions
  *)
