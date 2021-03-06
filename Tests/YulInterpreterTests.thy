@@ -1,5 +1,5 @@
 theory YulInterpreterTests
-  imports "../EvmDialect"
+  imports "../EvmDialectRestricted"
 
 begin
 
@@ -16,7 +16,6 @@ YUL{
 }"
 
 
-value [nbe] "eval exp_yul"
 *)
 
 (*
@@ -35,10 +34,6 @@ YUL{
         mstore(mul(x, 2), mul(x, 0x2))
     }
 }"
-*)
-
-(*
-  is the issue here with the post-loop statement?
 *)
 definition loop_yul :: "(eint, unit) YulStatement" where
 "loop_yul \<equiv>
@@ -63,6 +58,8 @@ value "
   Inl x \<Rightarrow> edata_gets 0 72 (e_memory x))"
 
 term "0 :: nat"
+
+export_code "loop_yul" eval in Haskell module_name ABICoder file_prefix abicoder
 
 (*
 *)
