@@ -774,8 +774,8 @@ fun ei_selfdestruct :: "eint \<Rightarrow> (estate, unit) State" where
 (*
  * dialect
  *)
-definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
-"yulBuiltins = make_locals
+definition yulBuiltinsMini :: "(estate, eint, unit) function_sig locals" where
+"yulBuiltinsMini = make_locals
   [ (STR ''add'', mkBuiltin ei_add)
   , (STR ''mul'', mkBuiltin ei_mul)
   , (STR ''not'', mkBuiltin ei_not)
@@ -787,12 +787,13 @@ definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
  *)
 
 
-(*
+
 definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
 "yulBuiltins = make_locals
   [ (STR ''stop'', mkBuiltin ei_stop)
   , (STR ''add'', mkBuiltin ei_add)
-  , (STR ''mul'', mkBuiltin ei_sub)
+  , (STR ''mul'', mkBuiltin ei_mul)
+  , (STR ''sub'', mkBuiltin ei_sub)
   , (STR ''div'', mkBuiltin ei_div)
   , (STR ''sdiv'', mkBuiltin ei_sdiv)
   , (STR ''mod'', mkBuiltin ei_mod)
@@ -832,7 +833,8 @@ definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
   , (STR ''gasprice'', mkBuiltin ei_gasprice)
   , (STR ''extcodesize'', mkBuiltin ei_extcodesize)
   , (STR ''extcodecopy'', mkBuiltin ei_extcodecopy)
-  , (STR ''returndatasize'', mkBuiltin ei_returndatacopy)
+  , (STR ''returndatasize'', mkBuiltin ei_returndatasize)
+  , (STR ''returndatacopy'', mkBuiltin ei_returndatacopy)
   , (STR ''extcodehash'', mkBuiltin ei_extcodehash)
 
   , (STR ''blockhash'', mkBuiltin ei_blockhash)
@@ -878,8 +880,17 @@ definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
   , (STR ''selfdestruct'', mkBuiltin ei_selfdestruct)
   ]"
 
-*)
 
+
+definition EvmDialectMini :: "(estate, eint, unit) YulDialect" where
+"EvmDialectMini =
+  \<lparr> is_truthy = (\<lambda> x . (x \<noteq> word_of_int 0))
+  , init_state = dummy_estate
+  , default_val = word_of_int 0
+  , builtins = yulBuiltinsMini
+  , set_flag = 
+      (\<lambda> f st . (st \<lparr> e_flag := f \<rparr>))
+  , get_flag = e_flag \<rparr>"
 
 definition EvmDialect :: "(estate, eint, unit) YulDialect" where
 "EvmDialect =
@@ -890,6 +901,7 @@ definition EvmDialect :: "(estate, eint, unit) YulDialect" where
   , set_flag = 
       (\<lambda> f st . (st \<lparr> e_flag := f \<rparr>))
   , get_flag = e_flag \<rparr>"
+
 
 definition eval where "eval \<equiv> \<lambda> x . case (evalYul EvmDialect x 10000) of
   ErrorResult x y \<Rightarrow> Inr x | YulResult g \<Rightarrow> Inl (global g)"
@@ -906,9 +918,122 @@ YUL{
     }
 }"
 
+term "YUL{
+    for { let x := 2 } lt(x, 10) { x := add(x, 1) } {
+        mstore(mul(x, 5), mul(x, 0x1))
+    }
+}"
+
+
+definition mulcheck_yul :: "(eint, unit) YulStatement" where
+"mulcheck_yul \<equiv>
+  YUL{ mul(2, 5) }
+"
+
+(*
 value "
 (case (eval loop_yul) of
   Inl x \<Rightarrow> edata_gets 0 72 (e_memory x))"
+*)
+
+definition dbg_info where
+"dbg_info x =
+  (case x of
+    YulResult g \<Rightarrow> (vals g, locals g, cont g))"
+
+value "dbg_info (evalYul EvmDialect loop_yul 25)"
+
+value "dbg_info (evalYul EvmDialect mulcheck_yul 7)"
+
+
+definition final_mem_get where
+"final_mem_get x =
+  (case x of
+    YulResult g \<Rightarrow> e_memory (global g))"
+
+fun edata_to_byte_list' ::
+  "edata \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list" where
+"edata_to_byte_list' _ _ 0 = []"
+| "edata_to_byte_list' ed start (Suc sz') =
+   ed (Word.of_int (int start)) # edata_to_byte_list' ed (Suc start) sz'"
+
+fun edata_to_byte_list ::
+  "edata \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list" where
+"edata_to_byte_list ed start end =
+  edata_to_byte_list' ed start (end - start)"
+
+value "edata_to_byte_list (final_mem_get (evalYul EvmDialect loop_yul 1000)) 0 100"
+
+value "bulk_copy 10 0 32 (\<lambda> _ . 0) (byte_list_to_edata (word_rsplit (10 :: 256 word) :: 8 word list))
+41
+"
+
+value "(byte_list_to_edata (word_rsplit (10 :: 256 word) :: 8 word list) 31)"
+
+(* fuel = 1 \<Rightarrow> 2 copies of funs
+   fuel = 2 \<Rightarrow> 2
+   fuel = 3 \<Rightarrow> 3
+   fuel = 4 \<Rightarrow> 4
+   fuel = 5 \<Rightarrow> 4
+   fuel = 6
+*)
+
+(*
+definition loop_yul' :: "(eint, unit) YulStatement" where 
+"loop_yul' \<equiv>
+YUL{
+    for { let x := 2 } lt(x, 10) { x := add(x, 1) } {
+    }
+}"
+
+value "dbg_info (evalYul EvmDialect loop_yul' 5)"
+value "dbg_info (evalYul EvmDialect loop_yul' 6)"
+value "dbg_info (evalYul EvmDialect loop_yul' 7)"
+value "dbg_info (evalYul EvmDialect loop_yul' 8)"
+value "dbg_info (evalYul EvmDialect loop_yul' 9)"
+value "dbg_info (evalYul EvmDialect loop_yul' 10)"
+value "dbg_info (evalYul EvmDialect loop_yul' 11)"
+value "dbg_info (evalYul EvmDialect loop_yul' 12)"
+value "dbg_info (evalYul EvmDialect loop_yul' 13)"
+value "dbg_info (evalYul EvmDialect loop_yul' 14)"
+value "dbg_info (evalYul EvmDialect loop_yul' 15)"
+value "dbg_info (evalYul EvmDialect loop_yul' 16)"
+value "dbg_info (evalYul EvmDialect loop_yul' 17)"
+value "dbg_info (evalYul EvmDialect loop_yul' 18)"
+value "dbg_info (evalYul EvmDialect loop_yul' 19)"
+value "dbg_info (evalYul EvmDialect loop_yul' 20)"
+value "dbg_info (evalYul EvmDialect loop_yul' 21)"
+value "dbg_info (evalYul EvmDialect loop_yul' 22)"
+value "dbg_info (evalYul EvmDialect loop_yul' 23)"
+value "dbg_info (evalYul EvmDialect loop_yul' 24)"
+value "dbg_info (evalYul EvmDialect loop_yul' 25)"
+value "dbg_info (evalYul EvmDialect loop_yul' 26)"
+value "dbg_info (evalYul EvmDialect loop_yul' 27)"
+value "dbg_info (evalYul EvmDialect loop_yul' 28)"
+value "dbg_info (evalYul EvmDialect loop_yul' 29)"
+value "dbg_info (evalYul EvmDialect loop_yul' 30)"
+value "dbg_info (evalYul EvmDialect loop_yul' 31)"
+value "dbg_info (evalYul EvmDialect loop_yul' 32)"
+value "dbg_info (evalYul EvmDialect loop_yul' 33)"
+value "dbg_info (evalYul EvmDialect loop_yul' 34)"
+value "dbg_info (evalYul EvmDialect loop_yul' 35)"
+value "dbg_info (evalYul EvmDialect loop_yul' 36)"
+value "dbg_info (evalYul EvmDialect loop_yul' 37)"
+value "dbg_info (evalYul EvmDialect loop_yul' 38)"
+value "dbg_info (evalYul EvmDialect loop_yul' 39)"
+value "dbg_info (evalYul EvmDialect loop_yul' 40)"
+value "dbg_info (evalYul EvmDialect loop_yul' 41)"
+value "dbg_info (evalYul EvmDialect loop_yul' 42)"
+value "dbg_info (evalYul EvmDialect loop_yul' 43)"
+
+value "dbg_info (evalYul EvmDialect loop_yul' 170)"
+*)
+
+(*
+ 20 \<Rightarrow> ~8 copies of funs
+*)
+
+(* x is not getting updated by post ?! *)
 
 definition not_yul :: "(eint, unit) YulStatement" where
 "not_yul \<equiv>
@@ -916,9 +1041,10 @@ YUL{
   mstore(0,not(1))
 }"
 
+(*
 value "
 (case (eval not_yul) of
   Inl x \<Rightarrow> edata_gets 0 32 (e_memory x))"
-
+*)
 
 end
