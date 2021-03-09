@@ -1,5 +1,5 @@
 theory YulInterpreterTests
-  imports "../EvmDialectRestricted"
+  imports "../Dialects/EvmDialectRestricted"
 
 begin
 
@@ -59,8 +59,9 @@ value "
 
 term "0 :: nat"
 
+(*
 export_code "loop_yul" eval in Haskell module_name ABICoder file_prefix abicoder
-
+*)
 (*
 *)
 

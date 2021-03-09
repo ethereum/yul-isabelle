@@ -1,5 +1,5 @@
 theory BasicTests
-  imports "../YulSemanticsSingleStep" "../YulSyntax" "../BasicDialect"
+  imports "../Yul/YulSemanticsSingleStep" "../Yul/YulSyntax" "../Dialects/BasicDialect"
 begin
 
 definition eval where "eval \<equiv> \<lambda> x . case (evalYul basicDialect x 10000) of

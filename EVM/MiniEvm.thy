@@ -1,9 +1,9 @@
 theory MiniEvm
-  imports "YulDialect"
+  imports "../Yul/YulDialect"
     "HOL-Library.Word"
-    "Keccak/Keccak"
-    "Word_Lib/Bits_Int"
-    "YulSemanticsSingleStep"
+    "../Keccak/Keccak"
+    "../Word_Lib/Bits_Int"
+    "../Yul/YulSemanticsSingleStep"
 begin
 
 (* based on

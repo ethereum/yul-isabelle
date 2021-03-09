@@ -1,5 +1,5 @@
-theory LowLevelEvm imports Main "HOL-Library.Numeral_Type" MiniEvm "HOL-Library.Adhoc_Overloading"
-"HOL-Eisbach.Eisbach_Tools"
+theory LowLevelEvm imports Main "HOL-Library.Numeral_Type" 
+MiniEvm 
 begin
 
 (* define EVM instruction syntax in terms of their representation as instruction-words *)
@@ -973,9 +973,9 @@ lemma cases_inst_helper :
   assumes H13 : "(\<And>x13. x13 \<in> set comms_codes \<Longrightarrow> y = id x13 \<Longrightarrow> P)"
   assumes H14 : "(\<And>x14. x14 \<in> set special_halt_codes \<Longrightarrow> y = id x14 \<Longrightarrow> P)"
   assumes H15 : "(\<And>x15. x15 \<in> set bad_codes \<Longrightarrow> y = id x15 \<Longrightarrow> P)"
-shows P
-  sorry
+  shows P
 
+  sorry
 (*
 
 (* "constructors" for each instruction type *)
@@ -1157,7 +1157,7 @@ List.upt_def simp del: set_upt; fail)+
                       defer
                apply(transfer; force)+
   *)
-
+*)
 
 end
   

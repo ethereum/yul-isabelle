@@ -1,7 +1,6 @@
 theory EvmDialect imports
-  MiniEvm
-  YulSemanticsSingleStep
-  "HOL-Library.Adhoc_Overloading"
+  "../Evm/MiniEvm"
+  "../Yul/YulSemanticsSingleStep"
 
 begin
 
