@@ -14,8 +14,11 @@ https://github.com/ethereum/solidity/blob/develop/libevmasm/Instruction.h
   this version of minevm uses a "flat" record layout rather than extension
 *)
 
+(*
 type_synonym edata = "eint \<Rightarrow> 8 word"
+*)
 
+type_synonym edata = "8 word list"
 
 datatype logentry =
   Log0 "8 word list"
@@ -39,11 +42,8 @@ record estate_resource =
 
 record estate_data =
   es_codedata :: "edata"
-  es_codedatasize :: "eint"
   es_calldata :: "edata"
-  es_calldatasize :: "eint"
   es_returndata :: "edata"
-  es_returndatasize :: "eint"
 
 record estate_metadata = 
   es_address :: eint
@@ -65,7 +65,6 @@ record estate_metadata =
  *)
 record estate_ext = 
   es_extcode :: "eaddr \<Rightarrow> edata"
-  es_extcodesize :: "eaddr \<Rightarrow> eint"
   (* e_extcode_sem :: *)
   es_balances :: "eaddr \<Rightarrow> eint"
   (* tracking account existence is needed for balance *)
@@ -89,11 +88,8 @@ abbreviation e_msize where "e_msize \<equiv> es_msize o es_resource"
 abbreviation e_gas where "e_gas \<equiv> es_gas o es_resource"
 
 abbreviation e_codedata where "e_codedata \<equiv> es_codedata o es_data"
-abbreviation e_codedatasize where "e_codedatasize \<equiv> es_codedatasize o es_data"
 abbreviation e_calldata where "e_calldata \<equiv> es_calldata o es_data"
-abbreviation e_calldatasize where "e_calldatasize \<equiv> es_calldatasize o es_data"
 abbreviation e_returndata where "e_returndata \<equiv> es_returndata o es_data"
-abbreviation e_returndatasize where "e_returndatasize \<equiv> es_returndatasize o es_data"
 
 abbreviation e_address where "e_address \<equiv> es_address o es_metadata"
 abbreviation e_origin where "e_origin \<equiv> es_origin o es_metadata"
@@ -110,7 +106,6 @@ abbreviation e_chainid where "e_chainid \<equiv> es_chainid o es_metadata"
 abbreviation e_selfbalance where "e_selfbalance \<equiv> es_selfbalance o es_metadata"
 
 abbreviation e_extcode where "e_extcode \<equiv> es_extcode o es_ext"
-abbreviation e_extcodesize where "e_extcodesize \<equiv> es_extcodesize o es_ext"
 abbreviation e_balances where "e_balances \<equiv> es_balances o es_ext"
 abbreviation e_acct_exists where "e_acct_exists \<equiv> es_acct_exists o es_ext"
 abbreviation e_acct_live where "e_acct_live \<equiv> es_acct_live o es_ext"
@@ -125,16 +120,10 @@ abbreviation e_gas_update where "e_gas_update \<equiv> es_resource_update o es_g
 
 abbreviation e_codedata_update where
 "e_codedata_update \<equiv> es_data_update o es_codedata_update"
-abbreviation e_codedatasize_update where
-"e_codedatasize_update \<equiv> es_data_update o es_codedatasize_update"
 abbreviation e_calldata_update where
 "e_calldata_update \<equiv> es_data_update o es_calldata_update"
-abbreviation e_calldatasize_update where
-"e_calldatasize_update \<equiv> es_data_update o es_calldatasize_update"
 abbreviation e_returndata_update where
 "e_returndata_update \<equiv> es_data_update o es_returndata_update"
-abbreviation e_returndatasize_update where
-"e_returndatasize_update \<equiv> es_data_update o es_returndatasize_update"
 
 abbreviation e_address_update where
 "e_address_update == es_metadata_update o es_address_update"
@@ -165,8 +154,6 @@ abbreviation e_selfbalance_update where
 
 abbreviation e_extcode_update where
 "e_extcode_update == es_ext_update o es_extcode_update"
-abbreviation e_extcodesize_update where
-"e_extcodesize_update == es_ext_update o es_extcodesize_update"
 abbreviation e_balances_update where
 "e_balances_update == es_ext_update o es_balances_update"
 abbreviation e_acct_exists_update where
@@ -178,7 +165,7 @@ abbreviation e_acct_live_update where
 definition dummy_estate :: estate where
 "dummy_estate =
   \<lparr> es_core =
-    \<lparr> es_memory = \<lambda> _ . word_of_int 0
+    \<lparr> es_memory = []
     , es_storage = \<lambda> _ . word_of_int 0  
     , es_flag = Executing
     , es_log = [] \<rparr>
@@ -186,12 +173,9 @@ definition dummy_estate :: estate where
     \<lparr> es_msize = word_of_int 0
     , es_gas = word_of_int 0 \<rparr>
   , es_data =
-    \<lparr> es_codedata = \<lambda> _ . word_of_int 0
-    , es_codedatasize = 0
-    , es_calldata = \<lambda> _ . word_of_int 0
-    , es_calldatasize = 0
-    , es_returndata = \<lambda> _ . word_of_int 0
-    , es_returndatasize = 0 \<rparr>
+    \<lparr> es_codedata = []
+    , es_calldata = []
+    , es_returndata = [] \<rparr>
   , es_metadata =
     \<lparr> es_address = word_of_int 0
     , es_origin = word_of_int 0
@@ -207,8 +191,7 @@ definition dummy_estate :: estate where
     , es_chainid = word_of_int 0
     , es_selfbalance = word_of_int 0 \<rparr>
   , es_ext =
-    \<lparr> es_extcode = (\<lambda> _ . \<lambda> _ . word_of_int 0)
-    , es_extcodesize = (\<lambda> _ . 0)
+    \<lparr> es_extcode = (\<lambda> _ . [])
     , es_balances = (\<lambda> _ . word_of_int 0)
     , es_acct_exists = (\<lambda> _ . False)
     , es_acct_live = (\<lambda> _ . False) \<rparr>
@@ -277,35 +260,21 @@ fun shr_many :: "('a :: len) word \<Rightarrow> int \<Rightarrow> 'a word" where
    else shr_many (shiftr1 w) (n-1))"
 
 (* helper for pulling values from a list, adding default value if the end is reached *)
-(*
+
 fun take_default :: "nat \<Rightarrow> 'a \<Rightarrow> 'a list \<Rightarrow> 'a list" where
 "take_default n dfl ls =
   take n ls @ (replicate (n - length ls) dfl)"
-*)
-
-(* still need take_padded for keccak *)
-
-(* helper for pulling word values from a list, adding zero-word value if the end is reached *)
-(*
-fun take_padded :: "nat \<Rightarrow> ('a :: len) word list \<Rightarrow> 'a word list" where
-"take_padded n ls = take_default n (word_of_int 0) ls"
-*)
 
 (* get sz number of bytes starting at start*)
+
 fun edata_gets :: "nat \<Rightarrow> nat \<Rightarrow> edata \<Rightarrow> 8 word list" where
-"edata_gets start 0 d = []"
-| "edata_gets start sz d =
-   d (word_of_int (int start)) # edata_gets (start + 1) (sz - 1) d"
+"edata_gets start sz d =
+  take_default sz (word_of_int 0) (drop start d)"
 
 (* get bytes from start to (end - 1) *)
 fun edata_gets_range :: "nat \<Rightarrow> nat \<Rightarrow> edata \<Rightarrow> 8 word list" where
 "edata_gets_range start end d =
  (edata_gets start (end - start) d)"
-
-(*
-fun bulk_load :: "nat \<Rightarrow> 8 word list \<Rightarrow> eint" where
-"bulk_load n wl = word_rcat (take_padded 32 (drop n wl))"
-*)
 
 (* Helper for calldataload.
    return eint of 32 bytes starting at byte n *)
@@ -316,33 +285,9 @@ fun bulk_load :: "nat \<Rightarrow> edata \<Rightarrow> eint" where
 fun bulk_copy :: 
 "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> edata \<Rightarrow> edata \<Rightarrow> edata" where
 "bulk_copy to_idx from_idx n_bytes mem ext_data =
- (\<lambda> idx .
-  (if to_idx \<le> unat idx \<and> unat idx < to_idx + n_bytes
-   then ext_data (word_of_int (int (from_idx + (unat idx - to_idx))))
-   else mem idx))"
-
-fun byte_list_to_edata :: "8 word list \<Rightarrow> edata" where
-"byte_list_to_edata l n =
-  (if unat n < length l then l ! unat n
-   else 0)"
-(*
-fun memdump :: "estate \<Rightarrow> 8 word list" where
-"memdump e =
-  edata_gets 0 (e_msize e) (e_memory e)"
-*)
-(*
-fun bulk_copy :: 
-"nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> edata \<Rightarrow> edata \<Rightarrow> edata" where
-"bulk_copy to_idx from_idx n_bytes mem ext_data =
- (let loaded_bytes = take_padded n_bytes (drop from_idx ext_data) in
+ (let loaded_bytes = take_default n_bytes (word_of_int 0) (drop from_idx ext_data) in
   take to_idx mem @ loaded_bytes @ drop (to_idx + n_bytes) mem)"
-*)
-(* another helper for accessing memory *)
-(*
-fun get_mrange :: "estate \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> ebyte list" where
-"get_mrange st idx sz =
-  (take_padded sz (drop idx (e_memory st)))"
-*)
+
 (*
  * EVM instruction semantics
  *)
@@ -529,7 +474,7 @@ fun ei_calldataload :: "eint \<Rightarrow> (estate, eint) State" where
  (bulk_load (unat loc) (e_calldata s), s)"
 
 fun ei_calldatasize :: "(estate, eint) State" where
-"ei_calldatasize s = (e_calldatasize s, s)"
+"ei_calldatasize s = (word_of_int (int (length (e_calldata s))), s)"
 
 fun ei_calldatacopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_calldatacopy to_idx from_idx n_bytes s = 
@@ -537,7 +482,7 @@ fun ei_calldatacopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow>
                                  (e_memory s) (e_calldata s) \<rparr>))"
 
 fun ei_codesize :: "(estate, eint) State" where
-"ei_codesize s = (e_codedatasize s, s)"
+"ei_codesize s = (word_of_int (int (length (e_codedata s))), s)"
 
 fun ei_codecopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_codecopy to_idx from_idx n_bytes s =
@@ -548,7 +493,7 @@ fun ei_gasprice :: "(estate, eint) State" where
 "ei_gasprice s = (e_gasprice s, s)"
 
 fun ei_extcodesize :: "eint \<Rightarrow> (estate, eint) State" where
-"ei_extcodesize acctid s = (e_extcodesize s (ucast acctid), s)"
+"ei_extcodesize acctid s = (word_of_int (int (length (e_extcode s (ucast acctid)))), s)"
 
 fun ei_extcodecopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_extcodecopy acctid to_idx from_idx n_bytes s =
@@ -557,7 +502,7 @@ fun ei_extcodecopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> 
 
 fun ei_returndatasize :: "(estate, eint) State" where
 "ei_returndatasize s =
-  (e_returndatasize s, s)"
+  (word_of_int (int (length (e_returndata s))), s)"
 
 fun ei_returndatacopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_returndatacopy to_idx from_idx n_bytes s = 
@@ -567,7 +512,7 @@ fun ei_returndatacopy :: "eint \<Rightarrow> eint \<Rightarrow> eint \<Rightarro
 fun ei_extcodehash :: "eint \<Rightarrow> (estate, eint) State" where
 "ei_extcodehash acctid s =
  ((if e_acct_live s (ucast acctid)
-   then Keccak.keccak (edata_gets  0 (unat (e_extcodesize s (ucast acctid)))
+   then Keccak.keccak (edata_gets  0 (length (e_extcode s (ucast acctid)))
                                      (e_extcode s (ucast acctid)))
    else word_of_int 0)
  , s)"
@@ -621,14 +566,14 @@ fun ei_mstore :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" wh
   (let bytes = word_rsplit value :: 8 word list in
   ((),
    (st \<lparr> e_memory := bulk_copy (unat idx) 0 32 (e_memory st)
-                               (byte_list_to_edata bytes)  \<rparr>)))"
+                               (bytes)  \<rparr>)))"
 
 fun ei_mstore8 :: "eint \<Rightarrow> eint \<Rightarrow> (estate, unit) State" where
 "ei_mstore8 idx value st =
   (let bytes = [(Word.ucast value) :: 8 word] in
   ((),
    (st \<lparr> e_memory := bulk_copy (unat idx) 0 32 (e_memory st) 
-                               (byte_list_to_edata bytes) \<rparr>)))"
+                               (bytes) \<rparr>)))"
 
 fun ei_sload :: "eint \<Rightarrow> (estate, eint) State" where
 "ei_sload idx st =
@@ -918,11 +863,6 @@ YUL{
     }
 }"
 
-term "YUL{
-    for { let x := 2 } lt(x, 10) { x := add(x, 1) } {
-        mstore(mul(x, 5), mul(x, 0x1))
-    }
-}"
 
 
 definition mulcheck_yul :: "(eint, unit) YulStatement" where
@@ -941,93 +881,12 @@ definition dbg_info where
   (case x of
     YulResult g \<Rightarrow> (vals g, locals g, cont g))"
 
-value "dbg_info (evalYul EvmDialect loop_yul 25)"
-
-value "dbg_info (evalYul EvmDialect mulcheck_yul 7)"
-
-
 definition final_mem_get where
 "final_mem_get x =
   (case x of
     YulResult g \<Rightarrow> e_memory (global g))"
 
-fun edata_to_byte_list' ::
-  "edata \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list" where
-"edata_to_byte_list' _ _ 0 = []"
-| "edata_to_byte_list' ed start (Suc sz') =
-   ed (Word.of_int (int start)) # edata_to_byte_list' ed (Suc start) sz'"
-
-fun edata_to_byte_list ::
-  "edata \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> 8 word list" where
-"edata_to_byte_list ed start end =
-  edata_to_byte_list' ed start (end - start)"
-
-value "edata_to_byte_list (final_mem_get (evalYul EvmDialect loop_yul 1000)) 0 100"
-
-value "bulk_copy 10 0 32 (\<lambda> _ . 0) (byte_list_to_edata (word_rsplit (10 :: 256 word) :: 8 word list))
-41
-"
-
-value "(byte_list_to_edata (word_rsplit (10 :: 256 word) :: 8 word list) 31)"
-
-(* fuel = 1 \<Rightarrow> 2 copies of funs
-   fuel = 2 \<Rightarrow> 2
-   fuel = 3 \<Rightarrow> 3
-   fuel = 4 \<Rightarrow> 4
-   fuel = 5 \<Rightarrow> 4
-   fuel = 6
-*)
-
-(*
-definition loop_yul' :: "(eint, unit) YulStatement" where 
-"loop_yul' \<equiv>
-YUL{
-    for { let x := 2 } lt(x, 10) { x := add(x, 1) } {
-    }
-}"
-
-value "dbg_info (evalYul EvmDialect loop_yul' 5)"
-value "dbg_info (evalYul EvmDialect loop_yul' 6)"
-value "dbg_info (evalYul EvmDialect loop_yul' 7)"
-value "dbg_info (evalYul EvmDialect loop_yul' 8)"
-value "dbg_info (evalYul EvmDialect loop_yul' 9)"
-value "dbg_info (evalYul EvmDialect loop_yul' 10)"
-value "dbg_info (evalYul EvmDialect loop_yul' 11)"
-value "dbg_info (evalYul EvmDialect loop_yul' 12)"
-value "dbg_info (evalYul EvmDialect loop_yul' 13)"
-value "dbg_info (evalYul EvmDialect loop_yul' 14)"
-value "dbg_info (evalYul EvmDialect loop_yul' 15)"
-value "dbg_info (evalYul EvmDialect loop_yul' 16)"
-value "dbg_info (evalYul EvmDialect loop_yul' 17)"
-value "dbg_info (evalYul EvmDialect loop_yul' 18)"
-value "dbg_info (evalYul EvmDialect loop_yul' 19)"
-value "dbg_info (evalYul EvmDialect loop_yul' 20)"
-value "dbg_info (evalYul EvmDialect loop_yul' 21)"
-value "dbg_info (evalYul EvmDialect loop_yul' 22)"
-value "dbg_info (evalYul EvmDialect loop_yul' 23)"
-value "dbg_info (evalYul EvmDialect loop_yul' 24)"
-value "dbg_info (evalYul EvmDialect loop_yul' 25)"
-value "dbg_info (evalYul EvmDialect loop_yul' 26)"
-value "dbg_info (evalYul EvmDialect loop_yul' 27)"
-value "dbg_info (evalYul EvmDialect loop_yul' 28)"
-value "dbg_info (evalYul EvmDialect loop_yul' 29)"
-value "dbg_info (evalYul EvmDialect loop_yul' 30)"
-value "dbg_info (evalYul EvmDialect loop_yul' 31)"
-value "dbg_info (evalYul EvmDialect loop_yul' 32)"
-value "dbg_info (evalYul EvmDialect loop_yul' 33)"
-value "dbg_info (evalYul EvmDialect loop_yul' 34)"
-value "dbg_info (evalYul EvmDialect loop_yul' 35)"
-value "dbg_info (evalYul EvmDialect loop_yul' 36)"
-value "dbg_info (evalYul EvmDialect loop_yul' 37)"
-value "dbg_info (evalYul EvmDialect loop_yul' 38)"
-value "dbg_info (evalYul EvmDialect loop_yul' 39)"
-value "dbg_info (evalYul EvmDialect loop_yul' 40)"
-value "dbg_info (evalYul EvmDialect loop_yul' 41)"
-value "dbg_info (evalYul EvmDialect loop_yul' 42)"
-value "dbg_info (evalYul EvmDialect loop_yul' 43)"
-
-value "dbg_info (evalYul EvmDialect loop_yul' 170)"
-*)
+value "final_mem_get (evalYul EvmDialect loop_yul 100000)"
 
 (*
  20 \<Rightarrow> ~8 copies of funs
@@ -1041,10 +900,7 @@ YUL{
   mstore(0,not(1))
 }"
 
-(*
-value "
-(case (eval not_yul) of
-  Inl x \<Rightarrow> edata_gets 0 32 (e_memory x))"
-*)
+value "final_mem_get (evalYul EvmDialect not_yul 10000)"
+
 
 end
