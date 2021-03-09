@@ -12,7 +12,8 @@ definition yulBuiltins :: "(estate, eint, unit) function_sig locals" where
 "yulBuiltins = make_locals
   [ (STR ''stop'', mkBuiltin ei_stop)
   , (STR ''add'', mkBuiltin ei_add)
-  , (STR ''mul'', mkBuiltin ei_sub)
+  , (STR ''mul'', mkBuiltin ei_mul)
+  , (STR ''sub'', mkBuiltin ei_sub)
   , (STR ''div'', mkBuiltin ei_div)
   , (STR ''sdiv'', mkBuiltin ei_sdiv)
   , (STR ''mod'', mkBuiltin ei_mod)
