@@ -1,4 +1,4 @@
-theory LowLevelEvm imports Main "HOL-Library.Numeral_Type" MiniEvm 
+theory EvmBytecode imports Main "HOL-Library.Numeral_Type" MiniEvm 
 "../Utils/Ranges"
 begin
 
