@@ -47,6 +47,7 @@ record estate_data =
 
 record estate_metadata = 
   es_address :: eint
+  es_nonce :: eint
   es_origin :: eint
   es_caller :: eint
   es_callvalue :: eint
@@ -92,6 +93,7 @@ abbreviation e_calldata where "e_calldata \<equiv> es_calldata o es_data"
 abbreviation e_returndata where "e_returndata \<equiv> es_returndata o es_data"
 
 abbreviation e_address where "e_address \<equiv> es_address o es_metadata"
+abbreviation e_nonce where "e_nonce \<equiv> es_nonce o es_metadata"
 abbreviation e_origin where "e_origin \<equiv> es_origin o es_metadata"
 abbreviation e_caller where "e_caller \<equiv> es_caller o es_metadata"
 abbreviation e_callvalue where "e_callvalue \<equiv> es_callvalue o es_metadata"
@@ -178,6 +180,7 @@ definition dummy_estate :: estate where
     , es_returndata = [] \<rparr>
   , es_metadata =
     \<lparr> es_address = word_of_int 0
+    , es_nonce = word_of_int 0
     , es_origin = word_of_int 0
     , es_caller = word_of_int 0
     , es_callvalue = word_of_int 0

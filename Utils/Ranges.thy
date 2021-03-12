@@ -770,4 +770,71 @@ next
   qed
 qed
 
+fun Union_ranges :: "ranges list \<Rightarrow> ranges" where
+"Union_ranges [] = rg_empty"
+| "Union_ranges (h#t) =
+   union_ranges h (Union_ranges t)"
+
+lemma set_of_ranges_empty :
+  "set_of_ranges rg_empty = {}"
+  by(transfer; auto)
+
+lemma Union_ranges_spec :
+  "set_of_ranges (Union_ranges R) =
+  \<Union> (set (map set_of_ranges R))"
+proof(induction R)
+case Nil
+  then show ?case by(auto simp add: set_of_ranges_empty)
+next
+  case (Cons a R)
+  then show ?case using union_ranges_spec
+    by(simp)
+qed
+
+lemma Union_ranges_cases :
+  assumes H0 : "\<And> x r . r \<in> set rs \<Longrightarrow> member_ranges x r \<Longrightarrow> P x"
+  assumes H : "member_ranges y (Union_ranges rs)"
+  shows "P y" 
+proof-
+  have H' : "y \<in> set_of_ranges (Union_ranges rs)"
+    using H unfolding member_ranges_spec by auto
+
+  have H'' : "y \<in> \<Union> (set (map set_of_ranges rs))"
+    using H' unfolding Union_ranges_spec by auto
+
+  show "P y" using UnionE[OF H''] H0
+    unfolding member_ranges_spec
+    by(auto)
+qed  
+
+
+fun set_of_ranges_alt' :: "ranges' \<Rightarrow> nat set" where
+"set_of_ranges_alt' [] = {}"
+| "set_of_ranges_alt' ((n1, n2)#m) = 
+   set (List.upt n1 n2) \<union> set_of_ranges_alt' m"
+
+lemma set_of_ranges_alt'_spec :
+  "set_of_ranges' r = set_of_ranges_alt' r"
+proof(induction r)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons a r)
+  then show ?case 
+    by(cases a; auto)
+qed
+
+lift_definition set_of_ranges_alt :: "ranges \<Rightarrow> nat set" is "set_of_ranges_alt'" .
+
+lemma set_of_ranges_alt_spec :
+"set_of_ranges r = set_of_ranges_alt r"
+  by(transfer; auto simp add: set_of_ranges_alt'_spec)
+
+(* isabelle's automation seems to be doing some annoying things with
+integer ranges once we start taking unions... *)
+(*
+fun set_of_ranges_alt2 :: "ranges' \<Rightarrow> nat set"
+*)
+
+
 end

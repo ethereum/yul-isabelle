@@ -1,5 +1,5 @@
 theory Hex
-  imports Main HOL.String "HOL-Word.Word"
+  imports Main HOL.String "HOL-Library.Word"
 begin
 
 (* this file is going to contain some miscellaneous tools

@@ -1,56 +1,101 @@
-theory LowLevelEvm imports Main "HOL-Library.Numeral_Type" 
-MiniEvm 
+theory LowLevelEvm imports Main "HOL-Library.Numeral_Type" MiniEvm 
+"../Utils/Ranges"
 begin
 
 (* define EVM instruction syntax in terms of their representation as instruction-words *)
-typedef inst = "{n :: nat . n < 256 }"
+definition inst_codes :: ranges where
+"inst_codes = mk_ranges [(0, 256)]"
+declare inst_codes_def [simp]
+
+typedef inst = "set_of_ranges inst_codes"
 proof-
   have "(0 :: nat) \<in> {n . n < 256}" by auto
-  thus "\<exists> (x :: nat) . x \<in> {n . n < 256}" by blast
+  thus "\<exists> (x :: nat) . x \<in> set_of_ranges inst_codes" 
+    unfolding inst_codes_def
+    apply(transfer; auto)
+    apply(rule_tac x = 0 in exI)
+    apply(auto)
+    done
 qed
 setup_lifting type_definition_inst
 
-(* begin opcodes *)
+(* 
+ * begin opcodes
+*)
 (* 
  * STOP
  *)
-definition stop_codes  :: "nat list"  where "stop_codes = [0 :: nat]" 
+definition stop_codes  :: "ranges"  where 
+"stop_codes = mk_ranges[(0, 1)]" 
 declare stop_codes_def [simp add]
-typedef stop_inst = "set stop_codes" by auto
+typedef stop_inst = "set_of_ranges stop_codes" 
+  unfolding stop_codes_def by (transfer; auto)
 setup_lifting type_definition_stop_inst
 
-lift_definition STOP_INST :: "stop_inst \<Rightarrow> inst" is id by auto
+lift_definition STOP_INST :: "stop_inst \<Rightarrow> inst" is id 
+  unfolding stop_codes_def inst_codes_def
+  by(transfer; auto)
 
-lift_definition STOP_STOP :: stop_inst is "0x00 :: nat" by auto
+lift_definition STOP_STOP :: stop_inst is "0x00 :: nat" 
+    unfolding stop_codes_def inst_codes_def 
+    by(transfer; auto)
+
 free_constructors cases_stop_inst for STOP_STOP
   by (transfer; auto)+
 
-definition is_STOP :: "stop_inst \<Rightarrow> bool" where
-"is_STOP x \<equiv> case x of STOP_STOP \<Rightarrow> True"
+definition is_STOP_STOP :: "stop_inst \<Rightarrow> bool" where
+"is_STOP_STOP x \<equiv> case x of STOP_STOP \<Rightarrow> True"
 
 (*
  * Arithmetic
  *)
-definition arith_codes :: "nat list" where 
-"arith_codes = (List.upt 0x01 0x0c)"
+definition arith_codes :: "ranges" where 
+"arith_codes = mk_ranges [(0x01, 0x0c)]"
 
 declare arith_codes_def [simp add]
-typedef arith_inst = "set arith_codes" by auto
+typedef arith_inst = "set_of_ranges arith_codes" 
+  unfolding arith_codes_def
+  by(transfer; auto)
+
 setup_lifting type_definition_arith_inst
 
-lift_definition ARITH_INST :: "arith_inst \<Rightarrow> inst" is id by auto
+lift_definition ARITH_INST :: "arith_inst \<Rightarrow> inst" is id 
+  unfolding arith_codes_def inst_codes_def
+  by(transfer; auto)
 
-lift_definition ARITH_ADD        :: "arith_inst" is "0x01 :: nat" by auto
-lift_definition ARITH_MUL        :: "arith_inst" is "0x02 :: nat" by auto
-lift_definition ARITH_SUB        :: "arith_inst" is "0x03 :: nat" by auto
-lift_definition ARITH_DIV        :: "arith_inst" is "0x04 :: nat" by auto
-lift_definition ARITH_SDIV       :: "arith_inst" is "0x05 :: nat" by auto
-lift_definition ARITH_MOD        :: "arith_inst" is "0x06 :: nat" by auto
-lift_definition ARITH_SMOD       :: "arith_inst" is "0x07 :: nat" by auto
-lift_definition ARITH_ADDMOD     :: "arith_inst" is "0x08 :: nat" by auto
-lift_definition ARITH_MULMOD     :: "arith_inst" is "0x09 :: nat" by auto
-lift_definition ARITH_EXP        :: "arith_inst" is "0x0a :: nat" by auto
-lift_definition ARITH_SIGNEXTEND :: "arith_inst" is "0x0b :: nat" by auto
+lift_definition ARITH_ADD        :: "arith_inst" is "0x01 :: nat" 
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
+lift_definition ARITH_MUL        :: "arith_inst" is "0x02 :: nat"
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
+lift_definition ARITH_SUB        :: "arith_inst" is "0x03 :: nat"
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
+lift_definition ARITH_DIV        :: "arith_inst" is "0x04 :: nat"
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
+lift_definition ARITH_SDIV       :: "arith_inst" is "0x05 :: nat"
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
+lift_definition ARITH_MOD        :: "arith_inst" is "0x06 :: nat"
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
+lift_definition ARITH_SMOD       :: "arith_inst" is "0x07 :: nat"
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
+lift_definition ARITH_ADDMOD     :: "arith_inst" is "0x08 :: nat"
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
+lift_definition ARITH_MULMOD     :: "arith_inst" is "0x09 :: nat"
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
+lift_definition ARITH_EXP        :: "arith_inst" is "0x0a :: nat"
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
+lift_definition ARITH_SIGNEXTEND :: "arith_inst" is "0x0b :: nat"
+  unfolding inst_codes_def arith_codes_def
+  by(transfer; auto)
 
 free_constructors cases_arith_inst for
   ARITH_ADD
@@ -64,8 +109,10 @@ free_constructors cases_arith_inst for
 | ARITH_MULMOD
 | ARITH_EXP
 | ARITH_SIGNEXTEND
+  apply(transfer; simp only:set_of_ranges_alt_spec arith_codes_def; transfer)
+  apply(force simp del:set_upt simp  add:List.upt_def)
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+     auto simp add:List.upt_def)+
 
 fun is_arith_ADD :: "arith_inst => bool" where
 "is_arith_ADD ARITH_ADD = True"
@@ -105,29 +152,46 @@ fun is_arith_SIGNEXTEND :: "arith_inst => bool" where
 (* 
  * Bits + Comparisons
  *)
-definition bits_compare_codes :: "nat list" where 
-  "bits_compare_codes = (List.upt 0x10 0x1e)"
+definition bits_compare_codes :: "ranges" where 
+  "bits_compare_codes = mk_ranges[(0x10, 0x1e)]"
 declare bits_compare_codes_def [simp add]
-typedef bits_compare_inst = "set bits_compare_codes" by auto
+typedef bits_compare_inst = "set_of_ranges bits_compare_codes" 
+  unfolding bits_compare_codes_def
+  by(transfer; auto)
 setup_lifting type_definition_bits_compare_inst
 
-lift_definition BITS_COMPARE_LT     :: "bits_compare_inst" is "0x10" by auto
-lift_definition BITS_COMPARE_GT     :: "bits_compare_inst" is "0x11" by auto
-lift_definition BITS_COMPARE_SLT    :: "bits_compare_inst" is "0x12" by auto
-lift_definition BITS_COMPARE_SGT    :: "bits_compare_inst" is "0x13" by auto
-lift_definition BITS_COMPARE_EQ     :: "bits_compare_inst" is "0x14" by auto
-lift_definition BITS_COMPARE_ISZERO :: "bits_compare_inst" is "0x15" by auto
-lift_definition BITS_COMPARE_AND    :: "bits_compare_inst" is "0x16" by auto
-lift_definition BITS_COMPARE_OR     :: "bits_compare_inst" is "0x17" by auto
-lift_definition BITS_COMPARE_XOR    :: "bits_compare_inst" is "0x18" by auto
-lift_definition BITS_COMPARE_NOT    :: "bits_compare_inst" is "0x19" by auto
-lift_definition BITS_COMPARE_BYTE   :: "bits_compare_inst" is "0x1a" by auto
-lift_definition BITS_COMPARE_SHL    :: "bits_compare_inst" is "0x1b" by auto
-lift_definition BITS_COMPARE_SHR    :: "bits_compare_inst" is "0x1c" by auto
-lift_definition BITS_COMPARE_SAR    :: "bits_compare_inst" is "0x1d" by auto
+lift_definition BITS_COMPARE_LT     :: "bits_compare_inst" is "0x10"
+  unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_GT     :: "bits_compare_inst" is "0x11"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_SLT    :: "bits_compare_inst" is "0x12"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_SGT    :: "bits_compare_inst" is "0x13"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_EQ     :: "bits_compare_inst" is "0x14"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_ISZERO :: "bits_compare_inst" is "0x15"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_AND    :: "bits_compare_inst" is "0x16" 
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_OR     :: "bits_compare_inst" is "0x17"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_XOR    :: "bits_compare_inst" is "0x18"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_NOT    :: "bits_compare_inst" is "0x19"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_BYTE   :: "bits_compare_inst" is "0x1a"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_SHL    :: "bits_compare_inst" is "0x1b"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_SHR    :: "bits_compare_inst" is "0x1c"
+ unfolding bits_compare_codes_def by (transfer; auto)
+lift_definition BITS_COMPARE_SAR    :: "bits_compare_inst" is "0x1d"
+ unfolding bits_compare_codes_def by (transfer; auto)
 
 
-lift_definition BITS_COMPARE_INST :: "bits_compare_inst \<Rightarrow> inst" is id by auto
+lift_definition BITS_COMPARE_INST :: "bits_compare_inst \<Rightarrow> inst" is id
+  unfolding bits_compare_codes_def inst_codes_def by(transfer; auto)
 
 free_constructors cases_compare_inst for
   BITS_COMPARE_LT
@@ -144,8 +208,11 @@ free_constructors cases_compare_inst for
 | BITS_COMPARE_SHL
 | BITS_COMPARE_SHR
 | BITS_COMPARE_SAR
+  apply(transfer; simp only:set_of_ranges_alt_spec bits_compare_codes_def; transfer)
+  apply(force simp del:set_upt simp  add:List.upt_def)
+
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+     auto simp add:List.upt_def)+
 
 fun "is_bits_compare_LT" :: "bits_compare_inst => bool" where
 "is_bits_compare_LT BITS_COMPARE_LT = True"
@@ -192,14 +259,21 @@ fun "is_bits_compare_SAR" :: "bits_compare_inst => bool" where
 
 
 (* keccak256 *)
-definition keccak256_codes  :: "nat list"  where "keccak256_codes = [0x20 :: nat]" 
+definition keccak256_codes  :: "ranges"  where 
+"keccak256_codes = mk_ranges[(0x20, 0x21)]" 
 declare keccak256_codes_def [simp add]
-typedef keccak256_inst = "set keccak256_codes" by auto
+typedef keccak256_inst = "set_of_ranges keccak256_codes" 
+  unfolding keccak256_codes_def
+  by (transfer; auto)
 setup_lifting type_definition_keccak256_inst
 
-lift_definition KECCAK256_KECCAK256 :: keccak256_inst is "0x20 :: nat" by auto
+lift_definition KECCAK256_KECCAK256 :: keccak256_inst is "0x20 :: nat" 
+  unfolding keccak256_codes_def
+  by(transfer; auto)
 
-lift_definition KECCAK256_INST :: "keccak256_inst \<Rightarrow> inst" is id by auto
+lift_definition KECCAK256_INST :: "keccak256_inst \<Rightarrow> inst" is id 
+  unfolding keccak256_codes_def inst_codes_def
+  by (transfer; auto)
 
 free_constructors cases_keccak256_inst for KECCAK256_KECCAK256
   by (transfer; auto)+
@@ -211,31 +285,66 @@ fun "is_keccak256_KECCAK256" :: "keccak256_inst => bool" where
 (* 
  * transaction-specific data instructions
  *)
-definition tx_data_codes :: "nat list"
+definition tx_data_codes :: "ranges"
   where 
-  "tx_data_codes = (List.upt 0x30 0x40)"
+  "tx_data_codes = mk_ranges[(0x30, 0x40)]"
 declare tx_data_codes_def[simp add]
-typedef tx_data_inst = "set tx_data_codes" by auto
+typedef tx_data_inst = "set_of_ranges tx_data_codes" 
+  unfolding tx_data_codes_def
+  by(transfer; auto)
 setup_lifting type_definition_tx_data_inst
 
-lift_definition TX_DATA_ADDRESS        :: "tx_data_inst" is "0x30" by auto
-lift_definition TX_DATA_BALANCE        :: "tx_data_inst" is "0x31" by auto
-lift_definition TX_DATA_ORIGIN         :: "tx_data_inst" is "0x32" by auto
-lift_definition TX_DATA_CALLER         :: "tx_data_inst" is "0x33" by auto
-lift_definition TX_DATA_CALLVALUE      :: "tx_data_inst" is "0x34" by auto
-lift_definition TX_DATA_CALLDATALOAD   :: "tx_data_inst" is "0x35" by auto
-lift_definition TX_DATA_CALLDATASIZE   :: "tx_data_inst" is "0x36" by auto
-lift_definition TX_DATA_CALLDATACOPY   :: "tx_data_inst" is "0x37" by auto
-lift_definition TX_DATA_CODESIZE       :: "tx_data_inst" is "0x38" by auto
-lift_definition TX_DATA_CODECOPY       :: "tx_data_inst" is "0x39" by auto
-lift_definition TX_DATA_GASPRICE       :: "tx_data_inst" is "0x3a" by auto
-lift_definition TX_DATA_EXTCODESIZE    :: "tx_data_inst" is "0x3b" by auto
-lift_definition TX_DATA_EXTCODECOPY    :: "tx_data_inst" is "0x3c" by auto
-lift_definition TX_DATA_RETURNDATASIZE :: "tx_data_inst" is "0x3d" by auto
-lift_definition TX_DATA_RETURNDATACOPY :: "tx_data_inst" is "0x3e" by auto
-lift_definition TX_DATA_EXTCODEHASH    :: "tx_data_inst" is "0x3f" by auto
+lift_definition TX_DATA_ADDRESS        :: "tx_data_inst" is "0x30"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_BALANCE        :: "tx_data_inst" is "0x31"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_ORIGIN         :: "tx_data_inst" is "0x32"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_CALLER         :: "tx_data_inst" is "0x33"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_CALLVALUE      :: "tx_data_inst" is "0x34"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_CALLDATALOAD   :: "tx_data_inst" is "0x35"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_CALLDATASIZE   :: "tx_data_inst" is "0x36"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_CALLDATACOPY   :: "tx_data_inst" is "0x37"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_CODESIZE       :: "tx_data_inst" is "0x38"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_CODECOPY       :: "tx_data_inst" is "0x39"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_GASPRICE       :: "tx_data_inst" is "0x3a"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_EXTCODESIZE    :: "tx_data_inst" is "0x3b"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_EXTCODECOPY    :: "tx_data_inst" is "0x3c"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_RETURNDATASIZE :: "tx_data_inst" is "0x3d"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_RETURNDATACOPY :: "tx_data_inst" is "0x3e"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
+lift_definition TX_DATA_EXTCODEHASH    :: "tx_data_inst" is "0x3f"
+  unfolding tx_data_codes_def
+  by(transfer; auto)
 
-lift_definition TX_DATA_INST :: "tx_data_inst \<Rightarrow> inst" is id by auto
+lift_definition TX_DATA_INST :: "tx_data_inst \<Rightarrow> inst" is id
+  unfolding tx_data_codes_def inst_codes_def by(transfer; auto)
 
 free_constructors cases_tx_data_inst for
 TX_DATA_ADDRESS
@@ -254,8 +363,10 @@ TX_DATA_ADDRESS
 | TX_DATA_RETURNDATASIZE
 | TX_DATA_RETURNDATACOPY
 | TX_DATA_EXTCODEHASH
+  apply(transfer; simp only:set_of_ranges_alt_spec tx_data_codes_def; transfer)
+  apply(force simp del:set_upt simp  add:List.upt_def)
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+     auto simp add:List.upt_def)+
 
 fun "is_tx_data_ADDRESS" :: "tx_data_inst => bool" where
 "is_tx_data_ADDRESS TX_DATA_ADDRESS = True"
@@ -310,23 +421,43 @@ fun "is_tx_data_EXTCODEHASH" :: "tx_data_inst => bool" where
 (* 
  * chain-specific data instructions
  *)
-definition chain_data_codes :: "nat list"
+definition chain_data_codes :: "ranges"
   where
-  "chain_data_codes = List.upt 0x40 0x48"
+  "chain_data_codes = mk_ranges[(0x40, 0x48)]"
 declare chain_data_codes_def[simp add]
-typedef chain_data_inst = "set chain_data_codes" by auto
+typedef chain_data_inst = "set_of_ranges chain_data_codes"
+  unfolding chain_data_codes_def
+  by (transfer; auto)
 setup_lifting type_definition_chain_data_inst
 
-lift_definition CHAIN_DATA_BLOCKHASH   :: "chain_data_inst" is "0x40" by auto
-lift_definition CHAIN_DATA_COINBASE    :: "chain_data_inst" is "0x41" by auto
-lift_definition CHAIN_DATA_TIMESTAMP   :: "chain_data_inst" is "0x42" by auto
-lift_definition CHAIN_DATA_NUMBER      :: "chain_data_inst" is "0x43" by auto
-lift_definition CHAIN_DATA_DIFFICULTY  :: "chain_data_inst" is "0x44" by auto
-lift_definition CHAIN_DATA_GASLIMIT    :: "chain_data_inst" is "0x45" by auto
-lift_definition CHAIN_DATA_CHAINID     :: "chain_data_inst" is "0x46" by auto
-lift_definition CHAIN_DATA_SELFBALANCE :: "chain_data_inst" is "0x47" by auto
+lift_definition CHAIN_DATA_BLOCKHASH   :: "chain_data_inst" is "0x40"
+  unfolding chain_data_codes_def
+  by (transfer; auto)
+lift_definition CHAIN_DATA_COINBASE    :: "chain_data_inst" is "0x41"
+  unfolding chain_data_codes_def
+  by (transfer; auto)
+lift_definition CHAIN_DATA_TIMESTAMP   :: "chain_data_inst" is "0x42"
+  unfolding chain_data_codes_def
+  by (transfer; auto)
+lift_definition CHAIN_DATA_NUMBER      :: "chain_data_inst" is "0x43"
+  unfolding chain_data_codes_def
+  by (transfer; auto)
+lift_definition CHAIN_DATA_DIFFICULTY  :: "chain_data_inst" is "0x44"
+  unfolding chain_data_codes_def
+  by (transfer; auto)
+lift_definition CHAIN_DATA_GASLIMIT    :: "chain_data_inst" is "0x45"
+  unfolding chain_data_codes_def
+  by (transfer; auto)
+lift_definition CHAIN_DATA_CHAINID     :: "chain_data_inst" is "0x46"
+  unfolding chain_data_codes_def
+  by (transfer; auto)
+lift_definition CHAIN_DATA_SELFBALANCE :: "chain_data_inst" is "0x47"
+  unfolding chain_data_codes_def
+  by (transfer; auto)
 
-lift_definition CHAIN_DATA_INST :: "chain_data_inst \<Rightarrow> inst" is id by auto
+lift_definition CHAIN_DATA_INST :: "chain_data_inst \<Rightarrow> inst" is id 
+  unfolding chain_data_codes_def inst_codes_def
+  by (transfer; auto)
 
 free_constructors cases_chain_data_inst for
 CHAIN_DATA_BLOCKHASH
@@ -337,8 +468,11 @@ CHAIN_DATA_BLOCKHASH
 | CHAIN_DATA_GASLIMIT
 | CHAIN_DATA_CHAINID
 | CHAIN_DATA_SELFBALANCE
+  apply(transfer; simp only:set_of_ranges_alt_spec chain_data_codes_def; transfer)
+  apply(force simp del:set_upt simp  add:List.upt_def)
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+     auto simp add:List.upt_def)+
+
 
 fun "is_chain_data_BLOCKHASH" :: "chain_data_inst => bool" where
 "is_chain_data_BLOCKHASH CHAIN_DATA_BLOCKHASH = True"
@@ -375,26 +509,54 @@ fun "is_chain_data_SELFBALANCE" :: "chain_data_inst => bool" where
 - storage ops
 - resource queries
 - control flow *)
-definition state_control_codes :: "nat list" where
-"state_control_codes = (List.upt 0x50 0x5c)"
+definition state_control_codes :: "ranges" where
+"state_control_codes = mk_ranges[(0x50, 0x5c)]"
 declare state_control_codes_def[simp add]
-typedef state_control_inst = "set state_control_codes" by auto
+typedef state_control_inst = "set_of_ranges state_control_codes" 
+  unfolding state_control_codes_def
+  by(transfer; auto)
 setup_lifting type_definition_state_control_inst
 
-lift_definition STATE_CONTROL_POP      :: "state_control_inst" is "0x50" by auto
-lift_definition STATE_CONTROL_MLOAD    :: "state_control_inst" is "0x51" by auto
-lift_definition STATE_CONTROL_MSTORE   :: "state_control_inst" is "0x52" by auto
-lift_definition STATE_CONTROL_MSTORE8  :: "state_control_inst" is "0x53" by auto
-lift_definition STATE_CONTROL_SLOAD    :: "state_control_inst" is "0x54" by auto
-lift_definition STATE_CONTROL_SSTORE   :: "state_control_inst" is "0x55" by auto
-lift_definition STATE_CONTROL_JUMP     :: "state_control_inst" is "0x56" by auto
-lift_definition STATE_CONTROL_JUMPI    :: "state_control_inst" is "0x57" by auto
-lift_definition STATE_CONTROL_PC       :: "state_control_inst" is "0x58" by auto
-lift_definition STATE_CONTROL_MSIZE    :: "state_control_inst" is "0x59" by auto
-lift_definition STATE_CONTROL_GAS      :: "state_control_inst" is "0x5a" by auto
-lift_definition STATE_CONTROL_JUMPDEST :: "state_control_inst" is "0x5b" by auto
+lift_definition STATE_CONTROL_POP      :: "state_control_inst" is "0x50"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_MLOAD    :: "state_control_inst" is "0x51"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_MSTORE   :: "state_control_inst" is "0x52"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_MSTORE8  :: "state_control_inst" is "0x53"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_SLOAD    :: "state_control_inst" is "0x54"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_SSTORE   :: "state_control_inst" is "0x55"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_JUMP     :: "state_control_inst" is "0x56"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_JUMPI    :: "state_control_inst" is "0x57"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_PC       :: "state_control_inst" is "0x58"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_MSIZE    :: "state_control_inst" is "0x59"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_GAS      :: "state_control_inst" is "0x5a"
+unfolding state_control_codes_def
+  by(transfer; auto)
+lift_definition STATE_CONTROL_JUMPDEST :: "state_control_inst" is "0x5b"
+unfolding state_control_codes_def
+  by(transfer; auto)
 
-lift_definition STATE_CONTROL_INST :: "state_control_inst => inst" is id by auto
+lift_definition STATE_CONTROL_INST :: "state_control_inst => inst" is id
+  unfolding state_control_codes_def inst_codes_def
+  by(transfer; auto)
 
 free_constructors cases_state_control_inst for
 STATE_CONTROL_POP
@@ -409,8 +571,12 @@ STATE_CONTROL_POP
 | STATE_CONTROL_MSIZE
 | STATE_CONTROL_GAS
 | STATE_CONTROL_JUMPDEST
+  apply(transfer; simp only:set_of_ranges_alt_spec state_control_codes_def; transfer)
+  apply(force simp del:set_upt simp  add:List.upt_def)
+
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+     auto simp add:List.upt_def)+
+
 
 fun "is_state_control_POP" :: "state_control_inst => bool" where
 "is_state_control_POP STATE_CONTROL_POP = True"
@@ -453,13 +619,17 @@ fun "is_state_control_JUMPDEST" :: "state_control_inst => bool" where
 (* 
  * push instructions
  *)
-definition push_codes :: "nat list" where
-"push_codes = (List.upt 0x60 0x80)"
+definition push_codes :: "ranges" where
+"push_codes = mk_ranges[(0x60, 0x80)]"
 declare push_codes_def[simp add]
-typedef push_inst = "set push_codes" by auto
+typedef push_inst = "set_of_ranges push_codes" 
+  unfolding push_codes_def
+  by (transfer; auto)
 setup_lifting type_definition_push_inst
 
-lift_definition PUSH_INST :: "push_inst \<Rightarrow> inst" is id by auto
+lift_definition PUSH_INST :: "push_inst \<Rightarrow> inst" is id
+  unfolding push_codes_def inst_codes_def
+  by(transfer; auto)
 
 typedef nat32 = "{x :: nat . x < 32}"
 proof
@@ -492,8 +662,8 @@ proof-
   hence Mapped : "(0x60 + (n mod 32)) \<in> set (map (\<lambda> x . x + 0x60) (List.upt 0 32))"
     by auto
 
-  then show "make_push n \<in> set push_codes"
-    using List.map_add_upt by auto
+  then show "make_push n \<in> set_of_ranges push_codes"
+    by(transfer; auto)+
 qed
 
 lift_definition PUSH_PUSH :: "nat32 \<Rightarrow> push_inst" is make_push
@@ -511,13 +681,16 @@ proof-
   hence Mapped : "(0x60 + (n mod 32)) \<in> set (map (\<lambda> x . x + 0x60) (List.upt 0 32))"
     by auto
 
-  then show "make_push n \<in> set push_codes"
-    using List.map_add_upt by auto
+  then show "make_push n \<in> set_of_ranges push_codes"
+    by(transfer; auto)+
 qed
 
+
 free_constructors cases_push_inst for PUSH_PUSH
+  apply(transfer; simp only:set_of_ranges_alt_spec push_codes_def; transfer)
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+ 
+     auto simp add:List.upt_def)+
+
 
 fun is_PUSH_PUSH :: "push_inst \<Rightarrow> bool" where
 "is_PUSH_PUSH (PUSH_PUSH _) = True"
@@ -531,10 +704,12 @@ fun is_PUSH_PUSH_n :: "push_inst \<Rightarrow> nat \<Rightarrow> bool" where
 (* 
  * dup instructions 
  *)
-definition dup_codes :: "nat list" where
-"dup_codes = (List.upt 0x80 0x90)"
+definition dup_codes :: "ranges" where
+"dup_codes = mk_ranges[(0x80, 0x90)]"
 declare dup_codes_def[simp add]
-typedef dup_inst = "set dup_codes" by auto
+typedef dup_inst = "set_of_ranges dup_codes" 
+  unfolding dup_codes_def
+  by(transfer; auto)
 setup_lifting type_definition_dup_inst
 
 typedef nat16 = "{x :: nat . x < 16}"
@@ -544,7 +719,9 @@ proof
 qed
 setup_lifting type_definition_nat16
 
-lift_definition DUP_INST :: "dup_inst => inst" is id by auto
+lift_definition DUP_INST :: "dup_inst => inst" is id
+  unfolding dup_codes_def inst_codes_def
+  by(transfer; auto)
 
 lift_definition nat_of_nat16 :: "nat16 \<Rightarrow> nat" is id done
 
@@ -570,8 +747,8 @@ proof-
   hence Mapped : "(0x80 + (n mod 16)) \<in> set (map (\<lambda> x . x + 0x80) (List.upt 0 16))"
     by auto
 
-  then show "make_dup n \<in> set dup_codes"
-    using List.map_add_upt by auto
+  then show "make_dup n \<in> set_of_ranges dup_codes"
+    by (transfer; auto)+
 qed
 
 lift_definition DUP_DUP :: "nat16 \<Rightarrow> dup_inst" is make_dup
@@ -588,13 +765,14 @@ proof-
   hence Mapped : "(0x80 + (n mod 16)) \<in> set (map (\<lambda> x . x + 0x80) (List.upt 0 16))"
     by auto
 
-  then show "make_dup n \<in> set dup_codes"
-    using List.map_add_upt by auto
+  then show "make_dup n \<in> set_of_ranges dup_codes"
+    by(transfer; auto)+
 qed
 
 free_constructors cases_dup_inst for DUP_DUP
+  apply(transfer; simp only:set_of_ranges_alt_spec dup_codes_def; transfer)
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+ 
+     auto simp add:List.upt_def)+
 
 fun is_DUP_DUP :: "dup_inst \<Rightarrow> bool" where
 "is_DUP_DUP (DUP_DUP _) = True"
@@ -608,13 +786,17 @@ fun is_DUP_DUP_n :: "dup_inst \<Rightarrow> nat \<Rightarrow> bool" where
 (* 
  * swap instructions 
  *)
-definition swap_codes :: "nat list" where
-"swap_codes = (List.upt 0x90 0xa0)"
+definition swap_codes :: "ranges" where
+"swap_codes = mk_ranges[(0x90, 0xa0)]"
 declare swap_codes_def[simp add]
-typedef swap_inst = "set swap_codes" by auto
+typedef swap_inst = "set_of_ranges swap_codes"
+  unfolding swap_codes_def
+  by(transfer; auto)
 setup_lifting type_definition_swap_inst
 
-lift_definition SWAP_INST :: "swap_inst => inst" is id by auto
+lift_definition SWAP_INST :: "swap_inst => inst" is id
+  unfolding swap_codes_def inst_codes_def
+  by (transfer; auto)
 
 (* helper for building swap instructions *)
 fun make_swap :: "nat \<Rightarrow> nat" where
@@ -635,8 +817,8 @@ proof-
   hence Mapped : "(0x90 + (n mod 16)) \<in> set (map (\<lambda> x . x + 0x90) (List.upt 0 16))"
     by auto
 
-  then show "make_swap n \<in> set swap_codes"
-    using List.map_add_upt by auto
+  then show "make_swap n \<in> set_of_ranges swap_codes"
+    by(transfer; auto)+
 qed
 
 lift_definition SWAP_SWAP :: "nat16 \<Rightarrow> swap_inst" is make_swap
@@ -653,13 +835,14 @@ proof-
   hence Mapped : "(0x90 + (n mod 16)) \<in> set (map (\<lambda> x . x + 0x90) (List.upt 0 16))"
     by auto
 
-  then show "make_swap n \<in> set swap_codes"
-    using List.map_add_upt by auto
+  then show "make_swap n \<in> set_of_ranges swap_codes"
+    by(transfer; auto)+
 qed
 
 free_constructors cases_swap_inst for SWAP_SWAP
+  apply(transfer; simp only:set_of_ranges_alt_spec swap_codes_def; transfer)
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+     auto simp add:List.upt_def)+
 
 fun is_SWAP_SWAP :: "swap_inst \<Rightarrow> bool" where
 "is_SWAP_SWAP (SWAP_SWAP _) = True"
@@ -674,18 +857,33 @@ fun is_SWAP_SWAP_n :: "swap_inst \<Rightarrow> nat \<Rightarrow> bool" where
  * log instructions 
  *)
 definition log_codes where
-"log_codes = (List.upt 0xa0 0xa5)"
+"log_codes = mk_ranges[(0xa0, 0xa5)]"
 declare log_codes_def[simp]
-typedef log_inst = "set log_codes" by auto
+typedef log_inst = "set_of_ranges log_codes"
+  unfolding log_codes_def
+  by(transfer; auto)
+
 setup_lifting type_definition_log_inst
 
-lift_definition LOG_LOG0 :: "log_inst" is "0xa0" by auto
-lift_definition LOG_LOG1 :: "log_inst" is "0xa1" by auto
-lift_definition LOG_LOG2 :: "log_inst" is "0xa2" by auto
-lift_definition LOG_LOG3 :: "log_inst" is "0xa3" by auto
-lift_definition LOG_LOG4 :: "log_inst" is "0xa4" by auto
+lift_definition LOG_INST :: "log_inst => inst" is id 
+  unfolding inst_codes_def log_codes_def
+  by(transfer; auto)
 
-lift_definition LOG_INST :: "log_inst => inst" is id by auto
+lift_definition LOG_LOG0 :: "log_inst" is "0xa0" 
+  unfolding inst_codes_def log_codes_def
+  by(transfer; auto)
+lift_definition LOG_LOG1 :: "log_inst" is "0xa1"
+  unfolding inst_codes_def log_codes_def
+  by(transfer; auto)
+lift_definition LOG_LOG2 :: "log_inst" is "0xa2"
+  unfolding inst_codes_def log_codes_def
+  by(transfer; auto)
+lift_definition LOG_LOG3 :: "log_inst" is "0xa3"
+  unfolding inst_codes_def log_codes_def
+  by(transfer; auto)
+lift_definition LOG_LOG4 :: "log_inst" is "0xa4"
+  unfolding inst_codes_def log_codes_def
+  by(transfer; auto)
 
 free_constructors cases_log_inst for
 LOG_LOG0
@@ -693,8 +891,10 @@ LOG_LOG0
 | LOG_LOG2
 | LOG_LOG3
 | LOG_LOG4
+  apply(transfer; simp only:set_of_ranges_alt_spec log_codes_def; transfer)
+  apply(force simp del:set_upt simp  add:List.upt_def)
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+     auto simp add:List.upt_def)+
 
 fun "is_log_LOG0" :: "log_inst => bool" where
 "is_log_LOG0 LOG_LOG0 = True"
@@ -716,23 +916,47 @@ fun "is_log_LOG4" :: "log_inst => bool" where
  * EIP615 instructions 
  *)
 definition eip615_codes where
-"eip615_codes = (List.upt 0xb0 0xba)"
+"eip615_codes = mk_ranges[(0xb0, 0xba)]"
 declare eip615_codes_def[simp]
-typedef eip615_inst = "set eip615_codes" by auto
+typedef eip615_inst = "set_of_ranges eip615_codes" 
+  unfolding eip615_codes_def
+  by(transfer; auto)
 setup_lifting type_definition_eip615_inst
 
-lift_definition EIP615_JUMPTO    :: "eip615_inst" is "0xb0" by auto
-lift_definition EIP615_JUMPIF    :: "eip615_inst" is "0xb1" by auto
-lift_definition EIP615_JUMPV     :: "eip615_inst" is "0xb2" by auto
-lift_definition EIP615_JUMPSUB   :: "eip615_inst" is "0xb3" by auto
-lift_definition EIP615_JUMPSUBV  :: "eip615_inst" is "0xb4" by auto
-lift_definition EIP615_BEGINSUB  :: "eip615_inst" is "0xb5" by auto
-lift_definition EIP615_BEGINDATA :: "eip615_inst" is "0xb6" by auto
-lift_definition EIP615_RETURNSUB :: "eip615_inst" is "0xb7" by auto
-lift_definition EIP615_PUTLOCAL  :: "eip615_inst" is "0xb8" by auto
-lift_definition EIP615_GETLOCAL  :: "eip615_inst" is "0xb9" by auto
+lift_definition EIP615_JUMPTO    :: "eip615_inst" is "0xb0"
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition EIP615_JUMPIF    :: "eip615_inst" is "0xb1"
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition EIP615_JUMPV     :: "eip615_inst" is "0xb2"
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition EIP615_JUMPSUB   :: "eip615_inst" is "0xb3"
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition EIP615_JUMPSUBV  :: "eip615_inst" is "0xb4"
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition EIP615_BEGINSUB  :: "eip615_inst" is "0xb5"
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition EIP615_BEGINDATA :: "eip615_inst" is "0xb6"
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition EIP615_RETURNSUB :: "eip615_inst" is "0xb7"
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition EIP615_PUTLOCAL  :: "eip615_inst" is "0xb8"
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition EIP615_GETLOCAL  :: "eip615_inst" is "0xb9"
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
 
-lift_definition EIP615_INST :: "eip615_inst => inst" is id by auto
+lift_definition EIP615_INST :: "eip615_inst => inst" is id
+  unfolding eip615_codes_def inst_codes_def
+  by(transfer; auto)
 
 free_constructors cases_eip615_inst for
 EIP615_JUMPTO
@@ -745,8 +969,11 @@ EIP615_JUMPTO
 | EIP615_RETURNSUB
 | EIP615_PUTLOCAL
 | EIP615_GETLOCAL
+  apply(transfer; simp only:set_of_ranges_alt_spec eip615_codes_def; transfer)
+  apply(force simp del:set_upt simp  add:List.upt_def)
+
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+     auto simp add:List.upt_def)+
 
 fun "is_eip615_JUMPTO" :: "eip615_inst => bool" where
 "is_eip615_JUMPTO EIP615_JUMPTO = True"
@@ -783,20 +1010,38 @@ fun "is_eip615_GETLOCAL" :: "eip615_inst => bool" where
  * cross-contract communication instructions
  *)
 definition comms_codes where
-"comms_codes = (List.upt 0xf0 0xf6) @ [0xfa]"
+"comms_codes = mk_ranges[(0xf0, 0xf6), (0xfa, 0xfb)]"
 declare comms_codes_def[simp]
-typedef comms_inst = "set comms_codes" by auto
+typedef comms_inst = "set_of_ranges comms_codes" 
+  unfolding comms_codes_def
+  by(transfer; auto)
 setup_lifting type_definition_comms_inst
 
-lift_definition COMMS_CREATE       :: "comms_inst" is "0xf0" by auto
-lift_definition COMMS_CALL         :: "comms_inst" is "0xf1" by auto
-lift_definition COMMS_CALLCODE     :: "comms_inst" is "0xf2" by auto
-lift_definition COMMS_RETURN       :: "comms_inst" is "0xf3" by auto
-lift_definition COMMS_DELEGATECALL :: "comms_inst" is "0xf4" by auto
-lift_definition COMMS_CREATE2      :: "comms_inst" is "0xf5" by auto
-lift_definition COMMS_STATICCALL   :: "comms_inst" is "0xfa" by auto
+lift_definition COMMS_CREATE       :: "comms_inst" is "0xf0"
+  unfolding comms_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition COMMS_CALL         :: "comms_inst" is "0xf1"
+  unfolding comms_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition COMMS_CALLCODE     :: "comms_inst" is "0xf2"
+  unfolding comms_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition COMMS_RETURN       :: "comms_inst" is "0xf3"
+  unfolding comms_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition COMMS_DELEGATECALL :: "comms_inst" is "0xf4"
+  unfolding comms_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition COMMS_CREATE2      :: "comms_inst" is "0xf5"
+  unfolding comms_codes_def inst_codes_def
+  by(transfer; auto)
+lift_definition COMMS_STATICCALL   :: "comms_inst" is "0xfa"
+  unfolding comms_codes_def inst_codes_def
+  by(transfer; auto)
 
-lift_definition COMMS_INST :: "comms_inst => inst" is id by auto
+lift_definition COMMS_INST :: "comms_inst => inst" is id
+  unfolding comms_codes_def inst_codes_def
+  by(transfer; auto)
 
 free_constructors cases_comms_inst for
 COMMS_CREATE
@@ -806,8 +1051,12 @@ COMMS_CREATE
 | COMMS_DELEGATECALL
 | COMMS_CREATE2
 | COMMS_STATICCALL
+  apply(transfer; simp only:set_of_ranges_alt_spec comms_codes_def; transfer)
+  apply(force simp del:set_upt simp  add:List.upt_def)
+
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+     auto simp add:List.upt_def)+
+
 
 fun "is_comms_CREATE" :: "comms_inst => bool" where
 "is_comms_CREATE COMMS_CREATE = True"
@@ -836,23 +1085,36 @@ fun "is_comms_STATICCALL" :: "comms_inst => bool" where
  * special halting instructions
  *)
 definition special_halt_codes where
-"special_halt_codes = (List.upt 0xfd 0x100)"
+"special_halt_codes = mk_ranges [(0xfd, 0x100)]"
 declare special_halt_codes_def[simp]
-typedef special_halt_inst = "set special_halt_codes" by auto
+typedef special_halt_inst = "set_of_ranges special_halt_codes" 
+  unfolding special_halt_codes_def inst_codes_def
+  by(transfer; auto)
 setup_lifting type_definition_special_halt_inst
 
-lift_definition SPECIAL_HALT_REVERT       :: "special_halt_inst" is "0xfd" by auto
-lift_definition SPECIAL_HALT_INVALID      :: "special_halt_inst" is "0xfe" by auto
-lift_definition SPECIAL_HALT_SELFDESTRUCT :: "special_halt_inst" is "0xff" by auto
+lift_definition SPECIAL_HALT_REVERT       :: "special_halt_inst" is "0xfd" 
+  unfolding special_halt_codes_def
+  by(transfer; auto)
+lift_definition SPECIAL_HALT_INVALID      :: "special_halt_inst" is "0xfe"
+  unfolding special_halt_codes_def
+  by(transfer; auto)
+lift_definition SPECIAL_HALT_SELFDESTRUCT :: "special_halt_inst" is "0xff"
+  unfolding special_halt_codes_def
+  by(transfer; auto)
 
-lift_definition SPECIAL_HALT_INST :: "special_halt_inst => inst" is id by auto
+lift_definition SPECIAL_HALT_INST :: "special_halt_inst => inst" is id
+  unfolding inst_codes_def special_halt_codes_def
+  by(transfer; auto)
 
 free_constructors cases_special_halt_inst for
 SPECIAL_HALT_REVERT
 | SPECIAL_HALT_INVALID
 | SPECIAL_HALT_SELFDESTRUCT
+  apply(transfer; simp only:set_of_ranges_alt_spec special_halt_codes_def; transfer)
+  apply(force simp del:set_upt simp  add:List.upt_def)
+
   by(transfer;
-     auto simp del:set_upt simp add:List.upt_def)+
+     auto simp add:List.upt_def)+
 
 fun "is_special_halt_REVERT" :: "special_halt_inst => bool" where
 "is_special_halt_REVERT SPECIAL_HALT_REVERT = True"
@@ -870,115 +1132,196 @@ fun "is_special_halt_SELFDESTRUCT" :: "special_halt_inst => bool" where
  *)
 
 (* we are leaving out EIP615 *)
-definition good_codes :: "nat list" where
+definition good_codes :: "ranges" where
 "good_codes = 
-  stop_codes @
-  arith_codes @
-  bits_compare_codes @
-  keccak256_codes @
-  tx_data_codes @
-  chain_data_codes @
-  state_control_codes @
-  push_codes @
-  dup_codes @
-  swap_codes @
-  log_codes @
-  comms_codes @
-  special_halt_codes"
+  Union_ranges
+  [stop_codes,
+   arith_codes,
+   bits_compare_codes,
+   keccak256_codes,
+   tx_data_codes,
+   chain_data_codes,
+   state_control_codes,
+   push_codes,
+   dup_codes,
+   swap_codes,
+   log_codes,
+   comms_codes,
+   special_halt_codes]"
 
-typedef good_inst = "set good_codes"
-  by(auto simp add: good_codes_def)
+typedef good_inst = "set_of_ranges (good_codes)"
+  apply(simp add: good_codes_def)
+  apply(transfer) apply(auto)
+  done
 setup_lifting type_definition_good_inst
 
 lift_definition GOOD_INST :: "good_inst \<Rightarrow> inst" is id
-  by(auto simp add: good_codes_def)
+  by(simp add: good_codes_def; transfer; auto)
 
-(* "more computable" approach to set differencing -
-still not fast enough*)
-
-(*
-fun list_diff :: "'a list \<Rightarrow> 'a list \<Rightarrow> 'a list" where
-"list_diff l [] = l"
-| "list_diff l (x#xs) =
-   list_diff (remove1 x l) xs"
-
-lemma list_diff_set :
-  assumes H : "distinct l1"
-  shows "set (list_diff l1 l2) = set l1 - set l2" using assms
-proof(induction l2 arbitrary: l1)
-case Nil
-  then show ?case by auto
-next
-  case (Cons a l2)
-  then show ?case 
-    by(auto)
-qed
-*)
-(*
-definition bad_codes :: "nat list" where
-"bad_codes = 
-  list_diff (List.upt 0 256) good_codes"
-
-lemma bad_codes_spec :
-  shows "set bad_codes = set (List.upt 0 (256 :: nat)) - set good_codes"
-  unfolding bad_codes_def list_diff_set[OF distinct_upt]
-  by auto
-*)
-
-(* TODO: doing this by hand was pretty painful.
-   If we had a better data structure than lists readily available,
-   we could probably compute this in a reasonable way *)
-definition bad_codes :: "nat list" where
-"bad_codes =
-  [0x0c, 0x0d, 0x0e, 0x0f,
-   0x1e, 0x1f,
-   0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
-   0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f,
-   0x5c, 0x5d, 0x5e, 0x5f,
-   0xa5, 0xa6, 0xa7, 0xa8, 0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf,
-   0xb0, 0xb1, 0xb2, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xb8, 0xb9, 0xba, 0xbb, 0xbc, 0xbd, 0xbe, 0xbf,
-   0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf,
-   0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xd7, 0xd8, 0xd9, 0xda, 0xdb, 0xdc, 0xdd, 0xde, 0xdf,
-   0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef,
-   0xf6, 0xf7, 0xf8, 0xf9,
-   0xfb, 0xfc]"
-
-typedef bad_inst = "set bad_codes" by(auto simp add: bad_codes_def)
+definition bad_codes :: "ranges" where
+"bad_codes = diff_ranges inst_codes good_codes"
+typedef bad_inst = "set_of_ranges bad_codes"
+  apply(simp add: bad_codes_def good_codes_def)
+  apply(transfer) apply(simp)
+  apply(auto)
+  done
 setup_lifting type_definition_bad_inst
 
-lift_definition BAD_INST :: "bad_inst \<Rightarrow> inst" is id by(auto simp add: bad_codes_def)
-
-lemma good_are_insts : "set good_codes \<subseteq> {x . x < 256}"
-  by(auto simp add: good_codes_def)
-
-(*
-lemma good_bad : "set good_codes \<union> set bad_codes = {x . x < 256}"
-  unfolding bad_codes_def good_codes_def
+lift_definition BAD_INST :: "bad_inst \<Rightarrow> inst" is id
+  unfolding bad_codes_def good_codes_def inst_codes_def
+  apply(simp)
+  apply(transfer) apply(simp)
   apply(auto)
-*)
-  
+  done
+
+lemma good_bad_all :
+  "union_ranges good_codes bad_codes = inst_codes"
+  unfolding bad_codes_def good_codes_def
+  by(transfer; simp; transfer; auto)
+
+lemma good_bad_all' :
+  "Union_ranges [
+  stop_codes, 
+  arith_codes,
+  bits_compare_codes,
+  keccak256_codes,
+  tx_data_codes,
+  chain_data_codes,
+  state_control_codes,
+  push_codes,
+  dup_codes,
+  swap_codes,
+  log_codes,
+  comms_codes,
+  special_halt_codes,
+  bad_codes] = inst_codes"
+  unfolding bad_codes_def good_codes_def
+  by(simp; transfer; auto)
+
 lemma cases_inst_helper :
-  assumes Hy :  "(y :: nat) < 256"
-  assumes H1 :  "(\<And>x1. x1 \<in> set stop_codes \<Longrightarrow> y = id x1 \<Longrightarrow> P)"
-  assumes H2 :  "(\<And>x2. x2 \<in> set arith_codes \<Longrightarrow> y = id x2 \<Longrightarrow> P)"
-  assumes H4 :  "(\<And>x4. x4 \<in> set bits_compare_codes \<Longrightarrow> y = id x4 \<Longrightarrow> P)"
-  assumes H5 :  "(\<And>x5. x5 \<in> set keccak256_codes \<Longrightarrow> y = id x5 \<Longrightarrow> P)"
-  assumes H6 :  "(\<And>x6. x6 \<in> set tx_data_codes \<Longrightarrow> y = id x6 \<Longrightarrow> P)"
-  assumes H7 :  "(\<And>x7. x7 \<in> set chain_data_codes \<Longrightarrow> y = id x7 \<Longrightarrow> P)"
-  assumes H8 :  "(\<And>x8. x8 \<in> set state_control_codes \<Longrightarrow> y = id x8 \<Longrightarrow> P)"
-  assumes H9 :  "(\<And>x9. x9 \<in> set push_codes \<Longrightarrow> y = id x9 \<Longrightarrow> P)"
-  assumes H10 : "(\<And>x10. x10 \<in> set dup_codes \<Longrightarrow> y = id x10 \<Longrightarrow> P)"
-  assumes H11 : "(\<And>x11. x11 \<in> set swap_codes \<Longrightarrow> y = id x11 \<Longrightarrow> P)"
-  assumes H12 : "(\<And>x12. x12 \<in> set log_codes \<Longrightarrow> y = id x12 \<Longrightarrow> P)"
-  assumes H13 : "(\<And>x13. x13 \<in> set comms_codes \<Longrightarrow> y = id x13 \<Longrightarrow> P)"
-  assumes H14 : "(\<And>x14. x14 \<in> set special_halt_codes \<Longrightarrow> y = id x14 \<Longrightarrow> P)"
-  assumes H15 : "(\<And>x15. x15 \<in> set bad_codes \<Longrightarrow> y = id x15 \<Longrightarrow> P)"
-  shows P
+assumes H : "y \<in> set_of_ranges inst_codes"
+assumes H1 :  "(\<And>x1. x1 \<in> set_of_ranges stop_codes \<Longrightarrow>
+                  y = id x1 \<Longrightarrow> P)"
+assumes H2 : "(\<And>x2. x2 \<in> set_of_ranges arith_codes \<Longrightarrow>
+                  y = id x2 \<Longrightarrow> P)"
+assumes H3 : "(\<And>x3. x3 \<in> set_of_ranges bits_compare_codes \<Longrightarrow>
+                  y = id x3 \<Longrightarrow> P)"
+assumes H4: "(\<And>x4. x4 \<in> set_of_ranges keccak256_codes \<Longrightarrow>
+                  y = id x4 \<Longrightarrow> P)"
+assumes H5 : "(\<And>x5. x5 \<in> set_of_ranges tx_data_codes \<Longrightarrow>
+                  y = id x5 \<Longrightarrow> P)"
+assumes H6 : "(\<And>x6. x6 \<in> set_of_ranges chain_data_codes \<Longrightarrow>
+                  y = id x6 \<Longrightarrow> P)"
+assumes H7 : "(\<And>x7. x7 \<in> set_of_ranges state_control_codes \<Longrightarrow>
+                  y = id x7 \<Longrightarrow> P)"
+assumes H8 : "(\<And> x8. x8 \<in> set_of_ranges push_codes \<Longrightarrow>
+                  y = id x8 \<Longrightarrow> P)"
+assumes H9 : "(\<And>x9. x9 \<in> set_of_ranges dup_codes \<Longrightarrow>
+                  y = id x9 \<Longrightarrow> P)"
+assumes H10 : "(\<And>x10. x10 \<in> set_of_ranges swap_codes \<Longrightarrow>
+                   y = id x10 \<Longrightarrow> P)"
+assumes H11 : "(\<And>x11. x11 \<in> set_of_ranges log_codes \<Longrightarrow>
+                   y = id x11 \<Longrightarrow> P)"
+assumes H12 : "(\<And>x12. x12 \<in> set_of_ranges comms_codes \<Longrightarrow>
+                   y = id x12 \<Longrightarrow> P)"
+assumes H13 : "(\<And>x13. x13 \<in> set_of_ranges special_halt_codes \<Longrightarrow>
+                   y = id x13 \<Longrightarrow> P)"
+assumes H14 : "(\<And>x14. x14 \<in> set_of_ranges bad_codes \<Longrightarrow>
+                   y = id x14 \<Longrightarrow> P)"
+shows P
+proof-
 
-  sorry
-(*
+  have H' : "member_ranges y (Union_ranges [
+          stop_codes, 
+          arith_codes,
+          bits_compare_codes,
+          keccak256_codes,
+          tx_data_codes,
+          chain_data_codes,
+          state_control_codes,
+          push_codes,
+          dup_codes,
+          swap_codes,
+          log_codes,
+          comms_codes,
+          special_halt_codes,
+          bad_codes])"
+    using H unfolding sym[OF good_bad_all'] member_ranges_spec by(auto)
 
-(* "constructors" for each instruction type *)
+  have Conc' : "(y = y \<longrightarrow> P)"
+  proof(rule Union_ranges_cases[OF _ H', of "\<lambda> x . (y = x \<longrightarrow> P)"] )
+    fix r x
+    assume R_cases :
+    "r \<in> set [stop_codes, arith_codes, bits_compare_codes,
+                    keccak256_codes, tx_data_codes,
+                    chain_data_codes, state_control_codes,
+                    push_codes, dup_codes, swap_codes, log_codes,
+                    comms_codes, special_halt_codes,
+                    bad_codes]"
+    assume R_mem : "member_ranges x r"
+    consider (1) "r = stop_codes" | 
+             (2) "r = arith_codes" |
+             (3) "r = bits_compare_codes" |
+             (4) "r = keccak256_codes" |
+             (5) "r = tx_data_codes" |
+             (6) "r = chain_data_codes" |
+             (7) "r = state_control_codes" |
+             (8) "r = push_codes" |
+             (9) "r = dup_codes" |
+             (10) "r = swap_codes" |
+             (11) "r = log_codes" |
+             (12) "r = comms_codes" |
+             (13) "r = special_halt_codes" |
+             (14) "r = bad_codes"
+      using R_cases by(auto)
+    thus "y = x \<longrightarrow> P"
+    proof cases
+    case 1
+      then show ?thesis using H1 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 2
+      then show ?thesis using H2 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 3
+      then show ?thesis using H3 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 4
+      then show ?thesis using H4 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 5
+      then show ?thesis using H5 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 6
+      then show ?thesis using H6 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 7
+      then show ?thesis using H7 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 8
+      then show ?thesis using H8 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 9
+      then show ?thesis using H9 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 10
+      then show ?thesis using H10 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 11
+      then show ?thesis using H11 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 12
+      then show ?thesis using H12 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 13
+      then show ?thesis using H13 R_mem unfolding member_ranges_spec by(auto)
+    next
+      case 14
+      then show ?thesis using H14 R_mem unfolding member_ranges_spec by(auto)
+    qed
+  qed
+  thus ?thesis by auto
+qed
+
 free_constructors cases_inst for
 STOP_INST
 | ARITH_INST
@@ -994,170 +1337,800 @@ STOP_INST
 | COMMS_INST
 | SPECIAL_HALT_INST
 | BAD_INST
-
-                      apply(transfer)
-  defer
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)  
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail)
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-
-(* apply(rule cases_inst_helper; blast) *)
-
+  apply(transfer)
+  apply(rule cases_inst_helper; blast)
+  apply(transfer; simp add: bad_codes_def good_codes_def; transfer; force; fail)+
+  done
 
 (*
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-  apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-apply(transfer; auto simp: bad_codes_def good_codes_def; fail) 
-*)
-
-(*
-  by (transfer; auto simp: bad_codes_spec good_codes_def; fail)+
-*)
-
-(*
-                      apply(transfer;
-  match conclusion in "x = y" for x y \<Rightarrow> \<open>transfer; 
-  fastforce simp add: bad_codes_def good_codes_def
-List.upt_def simp del: set_upt\<close>
-      | match conclusion in"x \<noteq> y" for x y \<Rightarrow>  \<open>transfer; 
-  fastforce simp add: bad_codes_def good_codes_def
-List.upt_def simp del: set_upt\<close>
-      | rule cases_inst_helper; blast)
-*)
+ * Having defined inst, now we can define some further abbreviations
+ *)
 
 
-                   
 
 
-(*
-                      apply(transfer;
-  fastforce simp add: bad_codes_def good_codes_def
-List.upt_def simp del: set_upt; fail)+
-*)
-(*
-                      apply(match premises in I : "\<And> P y . y < 256"  \<Rightarrow>
-\<open>simp only: stop_codes_def\<close>)
-*)
+definition is_STOP :: "inst => bool" where
+"is_STOP i ==
+  (case i of STOP_INST _ => True
+  | _ => False)"
+  
+abbreviation eSTOP :: "inst" where
+"eSTOP == STOP_INST STOP_STOP"
 
-(*
-(rule cases_inst_helper; blast)[1])
-*)
-(*
-  apply( auto simp del:set_upt simp add:List.upt_def)+
-                      defer
-               apply(transfer; force)+
-  *)
-*)
+definition is_eSTOP :: "inst => bool" where
+"is_eSTOP i ==
+  (case i of eSTOP => True
+  | _ => False)"
+
+
+definition is_ARITH :: "inst => bool" where
+"is_ARITH i ==
+  (case i of ARITH_INST _ => True
+  | _ => False)"
+  
+abbreviation eADD :: "inst" where
+"eADD == ARITH_INST ARITH_ADD"
+
+definition is_eADD :: "inst => bool" where
+"is_eADD i ==
+  (case i of eADD => True
+  | _ => False)"
+
+
+abbreviation eMUL :: "inst" where
+"eMUL == ARITH_INST ARITH_MUL"
+
+definition is_eMUL :: "inst => bool" where
+"is_eMUL i ==
+  (case i of eMUL => True
+  | _ => False)"
+
+
+abbreviation eSUB :: "inst" where
+"eSUB == ARITH_INST ARITH_SUB"
+
+definition is_eSUB :: "inst => bool" where
+"is_eSUB i ==
+  (case i of eSUB => True
+  | _ => False)"
+
+
+abbreviation eDIV :: "inst" where
+"eDIV == ARITH_INST ARITH_DIV"
+
+definition is_eDIV :: "inst => bool" where
+"is_eDIV i ==
+  (case i of eDIV => True
+  | _ => False)"
+
+
+abbreviation eSDIV :: "inst" where
+"eSDIV == ARITH_INST ARITH_SDIV"
+
+definition is_eSDIV :: "inst => bool" where
+"is_eSDIV i ==
+  (case i of eSDIV => True
+  | _ => False)"
+
+
+abbreviation eMOD :: "inst" where
+"eMOD == ARITH_INST ARITH_MOD"
+
+definition is_eMOD :: "inst => bool" where
+"is_eMOD i ==
+  (case i of eMOD => True
+  | _ => False)"
+
+
+abbreviation eSMOD :: "inst" where
+"eSMOD == ARITH_INST ARITH_SMOD"
+
+definition is_eSMOD :: "inst => bool" where
+"is_eSMOD i ==
+  (case i of eSMOD => True
+  | _ => False)"
+
+
+abbreviation eADDMOD :: "inst" where
+"eADDMOD == ARITH_INST ARITH_ADDMOD"
+
+definition is_eADDMOD :: "inst => bool" where
+"is_eADDMOD i ==
+  (case i of eADDMOD => True
+  | _ => False)"
+
+
+abbreviation eMULMOD :: "inst" where
+"eMULMOD == ARITH_INST ARITH_MULMOD"
+
+definition is_eMULMOD :: "inst => bool" where
+"is_eMULMOD i ==
+  (case i of eMULMOD => True
+  | _ => False)"
+
+
+abbreviation eEXP :: "inst" where
+"eEXP == ARITH_INST ARITH_EXP"
+
+definition is_eEXP :: "inst => bool" where
+"is_eEXP i ==
+  (case i of eEXP => True
+  | _ => False)"
+
+
+abbreviation eSIGNEXTEND :: "inst" where
+"eSIGNEXTEND == ARITH_INST ARITH_SIGNEXTEND"
+
+definition is_eSIGNEXTEND :: "inst => bool" where
+"is_eSIGNEXTEND i ==
+  (case i of eSIGNEXTEND => True
+  | _ => False)"
+
+
+definition is_BITS_COMPARE :: "inst => bool" where
+"is_BITS_COMPARE i ==
+  (case i of BITS_COMPARE_INST _ => True
+  | _ => False)"
+  
+abbreviation eLT :: "inst" where
+"eLT == BITS_COMPARE_INST BITS_COMPARE_LT"
+
+definition is_eLT :: "inst => bool" where
+"is_eLT i ==
+  (case i of eLT => True
+  | _ => False)"
+
+
+abbreviation eGT :: "inst" where
+"eGT == BITS_COMPARE_INST BITS_COMPARE_GT"
+
+definition is_eGT :: "inst => bool" where
+"is_eGT i ==
+  (case i of eGT => True
+  | _ => False)"
+
+
+abbreviation eSLT :: "inst" where
+"eSLT == BITS_COMPARE_INST BITS_COMPARE_SLT"
+
+definition is_eSLT :: "inst => bool" where
+"is_eSLT i ==
+  (case i of eSLT => True
+  | _ => False)"
+
+
+abbreviation eSGT :: "inst" where
+"eSGT == BITS_COMPARE_INST BITS_COMPARE_SGT"
+
+definition is_eSGT :: "inst => bool" where
+"is_eSGT i ==
+  (case i of eSGT => True
+  | _ => False)"
+
+
+abbreviation eEQ :: "inst" where
+"eEQ == BITS_COMPARE_INST BITS_COMPARE_EQ"
+
+definition is_eEQ :: "inst => bool" where
+"is_eEQ i ==
+  (case i of eEQ => True
+  | _ => False)"
+
+
+abbreviation eISZERO :: "inst" where
+"eISZERO == BITS_COMPARE_INST BITS_COMPARE_ISZERO"
+
+definition is_eISZERO :: "inst => bool" where
+"is_eISZERO i ==
+  (case i of eISZERO => True
+  | _ => False)"
+
+
+abbreviation eAND :: "inst" where
+"eAND == BITS_COMPARE_INST BITS_COMPARE_AND"
+
+definition is_eAND :: "inst => bool" where
+"is_eAND i ==
+  (case i of eAND => True
+  | _ => False)"
+
+
+abbreviation eOR :: "inst" where
+"eOR == BITS_COMPARE_INST BITS_COMPARE_OR"
+
+definition is_eOR :: "inst => bool" where
+"is_eOR i ==
+  (case i of eOR => True
+  | _ => False)"
+
+
+abbreviation eXOR :: "inst" where
+"eXOR == BITS_COMPARE_INST BITS_COMPARE_XOR"
+
+definition is_eXOR :: "inst => bool" where
+"is_eXOR i ==
+  (case i of eXOR => True
+  | _ => False)"
+
+
+abbreviation eNOT :: "inst" where
+"eNOT == BITS_COMPARE_INST BITS_COMPARE_NOT"
+
+definition is_eNOT :: "inst => bool" where
+"is_eNOT i ==
+  (case i of eNOT => True
+  | _ => False)"
+
+
+abbreviation eBYTE :: "inst" where
+"eBYTE == BITS_COMPARE_INST BITS_COMPARE_BYTE"
+
+definition is_eBYTE :: "inst => bool" where
+"is_eBYTE i ==
+  (case i of eBYTE => True
+  | _ => False)"
+
+
+abbreviation eSHL :: "inst" where
+"eSHL == BITS_COMPARE_INST BITS_COMPARE_SHL"
+
+definition is_eSHL :: "inst => bool" where
+"is_eSHL i ==
+  (case i of eSHL => True
+  | _ => False)"
+
+
+abbreviation eSHR :: "inst" where
+"eSHR == BITS_COMPARE_INST BITS_COMPARE_SHR"
+
+definition is_eSHR :: "inst => bool" where
+"is_eSHR i ==
+  (case i of eSHR => True
+  | _ => False)"
+
+
+abbreviation eSAR :: "inst" where
+"eSAR == BITS_COMPARE_INST BITS_COMPARE_SAR"
+
+definition is_eSAR :: "inst => bool" where
+"is_eSAR i ==
+  (case i of eSAR => True
+  | _ => False)"
+
+
+definition is_KECCAK256 :: "inst => bool" where
+"is_KECCAK256 i ==
+  (case i of KECCAK256_INST _ => True
+  | _ => False)"
+  
+abbreviation eKECCAK256 :: "inst" where
+"eKECCAK256 == KECCAK256_INST KECCAK256_KECCAK256"
+
+definition is_eKECCAK256 :: "inst => bool" where
+"is_eKECCAK256 i ==
+  (case i of eKECCAK256 => True
+  | _ => False)"
+
+
+definition is_TX_DATA :: "inst => bool" where
+"is_TX_DATA i ==
+  (case i of TX_DATA_INST _ => True
+  | _ => False)"
+  
+abbreviation eADDRESS :: "inst" where
+"eADDRESS == TX_DATA_INST TX_DATA_ADDRESS"
+
+definition is_eADDRESS :: "inst => bool" where
+"is_eADDRESS i ==
+  (case i of eADDRESS => True
+  | _ => False)"
+
+
+abbreviation eBALANCE :: "inst" where
+"eBALANCE == TX_DATA_INST TX_DATA_BALANCE"
+
+definition is_eBALANCE :: "inst => bool" where
+"is_eBALANCE i ==
+  (case i of eBALANCE => True
+  | _ => False)"
+
+
+abbreviation eORIGIN :: "inst" where
+"eORIGIN == TX_DATA_INST TX_DATA_ORIGIN"
+
+definition is_eORIGIN :: "inst => bool" where
+"is_eORIGIN i ==
+  (case i of eORIGIN => True
+  | _ => False)"
+
+
+abbreviation eCALLER :: "inst" where
+"eCALLER == TX_DATA_INST TX_DATA_CALLER"
+
+definition is_eCALLER :: "inst => bool" where
+"is_eCALLER i ==
+  (case i of eCALLER => True
+  | _ => False)"
+
+
+abbreviation eCALLVALUE :: "inst" where
+"eCALLVALUE == TX_DATA_INST TX_DATA_CALLVALUE"
+
+definition is_eCALLVALUE :: "inst => bool" where
+"is_eCALLVALUE i ==
+  (case i of eCALLVALUE => True
+  | _ => False)"
+
+
+abbreviation eCALLDATALOAD :: "inst" where
+"eCALLDATALOAD == TX_DATA_INST TX_DATA_CALLDATALOAD"
+
+definition is_eCALLDATALOAD :: "inst => bool" where
+"is_eCALLDATALOAD i ==
+  (case i of eCALLDATALOAD => True
+  | _ => False)"
+
+
+abbreviation eCALLDATASIZE :: "inst" where
+"eCALLDATASIZE == TX_DATA_INST TX_DATA_CALLDATASIZE"
+
+definition is_eCALLDATASIZE :: "inst => bool" where
+"is_eCALLDATASIZE i ==
+  (case i of eCALLDATASIZE => True
+  | _ => False)"
+
+
+abbreviation eCALLDATACOPY :: "inst" where
+"eCALLDATACOPY == TX_DATA_INST TX_DATA_CALLDATACOPY"
+
+definition is_eCALLDATACOPY :: "inst => bool" where
+"is_eCALLDATACOPY i ==
+  (case i of eCALLDATACOPY => True
+  | _ => False)"
+
+
+abbreviation eCODESIZE :: "inst" where
+"eCODESIZE == TX_DATA_INST TX_DATA_CODESIZE"
+
+definition is_eCODESIZE :: "inst => bool" where
+"is_eCODESIZE i ==
+  (case i of eCODESIZE => True
+  | _ => False)"
+
+
+abbreviation eCODECOPY :: "inst" where
+"eCODECOPY == TX_DATA_INST TX_DATA_CODECOPY"
+
+definition is_eCODECOPY :: "inst => bool" where
+"is_eCODECOPY i ==
+  (case i of eCODECOPY => True
+  | _ => False)"
+
+
+abbreviation eGASPRICE :: "inst" where
+"eGASPRICE == TX_DATA_INST TX_DATA_GASPRICE"
+
+definition is_eGASPRICE :: "inst => bool" where
+"is_eGASPRICE i ==
+  (case i of eGASPRICE => True
+  | _ => False)"
+
+
+abbreviation eEXTCODESIZE :: "inst" where
+"eEXTCODESIZE == TX_DATA_INST TX_DATA_EXTCODESIZE"
+
+definition is_eEXTCODESIZE :: "inst => bool" where
+"is_eEXTCODESIZE i ==
+  (case i of eEXTCODESIZE => True
+  | _ => False)"
+
+
+abbreviation eEXTCODECOPY :: "inst" where
+"eEXTCODECOPY == TX_DATA_INST TX_DATA_EXTCODECOPY"
+
+definition is_eEXTCODECOPY :: "inst => bool" where
+"is_eEXTCODECOPY i ==
+  (case i of eEXTCODECOPY => True
+  | _ => False)"
+
+
+abbreviation eRETURNDATASIZE :: "inst" where
+"eRETURNDATASIZE == TX_DATA_INST TX_DATA_RETURNDATASIZE"
+
+definition is_eRETURNDATASIZE :: "inst => bool" where
+"is_eRETURNDATASIZE i ==
+  (case i of eRETURNDATASIZE => True
+  | _ => False)"
+
+
+abbreviation eRETURNDATACOPY :: "inst" where
+"eRETURNDATACOPY == TX_DATA_INST TX_DATA_RETURNDATACOPY"
+
+definition is_eRETURNDATACOPY :: "inst => bool" where
+"is_eRETURNDATACOPY i ==
+  (case i of eRETURNDATACOPY => True
+  | _ => False)"
+
+
+abbreviation eEXTCODEHASH :: "inst" where
+"eEXTCODEHASH == TX_DATA_INST TX_DATA_EXTCODEHASH"
+
+definition is_eEXTCODEHASH :: "inst => bool" where
+"is_eEXTCODEHASH i ==
+  (case i of eEXTCODEHASH => True
+  | _ => False)"
+
+
+definition is_CHAIN_DATA :: "inst => bool" where
+"is_CHAIN_DATA i ==
+  (case i of CHAIN_DATA_INST _ => True
+  | _ => False)"
+  
+abbreviation eBLOCKHASH :: "inst" where
+"eBLOCKHASH == CHAIN_DATA_INST CHAIN_DATA_BLOCKHASH"
+
+definition is_eBLOCKHASH :: "inst => bool" where
+"is_eBLOCKHASH i ==
+  (case i of eBLOCKHASH => True
+  | _ => False)"
+
+
+abbreviation eCOINBASE :: "inst" where
+"eCOINBASE == CHAIN_DATA_INST CHAIN_DATA_COINBASE"
+
+definition is_eCOINBASE :: "inst => bool" where
+"is_eCOINBASE i ==
+  (case i of eCOINBASE => True
+  | _ => False)"
+
+
+abbreviation eTIMESTAMP :: "inst" where
+"eTIMESTAMP == CHAIN_DATA_INST CHAIN_DATA_TIMESTAMP"
+
+definition is_eTIMESTAMP :: "inst => bool" where
+"is_eTIMESTAMP i ==
+  (case i of eTIMESTAMP => True
+  | _ => False)"
+
+
+abbreviation eNUMBER :: "inst" where
+"eNUMBER == CHAIN_DATA_INST CHAIN_DATA_NUMBER"
+
+definition is_eNUMBER :: "inst => bool" where
+"is_eNUMBER i ==
+  (case i of eNUMBER => True
+  | _ => False)"
+
+
+abbreviation eDIFFICULTY :: "inst" where
+"eDIFFICULTY == CHAIN_DATA_INST CHAIN_DATA_DIFFICULTY"
+
+definition is_eDIFFICULTY :: "inst => bool" where
+"is_eDIFFICULTY i ==
+  (case i of eDIFFICULTY => True
+  | _ => False)"
+
+
+abbreviation eCHAINID :: "inst" where
+"eCHAINID == CHAIN_DATA_INST CHAIN_DATA_CHAINID"
+
+definition is_eCHAINID :: "inst => bool" where
+"is_eCHAINID i ==
+  (case i of eCHAINID => True
+  | _ => False)"
+
+
+abbreviation eSELFBALANCE :: "inst" where
+"eSELFBALANCE == CHAIN_DATA_INST CHAIN_DATA_SELFBALANCE"
+
+definition is_eSELFBALANCE :: "inst => bool" where
+"is_eSELFBALANCE i ==
+  (case i of eSELFBALANCE => True
+  | _ => False)"
+
+
+definition is_STATE_CONTROL :: "inst => bool" where
+"is_STATE_CONTROL i ==
+  (case i of STATE_CONTROL_INST _ => True
+  | _ => False)"
+  
+abbreviation ePOP :: "inst" where
+"ePOP == STATE_CONTROL_INST STATE_CONTROL_POP"
+
+definition is_ePOP :: "inst => bool" where
+"is_ePOP i ==
+  (case i of ePOP => True
+  | _ => False)"
+
+
+abbreviation eMLOAD :: "inst" where
+"eMLOAD == STATE_CONTROL_INST STATE_CONTROL_MLOAD"
+
+definition is_eMLOAD :: "inst => bool" where
+"is_eMLOAD i ==
+  (case i of eMLOAD => True
+  | _ => False)"
+
+
+abbreviation eMSTORE :: "inst" where
+"eMSTORE == STATE_CONTROL_INST STATE_CONTROL_MSTORE"
+
+definition is_eMSTORE :: "inst => bool" where
+"is_eMSTORE i ==
+  (case i of eMSTORE => True
+  | _ => False)"
+
+
+abbreviation eMSTORE8 :: "inst" where
+"eMSTORE8 == STATE_CONTROL_INST STATE_CONTROL_MSTORE8"
+
+definition is_eMSTORE8 :: "inst => bool" where
+"is_eMSTORE8 i ==
+  (case i of eMSTORE8 => True
+  | _ => False)"
+
+
+abbreviation eSLOAD :: "inst" where
+"eSLOAD == STATE_CONTROL_INST STATE_CONTROL_SLOAD"
+
+definition is_eSLOAD :: "inst => bool" where
+"is_eSLOAD i ==
+  (case i of eSLOAD => True
+  | _ => False)"
+
+
+abbreviation eSSTORE :: "inst" where
+"eSSTORE == STATE_CONTROL_INST STATE_CONTROL_SSTORE"
+
+definition is_eSSTORE :: "inst => bool" where
+"is_eSSTORE i ==
+  (case i of eSSTORE => True
+  | _ => False)"
+
+
+abbreviation eJUMP :: "inst" where
+"eJUMP == STATE_CONTROL_INST STATE_CONTROL_JUMP"
+
+definition is_eJUMP :: "inst => bool" where
+"is_eJUMP i ==
+  (case i of eJUMP => True
+  | _ => False)"
+
+
+abbreviation eJUMPI :: "inst" where
+"eJUMPI == STATE_CONTROL_INST STATE_CONTROL_JUMPI"
+
+definition is_eJUMPI :: "inst => bool" where
+"is_eJUMPI i ==
+  (case i of eJUMPI => True
+  | _ => False)"
+
+
+abbreviation ePC :: "inst" where
+"ePC == STATE_CONTROL_INST STATE_CONTROL_PC"
+
+definition is_ePC :: "inst => bool" where
+"is_ePC i ==
+  (case i of ePC => True
+  | _ => False)"
+
+
+abbreviation eMSIZE :: "inst" where
+"eMSIZE == STATE_CONTROL_INST STATE_CONTROL_MSIZE"
+
+definition is_eMSIZE :: "inst => bool" where
+"is_eMSIZE i ==
+  (case i of eMSIZE => True
+  | _ => False)"
+
+
+abbreviation eGAS :: "inst" where
+"eGAS == STATE_CONTROL_INST STATE_CONTROL_GAS"
+
+definition is_eGAS :: "inst => bool" where
+"is_eGAS i ==
+  (case i of eGAS => True
+  | _ => False)"
+
+
+abbreviation eJUMPDEST :: "inst" where
+"eJUMPDEST == STATE_CONTROL_INST STATE_CONTROL_JUMPDEST"
+
+definition is_eJUMPDEST :: "inst => bool" where
+"is_eJUMPDEST i ==
+  (case i of eJUMPDEST => True
+  | _ => False)"
+
+definition is_PUSH :: "inst => bool" where
+"is_PUSH i ==
+  (case i of PUSH_INST _ => True
+  | _ => False)"
+
+(* NB: we cannot pattern match on this. *)
+abbreviation mkPUSH :: "nat \<Rightarrow> inst" where
+"mkPUSH n \<equiv> PUSH_INST (MAKE_PUSH n)"
+
+abbreviation ePUSH :: "nat32 \<Rightarrow> inst" where
+"ePUSH n \<equiv> PUSH_INST (PUSH_PUSH n)"
+
+  
+definition is_DUP :: "inst => bool" where
+"is_DUP i ==
+  (case i of DUP_INST _ => True
+  | _ => False)"
+
+(* NB: we cannot pattern match on this. *)
+abbreviation mkDUP :: "nat \<Rightarrow> inst" where
+"mkDUP n \<equiv> DUP_INST (MAKE_DUP n)"
+
+abbreviation eDUP :: "nat16 \<Rightarrow> inst" where
+"eDUP n \<equiv> DUP_INST (DUP_DUP n)"
+
+  
+definition is_SWAP :: "inst => bool" where
+"is_SWAP i ==
+  (case i of SWAP_INST _ => True
+  | _ => False)"
+
+(* NB: we cannot pattern match on this. *)
+abbreviation mkSWAP :: "nat \<Rightarrow> inst" where
+"mkSWAP n \<equiv> SWAP_INST (MAKE_SWAP n)"
+
+abbreviation eSWAP :: "nat16 \<Rightarrow> inst" where
+"eSWAP n \<equiv> SWAP_INST (SWAP_SWAP n)"
+
+  
+definition is_LOG :: "inst => bool" where
+"is_LOG i ==
+  (case i of LOG_INST _ => True
+  | _ => False)"
+  
+abbreviation eLOG0 :: "inst" where
+"eLOG0 == LOG_INST LOG_LOG0"
+
+definition is_eLOG0 :: "inst => bool" where
+"is_eLOG0 i ==
+  (case i of eLOG0 => True
+  | _ => False)"
+
+
+abbreviation eLOG1 :: "inst" where
+"eLOG1 == LOG_INST LOG_LOG1"
+
+definition is_eLOG1 :: "inst => bool" where
+"is_eLOG1 i ==
+  (case i of eLOG1 => True
+  | _ => False)"
+
+
+abbreviation eLOG2 :: "inst" where
+"eLOG2 == LOG_INST LOG_LOG2"
+
+definition is_eLOG2 :: "inst => bool" where
+"is_eLOG2 i ==
+  (case i of eLOG2 => True
+  | _ => False)"
+
+
+abbreviation eLOG3 :: "inst" where
+"eLOG3 == LOG_INST LOG_LOG3"
+
+definition is_eLOG3 :: "inst => bool" where
+"is_eLOG3 i ==
+  (case i of eLOG3 => True
+  | _ => False)"
+
+
+abbreviation eLOG4 :: "inst" where
+"eLOG4 == LOG_INST LOG_LOG4"
+
+definition is_eLOG4 :: "inst => bool" where
+"is_eLOG4 i ==
+  (case i of eLOG4 => True
+  | _ => False)"
+
+(* EIP615 instructions would go here *)
+
+definition is_COMMS :: "inst => bool" where
+"is_COMMS i ==
+  (case i of COMMS_INST _ => True
+  | _ => False)"
+  
+abbreviation eCREATE :: "inst" where
+"eCREATE == COMMS_INST COMMS_CREATE"
+
+definition is_eCREATE :: "inst => bool" where
+"is_eCREATE i ==
+  (case i of eCREATE => True
+  | _ => False)"
+
+
+abbreviation eCALL :: "inst" where
+"eCALL == COMMS_INST COMMS_CALL"
+
+definition is_eCALL :: "inst => bool" where
+"is_eCALL i ==
+  (case i of eCALL => True
+  | _ => False)"
+
+
+abbreviation eCALLCODE :: "inst" where
+"eCALLCODE == COMMS_INST COMMS_CALLCODE"
+
+definition is_eCALLCODE :: "inst => bool" where
+"is_eCALLCODE i ==
+  (case i of eCALLCODE => True
+  | _ => False)"
+
+
+abbreviation eRETURN :: "inst" where
+"eRETURN == COMMS_INST COMMS_RETURN"
+
+definition is_eRETURN :: "inst => bool" where
+"is_eRETURN i ==
+  (case i of eRETURN => True
+  | _ => False)"
+
+
+abbreviation eDELEGATECALL :: "inst" where
+"eDELEGATECALL == COMMS_INST COMMS_DELEGATECALL"
+
+definition is_eDELEGATECALL :: "inst => bool" where
+"is_eDELEGATECALL i ==
+  (case i of eDELEGATECALL => True
+  | _ => False)"
+
+
+abbreviation eCREATE2 :: "inst" where
+"eCREATE2 == COMMS_INST COMMS_CREATE2"
+
+definition is_eCREATE2 :: "inst => bool" where
+"is_eCREATE2 i ==
+  (case i of eCREATE2 => True
+  | _ => False)"
+
+
+abbreviation eSTATICCALL :: "inst" where
+"eSTATICCALL == COMMS_INST COMMS_STATICCALL"
+
+definition is_eSTATICCALL :: "inst => bool" where
+"is_eSTATICCALL i ==
+  (case i of eSTATICCALL => True
+  | _ => False)"
+
+
+definition is_SPECIAL_HALT :: "inst => bool" where
+"is_SPECIAL_HALT i ==
+  (case i of SPECIAL_HALT_INST _ => True
+  | _ => False)"
+  
+abbreviation eREVERT :: "inst" where
+"eREVERT == SPECIAL_HALT_INST SPECIAL_HALT_REVERT"
+
+definition is_eREVERT :: "inst => bool" where
+"is_eREVERT i ==
+  (case i of eREVERT => True
+  | _ => False)"
+
+
+abbreviation eINVALID :: "inst" where
+"eINVALID == SPECIAL_HALT_INST SPECIAL_HALT_INVALID"
+
+definition is_eINVALID :: "inst => bool" where
+"is_eINVALID i ==
+  (case i of eINVALID => True
+  | _ => False)"
+
+
+abbreviation eSELFDESTRUCT :: "inst" where
+"eSELFDESTRUCT == SPECIAL_HALT_INST SPECIAL_HALT_SELFDESTRUCT"
+
+definition is_eSELFDESTRUCT :: "inst => bool" where
+"is_eSELFDESTRUCT i ==
+  (case i of eSELFDESTRUCT => True
+  | _ => False)"
+
+  
 
 end
   

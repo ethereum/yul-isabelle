@@ -1,0 +1,24 @@
+
+
+#set(
+$instructions =
+{"stop" : ["stop"]
+,"arith" : ["add", "mul", "sub", "div", "sdiv", "mod", "smod", "addmod", "mulmod", "exp", "signextend" ]
+,"compare" : ["lt", "gt", "slt", "sgt", "eq", "iszero"]
+,"bits" : ["and", "or", "xor", "not", "byte", "shl", "shr", "sar"]
+,"keccak256" : ["keccak256"]
+,"tx_data" : ["address", "balance", "origin", "caller", "callvalue", "calldataload", "calldatasize"
+             ,"calldatacopy", "codesize", "codecopy", "gasprice", "extcodesize", "extcodecopy"
+             ,"returndatasize", "returndatacopy", "extcodehash"]
+,"chain_data" : ["blockhash", "coinbase", "timestamp", "number", "difficulty", "chainid", "selfbalance"]
+,"state_control" : ["pop", "mload", "mstore", "mstore8", "sload", "sstore", "jump", "jumpi", "pc"
+                   ,"msize", "gas", "jumpdest"]
+,"push" : "push"
+,"dup" : "dup"
+,"swap" : "swap"
+,"log" : ["log0", "log1", "log2", "log3", "log4"]
+,"eip615" : ["jumpto", "jumpif", "jumpv", "jumpsub", "jumpsubv"
+            ,"beginsub", "begindata", "returnsub", "putlocal", "getlocal"]
+,"comms" : ["create", "call", "callcode", "return", "delegatecall", "create2", "staticcall"]
+,"special_halt" : ["revert", "invalid", "selfdestruct"]
+})
