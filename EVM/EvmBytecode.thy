@@ -19,6 +19,7 @@ proof-
 qed
 setup_lifting type_definition_inst
 
+
 (* 
  * begin opcodes
 *)
@@ -1322,6 +1323,21 @@ proof-
   thus ?thesis by auto
 qed
 
+lift_definition parse_byte_inst :: "8 word \<Rightarrow> inst"
+is unat
+proof-
+  fix wd :: "8 word"
+  show "unat wd \<in> set_of_ranges inst_codes"
+    unfolding inst_codes_def
+  proof(transfer)
+    fix wd :: int
+    show "(nat \<circ> take_bit LENGTH(8)) wd
+          \<in> set_of_ranges' (mk_ranges' [(0, 256)])"
+      using Bits_Int.bintr_lt2p[of "8" "wd"]
+      by simp
+  qed
+qed
+
 free_constructors cases_inst for
 STOP_INST
 | ARITH_INST
@@ -1345,8 +1361,6 @@ STOP_INST
 (*
  * Having defined inst, now we can define some further abbreviations
  *)
-
-
 
 
 definition is_STOP :: "inst => bool" where
@@ -2130,7 +2144,57 @@ definition is_eSELFDESTRUCT :: "inst => bool" where
   (case i of eSELFDESTRUCT => True
   | _ => False)"
 
-  
 
+(*
+ * Parsing bytes as instructions
+ * member_ranges
+ * in order to avoid issues with the code generator, I think we would need to do
+ * something like this for all instructions...
+ *)
+fun parse_stop_inst :: "nat \<Rightarrow> inst" where
+"parse_stop_inst _ = eSTOP"
+
+fun parse_arith_inst :: "nat \<Rightarrow> inst" where
+"parse_arith_inst n =
+  (if n = 0x01 then eADD else
+  (if n = 0x02 then eMUL else
+  (if n = 0x03 then eSUB else
+  (if n = 0x04 then eDIV else
+  (if n = 0x05 then eSDIV else
+  (if n = 0x06 then eMOD else   
+  (if n = 0x07 then eSMOD else
+  (if n = 0x08 then eADDMOD else
+  (if n = 0x09 then eMULMOD else
+  (if n = 0x0a then eEXP else
+  (if n = 0x0b then eSIGNEXTEND else
+   eADD)))))))))))"
+
+
+
+(*
+
+fun parse_stop_inst w where
+"parse_stop_inst 4 = 
+
+*)
+
+(*
+fun parse_byte_inst :: "nat \<Rightarrow> inst" where
+"parse_byte_inst w =
+  (if member_ranges w stop_codes then parse_stop_inst w else
+  (if member_ranges w arith_codes then parse_arith_inst w ele
+  (if member_ranges w bits_compare_codes then parse_bits_compare_inst w else
+  (if member_ranges w keccak256_codes then parse_keccak256_inst w else
+  (if member_ranges w tx_data_codes then parse_tx_data_inst w else
+  (if member_ranges w chain_data_codes then parse_chain_data_inst w else
+  (if member_ranges w state_control_codes then parse_state_control_inst w else
+  (if member_ranges w push_codes then parse_push_inst w else
+  (if member_ranges w dup_codes then parse_dup_inst w else
+  (if member_ranges w swap_codes then parse_swap_inst w else
+  (if member_ranges w log_codes then parse_log_inst w else
+  (if member_ranges w comms_codes then parse_comms_inst w else
+  (if member_ranges w special_halt_codes then parse_special_halt_inst w else
+   parse_bad_codes w)))))))))))))
+*)
 end
   

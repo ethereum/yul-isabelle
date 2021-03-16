@@ -78,8 +78,6 @@ definition hexwrite1 :: "nat \<Rightarrow> char" where
                 if c = 15 then CHR ''f'' else undefined)"
 
 
-value "(1 < (0::nat))"
-
 (*
 lemma hexread1_hexwrite1 : "hexread1_dom c \<Longrightarrow> hexwrite1 (hexread1 c) = c"
   apply (auto simp add:hexread1_dom_def hexread1_def hexwrite1_def)
@@ -106,19 +104,10 @@ lemma hexwrite1_help :
 proof(induction n, auto)
 qed 
 
-(*
-lemma hexwrite1_hexread1 : "hexwrite1_dom n \<Longrightarrow> hexread1 (hexwrite1 n) = n"
-  apply(auto simp add:hexwrite1_dom_def hexwrite1_def)
-                  apply(auto simp add:hexread1_def)
-                  apply(insert hexwrite1_help, auto)
-  done
-*)
-
 definition hexread2 :: "char \<Rightarrow> char \<Rightarrow> int" where
 "hexread2 c1 c2 = (16 * (int (hexread1 c1)) + int (hexread1 c2))"
 
 (* we need to reverse the input list? *)
-(* TODO: later handle zero padding for odd numbers of bytes *)
 fun hexread' :: "char list \<Rightarrow> int \<Rightarrow> int" where
 "hexread' [] n = n"
 | "hexread' [_] _ = undefined"
@@ -169,10 +158,10 @@ value "hex_splits
 
 (* decimal reading/writing - for use in generating error messages *)
 
-definition decwrite1_dom :: "nat \<Rightarrow> bool" where
+definition decwrite1_dom :: "int \<Rightarrow> bool" where
 "decwrite1_dom n = (n < 10)"
 
-definition decwrite1 :: "nat \<Rightarrow> char" where
+definition decwrite1 :: "int \<Rightarrow> char" where
 "decwrite1 c = (if c = 0 then CHR ''0'' else
                 if c = 1 then CHR ''1'' else
                 if c = 2 then CHR ''2'' else
@@ -203,10 +192,10 @@ lemma decwrite1_help :
     0 < n \<Longrightarrow> False"
 proof(induction n, auto)
 qed 
-
-fun decwrite2 :: "nat \<Rightarrow> (char * char)" where
+(*
+fun decwrite2 :: "int \<Rightarrow> (char * char)" where
 "decwrite2 w = 
-  (case Divides.divmod_nat w 10 of
+  (case Divides.divmod_int w 10 of
        (d,m) \<Rightarrow> (decwrite1 d, decwrite1 m))"
 
 function(sequential) decwrite' :: "nat \<Rightarrow> char list" where
@@ -223,14 +212,35 @@ termination
 
 fun decwrite :: "nat \<Rightarrow> char list" where
 "decwrite n = rev (decwrite' n)"
-
-(*
-lemma hexwrite1_hexread1 : "hexwrite1_dom n \<Longrightarrow> hexread1 (hexwrite1 n) = n"
-  apply(auto simp add:hexwrite1_dom_def hexwrite1_def)
-                  apply(auto simp add:hexread1_def)
-                  apply(insert hexwrite1_help, auto)
-  done
 *)
+
+definition decread1_dom :: "char \<Rightarrow> bool" where
+"decread1_dom c = (c = CHR ''0'' \<or> c = CHR ''1'' \<or> c = CHR ''2'' \<or>
+                   c = CHR ''3'' \<or> c = CHR ''4'' \<or> c = CHR ''5'' \<or>
+                   c = CHR ''6'' \<or> c = CHR ''7'' \<or> c = CHR ''8'' \<or>
+                   c = CHR ''9'' )"
+
+definition decread1 :: "char \<Rightarrow> int" where
+"decread1 c = (if c = (CHR ''0'') then 0 else
+               if c = (CHR ''1'') then 1 else
+               if c = (CHR ''2'') then 2 else
+               if c = (CHR ''3'') then 3 else
+               if c = (CHR ''4'') then 4 else
+               if c = (CHR ''5'') then 5 else
+               if c = (CHR ''6'') then 6 else
+               if c = (CHR ''7'') then 7 else
+               if c = (CHR ''8'') then 8 else
+               if c = (CHR ''9'') then 9 else
+               undefined)"
+
+(* TODO: finish this *)
+fun decread' :: "char list \<Rightarrow> int \<Rightarrow> int" where
+"decread' [] n = n"
+| "decread' (n1#t) a =
+   decread' t (decread1 n1 + 10 * a)"
+
+definition decread :: "char list \<Rightarrow> int" where
+"decread ls = decread' ls 0"
 
 
 end

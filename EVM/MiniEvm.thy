@@ -129,6 +129,8 @@ abbreviation e_returndata_update where
 
 abbreviation e_address_update where
 "e_address_update == es_metadata_update o es_address_update"
+abbreviation e_nonce_update where
+"e_nonce_update == es_metadata_update o es_nonce_update"
 abbreviation e_origin_update where
 "e_origin_update == es_metadata_update o es_origin_update"
 abbreviation e_caller_update where
