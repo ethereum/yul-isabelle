@@ -1338,7 +1338,7 @@ proof-
   qed
 qed
 
-free_constructors cases_inst for
+free_constructors (plugins del: code) cases_inst for
 STOP_INST
 | ARITH_INST
 | BITS_COMPARE_INST
@@ -2144,6 +2144,25 @@ definition is_eSELFDESTRUCT :: "inst => bool" where
   (case i of eSELFDESTRUCT => True
   | _ => False)"
 
+
+(*
+lemma stop_inst_1[code]: "Abs_stop_inst 0 = STOP_STOP"
+  sorry
+
+lemma stop_inst_2[code]: "Abs_inst 0 = STOP_INST (Abs_stop_inst 0)"
+  sorry
+
+value "parse_byte_inst 0"
+
+(or, define Rep_inst of free constructors as code eqns )
+
+*)
+
+declare ARITH_ADD.rep_eq [code]
+declare BAD_INST.rep_eq [code]
+
+
+value "Rep_inst eADD"
 
 (*
  * Parsing bytes as instructions

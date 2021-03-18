@@ -343,11 +343,15 @@ fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) YulInput 
 
 fun evalYul' :: "('g, 'v, 't) YulDialect \<Rightarrow>
                  ('g, 'v, 't) YulInput \<Rightarrow> 
-                 int \<Rightarrow>
+                 nat \<Rightarrow>
                  ('g, 'v, 't) YulResult" where
 "evalYul' D r n =
   (if n \<le> 0 then (YulResult r)
-   else (case evalYulStep D r of (ErrorResult msg x) \<Rightarrow> ErrorResult msg x | YulResult r \<Rightarrow> evalYul' D r (n - 1)))"
+   else 
+    (if cont r = [] then YulResult r
+    else (case evalYulStep D r of
+           (ErrorResult msg x) \<Rightarrow> ErrorResult msg x 
+         | YulResult r \<Rightarrow> evalYul' D r (n - 1))))"
 
 fun yulInit :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v,'t) result" where
 "yulInit D = \<lparr> global = init_state D
@@ -358,7 +362,7 @@ fun yulInit :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v,'t) result" where
 
 fun evalYul :: "('g, 'v, 't) YulDialect \<Rightarrow>
                 ('v, 't) YulStatement \<Rightarrow>
-                int \<Rightarrow>
+                nat \<Rightarrow>
                 ('g, 'v, 't) YulResult" where
 "evalYul D s n =
   (let r = yulInit D in
@@ -366,7 +370,7 @@ fun evalYul :: "('g, 'v, 't) YulDialect \<Rightarrow>
 
 fun evalYulE :: "('g, 'v, 't) YulDialect \<Rightarrow>
                  ('v, 't) YulExpression \<Rightarrow>
-                 int \<Rightarrow>
+                 nat \<Rightarrow>
                  ('g, 'v, 't) YulResult" where
 "evalYulE D e n =
   (let r = yulInit D in
