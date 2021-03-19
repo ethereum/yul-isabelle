@@ -28,7 +28,7 @@ definition prog2 :: "(256 word, unit) YulStatement" where
     print(f(5 : uint256))
 })"
 
-value "evalYul basicDialect prog2 99"
+value "evalYul basicDialect prog2 200"
 
 
 definition bad1 :: "(256 word, unit) YulStatement" where
@@ -80,6 +80,39 @@ print(sub(x, y))
 
 value "eval prog5"
 
+
+definition prog6 :: "(256 word, unit) YulStatement" where
+"prog6 \<equiv>
+  (YUL{
+        base := 2
+        exponent := 4
+        result := 1
+        for { let i := 0 } 1 { i := add(i, 1) }
+        {
+            result := mul(result, base)
+            if gt(i, sub(exponent, 1)) {break }
+        }
+        print(result)
+})"
+
+value "eval prog6"
+
+definition prog7 :: "(256 word, unit) YulStatement" where
+"prog7 \<equiv>
+  (YUL{
+        base := 2
+        exponent := 4
+        result := 1
+        for { let i := 0 } 1 { i := add(i, 1) }
+        {
+            result := mul(result, base)
+            if lt(i, exponent) {continue }
+            break
+        }
+        print(result)
+})"
+
+value "evalYul basicDialect prog7 999"
 
 (* test switch statements *)
 
