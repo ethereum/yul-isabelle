@@ -115,18 +115,97 @@ definition is_halted :: "('g, 'v, 't) result \<Rightarrow> bool" where
 
 (* a more familiar-looking Hoare logic of statements - but showing its relationship to the
    actual executions beyond the first instruction will take some work. *)
-definition YulStepsStmt ::
+abbreviation YulStepsStmt ::
   "('g, 'v, 't) YulDialect \<Rightarrow>
    (('g, 'v, 't) result \<Rightarrow> bool) \<Rightarrow>
    ('v, 't) YulStatement \<Rightarrow>
    (('g, 'v, 't) result \<Rightarrow> bool) \<Rightarrow>
    bool" 
 ("_ % {_} _ {_}") where
-"(D % {P} c {Q}) =
-  ((D % {P} {Q}) \<and>
-   (\<forall> st . P st \<longrightarrow> cont st = [EnterStatement c]))"
+"(D % {P} c {Q}) \<equiv>
+  (D % {(\<lambda> st . P st \<and> cont st = [EnterStatement c])}
+       {(\<lambda> st . Q st \<and> cont st = [])})"
 
+(* how to correctly constrain p/q? *)
+abbreviation YulStepsStEls ::
+  "('g, 'v, 't) YulDialect \<Rightarrow>
+   (('g, 'v, 't) result \<Rightarrow> bool) \<Rightarrow>
+   ('g, 'v, 't) StackEl list \<Rightarrow>
+   (('g, 'v, 't) result \<Rightarrow> bool) \<Rightarrow>
+   bool" 
+("_ %* {_} _ {_}") where
+"(D %* {P} els {Q}) \<equiv>
+  (D % {(\<lambda> st . P st \<and> cont st = els)}
+       {(\<lambda> st . Q st \<and> cont st = [])})"
+(*
+lemma YSSI' :
+  assumes H : "(D % {P} {Q})"
+  assumes HP : "\<And> st . P st \<Longrightarrow> cont st = [EnterStatement c]"
+  assumes HQ : "\<And> st . Q st \<Longrightarrow> cont st = []"
+  shows "(D % {P} c {Q})"
+  using assms unfolding YulStepsStmt_def by auto
 
+lemma YSSE' :
+  assumes H : "(D % {P} c {Q})"
+  shows "(D % {P} {Q})" 
+        "\<And> st . P st \<Longrightarrow> cont st = [EnterStatement c]" 
+        "\<And> st . Q st \<Longrightarrow> cont st = []"
+  using assms unfolding YulStepsStmt_def by auto
+
+lemma YSSI [intro] :
+  assumes H : "\<And> st . P st \<Longrightarrow> 
+                (\<exists> n st' . evalYul' D st n = YulResult st' \<and>
+                   Q st')"
+  assumes HP : "\<And> st . P st \<Longrightarrow> cont st = [EnterStatement c]"
+  assumes HQ : "\<And> st . Q st \<Longrightarrow> cont st = []"
+  shows "(D % {P} c {Q})"
+  using assms unfolding YulStepsStmt_def by auto
+
+lemma YSSE1 :
+  assumes H : "(D % {P} c {Q})"
+  assumes HP : "P st"
+  shows "(\<exists> n st'. evalYul' D st n = YulResult st' \<and> Q st')"
+  using assms unfolding YulStepsStmt_def YulSteps_def by auto
+
+lemma YSSE2 :
+  assumes H : "(D % {P} c {Q})"
+  assumes HP : "P st"
+  shows "cont st = [EnterStatement c]" 
+  using assms unfolding YulStepsStmt_def YulSteps_def by auto
+
+lemma YSSE3 :
+  assumes H : "(D % {P} c {Q})"
+  assumes HQ : "Q st"
+  shows "cont st = []"
+  using assms unfolding YulStepsStmt_def YulSteps_def by auto
+
+lemma YSElI [intro] :
+  assumes H : "\<And> st . P st \<Longrightarrow> 
+                (\<exists> n st' . evalYul' D st n = YulResult st' \<and>
+                   Q st')"
+  assumes HP : "\<And> st . P st \<Longrightarrow> cont st = els"
+  assumes HQ : "\<And> st . Q st \<Longrightarrow> cont st = []"
+  shows "(D %* {P} els {Q})"
+  using assms unfolding YulStepsStEls_def by auto
+
+lemma YSElE1 :
+  assumes H : "(D %* {P} els {Q})"
+  assumes HP : "P st"
+  shows "(\<exists> n st'. evalYul' D st n = YulResult st' \<and> Q st')"
+  using assms unfolding YulStepsStEls_def YulSteps_def by auto
+
+lemma YSElE2 :
+  assumes H : "(D %* {P} els {Q})"
+  assumes HP : "P st"
+  shows "cont st = els" 
+  using assms unfolding YulStepsStEls_def YulSteps_def by auto
+
+lemma YSElE3 :
+  assumes H : "(D %* {P} els {Q})"
+  assumes HQ : "Q st"
+  shows "cont st = []"
+  using assms unfolding YulStepsStEls_def YulSteps_def by auto
+*)
 (* Revisiting the implementation - how can we make it easier to model behavior?
    1: formalize continuation stack transformation patterns. everything except for
 break and continue will add a (possibly empty) prefix to the stack, and drop the current element.
@@ -830,11 +909,23 @@ next
           using YR' unfolding Cons C1''_C1' R1''
         by(auto)
 
-      show ?thesis using evalYul'_steps[OF FirstStep IHspec] by auto
+        show ?thesis using evalYul'_steps[OF FirstStep IHspec] by auto
+      qed
     qed
   qed
 qed
 
+(* TODO: make sure this says what we think it does. *)
+lemma stackEls_sem_nil :
+  shows "D %* {P} [] {P}"
+  by auto
+
+
+(* lemmas for block cons/nil 
+    idea:
+    {P} (map EnterStatement sl) {Q} \<Longrightarrow>
+    {P}  {Q}
+*)
 
 (* evalYul' D \<lparr>result = r1, cont = c1 @ c2\<rparr> = YulResult \<lparr>result = r1', cont = c1' @ c2\<rparr>  *)
 (*
