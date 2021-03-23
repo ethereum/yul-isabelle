@@ -382,16 +382,17 @@ fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) YulInput 
 )"
 *)
 
-(* result ? ? *)
-fun updateResult :: "('g, 'v, 't) StackEl list \<Rightarrow>
+definition updateResult :: "('g, 'v, 't) StackEl list \<Rightarrow>
                      ('g, 'v, 't) YulStepResult \<Rightarrow> 
                      ('g, 'v, 't) YulResult" where
-"updateResult ct (YulResult (r', c')) =
-  YulResult \<lparr> result = r', cont = c' @ ct \<rparr>"
-| "updateResult ct (ErrorResult s None) =
-  ErrorResult s (None)"
-| "updateResult ct (ErrorResult s (Some (r', c'))) =
-  ErrorResult s (Some \<lparr> result = r', cont = c' @ ct\<rparr>)"
+"updateResult ct res =
+  (case res of
+    YulResult (r', c') \<Rightarrow>
+      YulResult \<lparr> result = r', cont = c' @ ct \<rparr>
+    | ErrorResult s (Some (r', c')) \<Rightarrow>
+      ErrorResult s (Some \<lparr> result = r', cont = c' @ ct\<rparr>)
+    | ErrorResult s None \<Rightarrow>
+      ErrorResult s None)"
 
 
 (* need to make sure early loop exit is happening correctly. *)
@@ -434,19 +435,13 @@ fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) result \<
 
         | Continue \<Rightarrow>
           (case ch of
-            (Expression cond1) \<Rightarrow> \<comment> \<open> peek ahead to see if this is a loop condition \<close>
-              (case ct of
-                [] \<Rightarrow> ErrorResult (STR ''Continue outside loop body'') 
-                                  (Some (r \<lparr> cont := ct \<rparr>))
-                | ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' # ct' \<Rightarrow>
-                    YulResult (r \<lparr> cont := EnterStatement YUL_STMT{ {\<guillemotleft>post\<guillemotright>} } #
-                                           Expression cond1 #
-                                           ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' 
-                                           # ct'
-                                 , mode := Regular \<rparr>)
-                | (ExitFunctionCall _ _ _ _ _) # _ \<Rightarrow>
-                    ErrorResult (STR ''Continue outside loop body (inside function body)'') (Some r)
-                | _ \<Rightarrow> YulResult (r \<lparr> cont := ct \<rparr>))
+            ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' \<Rightarrow>
+              YulResult (r \<lparr> cont := EnterStatement YUL_STMT{ {\<guillemotleft>post\<guillemotright>} } #
+                               Expression cond #
+                               ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' 
+                               # ct
+                           , mode := Regular \<rparr>)
+
             | (ExitFunctionCall _ _ _ _ _) \<Rightarrow>
                 ErrorResult (STR ''Continue outside loop body (inside function body)'') 
                             (Some (r \<lparr> cont := ct \<rparr>))
