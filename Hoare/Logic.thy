@@ -1,6 +1,12 @@
 theory Logic imports "../Yul/YulSemanticsSingleStep"
 begin
 
+(* need to figure out relationship between states now that we are
+   kind of masking out the continuation. *)
+
+(*
+  
+*)
 definition YulSteps ::
   "('g, 'v, 't) YulDialect \<Rightarrow>
   (('g, 'v, 't) result \<Rightarrow> bool) \<Rightarrow>
@@ -9,11 +15,11 @@ definition YulSteps ::
 ("_ % {_} {_}")
   where
 "YulSteps D P Q =
-  (\<forall> st . P st \<longrightarrow>
+  (\<forall> st . P (st) \<longrightarrow>
     (\<exists> n st' . evalYul' D st n = YulResult st' \<and>
      Q st'))"
 
-lemma YSI [intro]:
+lemma HTI [intro]:
   assumes
     "\<And> st . P st \<Longrightarrow> 
       (\<exists> n st' . evalYul' D st n = YulResult st' \<and>
@@ -915,11 +921,82 @@ next
   qed
 qed
 
+
+
 (* TODO: make sure this says what we think it does. *)
 lemma stackEls_sem_nil :
   shows "D %* {P} [] {P}"
+  unfolding YulSteps_def
   by auto
 
+(* convenience lemmas for Hoare triples with 2 clauses *)
+
+lemma HTI' [intro]:
+  assumes
+    "\<And> st . P1 st \<Longrightarrow> P2 st \<Longrightarrow>
+      (\<exists> n st' . evalYul' D st n = YulResult st' \<and>
+     Q st')"
+  shows "D % {(\<lambda> st . P1 st \<and> P2 st)} {Q}" using assms
+  unfolding YulSteps_def 
+  by auto
+
+lemma HTE' [elim]:
+  assumes H : "D%{(\<lambda> st . P1 st \<and> P2 st)} {Q}"
+  assumes HP1 : "P1 st"
+  assumes HP2 : "P2 st"
+  shows "(\<exists> n st'. evalYul' D st n = YulResult st' \<and>
+     Q st')"
+  using assms unfolding YulSteps_def by auto
+
+
+lemma stackEls_sem_cons :
+  assumes H1 : "D % {P1} h {P2}"
+  assumes H2 : "D %* {P2} t {P3}"
+  shows "D %* {P1} (EnterStatement h#t) {P3}"
+proof(rule HTI)
+  fix st1
+  assume "P1 st1 \<and> cont st1 = EnterStatement h # t"
+  hence Hp1 : "P1 st1" and Hcont1 : "cont st1 = EnterStatement h # t"
+    by auto
+
+  obtain st2 where Hp2 : "P2 st2" and Hcont2 : "cont st2 = []"
+    using HTE'[OF H1] by auto
+
+(*
+  (* evalYul'_seq *)
+  obtain st3 where Hp3 : "P3 st3" and Hcont3 : "cont st3 = []"
+    using HTE'[OF H2 Hp2 ]
+*)
+
+  show "\<exists>n st'.
+           evalYul' D st1 n = YulResult st' \<and>
+           P3 st' \<and> cont st' = []"
+    using evalYul'_seq
+(*
+proof(induction t)
+  case Nil
+
+  show ?case
+  proof(rule HTI)
+    fix st1
+    assume "P1 st1 \<and> cont st1 = [EnterStatement h]"
+    hence Hp1 : "P1 st1" and Hcont1 : "cont st1 = [EnterStatement h]"
+      by auto
+
+    obtain st2 where Hp2 : "P2 st2" and Hcont2 : "cont st2 = []"
+      using HTE'[OF H1 Hp1 Hcont1] by auto
+
+    obtain st3 where Hp3 : "P3 st3" and Hcont3 : "cont st3 = []"
+      using HTE'[OF H2 Hp2]
+
+    show "\<exists>n st'.
+             evalYul' D st n = YulResult st' \<and>
+             P3 st' \<and> cont st' = []"
+next
+  case (Cons a t)
+  then show ?case sorry
+qed
+*)
 
 (* lemmas for block cons/nil 
     idea:
