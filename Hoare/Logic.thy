@@ -119,30 +119,6 @@ qed
 definition is_halted :: "('g, 'v, 't) result \<Rightarrow> bool" where
 "is_halted r = (cont r = [])"
 
-(* a more familiar-looking Hoare logic of statements - but showing its relationship to the
-   actual executions beyond the first instruction will take some work. *)
-abbreviation YulStepsStmt ::
-  "('g, 'v, 't) YulDialect \<Rightarrow>
-   (('g, 'v, 't) result \<Rightarrow> bool) \<Rightarrow>
-   ('v, 't) YulStatement \<Rightarrow>
-   (('g, 'v, 't) result \<Rightarrow> bool) \<Rightarrow>
-   bool" 
-("_ % {_} _ {_}") where
-"(D % {P} c {Q}) \<equiv>
-  (D % {(\<lambda> st . P st \<and> cont st = [EnterStatement c])}
-       {(\<lambda> st . Q st \<and> cont st = [])})"
-
-(* how to correctly constrain p/q? *)
-abbreviation YulStepsStEls ::
-  "('g, 'v, 't) YulDialect \<Rightarrow>
-   (('g, 'v, 't) result \<Rightarrow> bool) \<Rightarrow>
-   ('g, 'v, 't) StackEl list \<Rightarrow>
-   (('g, 'v, 't) result \<Rightarrow> bool) \<Rightarrow>
-   bool" 
-("_ %* {_} _ {_}") where
-"(D %* {P} els {Q}) \<equiv>
-  (D % {(\<lambda> st . P st \<and> cont st = els)}
-       {(\<lambda> st . Q st \<and> cont st = [])})"
 (*
 lemma YSSI' :
   assumes H : "(D % {P} {Q})"
@@ -815,7 +791,7 @@ qed
 
 (* generalization: assume a potentially nonempty residual continuation after running first command? *)
 
-lemma evalYul'_seq :
+lemma evalYul'_seq_gen :
   assumes H1 : "evalYul' D \<lparr>result = r1, cont = c1\<rparr> n1 = 
                YulResult \<lparr>result = r2, cont = residue\<rparr>"
   assumes H2 : "evalYul' D \<lparr>result = r2, cont = residue @ c2 \<rparr> n2 = YulResult \<lparr> result = r3, cont = [] \<rparr>"
@@ -921,6 +897,38 @@ next
   qed
 qed
 
+lemma evalYul'_seq :
+  assumes H1 : "evalYul' D \<lparr>result = r1, cont = c1\<rparr> n1 = 
+               YulResult \<lparr>result = r2, cont = []\<rparr>"
+  assumes H2 : "evalYul' D \<lparr>result = r2, cont = c2 \<rparr> n2 = YulResult \<lparr> result = r3, cont = [] \<rparr>"
+  shows "evalYul' D \<lparr> result = r1, cont = c1 @ c2\<rparr> (n1 + n2) = YulResult \<lparr> result = r3, cont = [] \<rparr>" 
+  using evalYul'_seq_gen[of D r1 c1 n1 r2 "[]" c2 n2 r3] H1 H2
+  by auto
+
+(* a more familiar-looking Hoare logic of statements - but showing its relationship to the
+   actual executions beyond the first instruction will take some work. *)
+abbreviation YulStepsStmt ::
+  "('g, 'v, 't) YulDialect \<Rightarrow>
+   (('g, 'v, 't) result' \<Rightarrow> bool) \<Rightarrow>
+   ('v, 't) YulStatement \<Rightarrow>
+   (('g, 'v, 't) result' \<Rightarrow> bool) \<Rightarrow>
+   bool" 
+("_ % {_} _ {_}") where
+"(D % {P} c {Q}) \<equiv>
+  (D % {(\<lambda> st . P (result st) \<and> cont st = [EnterStatement c])}
+       {(\<lambda> st . Q (result st) \<and> cont st = [])})"
+
+(* how to correctly constrain p/q? *)
+abbreviation YulStepsStackEls ::
+  "('g, 'v, 't) YulDialect \<Rightarrow>
+   (('g, 'v, 't) result' \<Rightarrow> bool) \<Rightarrow>
+   ('g, 'v, 't) StackEl list \<Rightarrow>
+   (('g, 'v, 't) result' \<Rightarrow> bool) \<Rightarrow>
+   bool" 
+("_ %* {_} _ {_}") where
+"(D %* {P} els {Q}) \<equiv>
+  (D % {(\<lambda> st . P (result st) \<and> cont st = els)}
+       {(\<lambda> st . Q (result st) \<and> cont st = [])})"
 
 
 (* TODO: make sure this says what we think it does. *)
@@ -929,49 +937,266 @@ lemma stackEls_sem_nil :
   unfolding YulSteps_def
   by auto
 
-(* convenience lemmas for Hoare triples with 2 clauses *)
+(* convenience lemmas for Hoare triples separating
+   result and cont *)
 
 lemma HTI' [intro]:
-  assumes
-    "\<And> st . P1 st \<Longrightarrow> P2 st \<Longrightarrow>
-      (\<exists> n st' . evalYul' D st n = YulResult st' \<and>
+  assumes H :
+    "\<And> res contn. P1 res \<Longrightarrow> P2 contn \<Longrightarrow>
+      (\<exists> n st' . evalYul' D \<lparr>result = res, cont = contn \<rparr> n = YulResult st' \<and>
      Q st')"
-  shows "D % {(\<lambda> st . P1 st \<and> P2 st)} {Q}" using assms
-  unfolding YulSteps_def 
-  by auto
+  shows "D % {(\<lambda> st . P1 (result st) \<and> P2 (cont st))} {Q}" 
+proof
+  fix st :: "('a, 'b, 'c) result"
+  assume Assm : "P1 (result st) \<and> P2 (cont st)"
+  show "\<exists>n st'. evalYul' D st n = YulResult st' \<and> Q st'"
+    using H Assm
+    by(cases st; auto)
+qed
 
 lemma HTE' [elim]:
-  assumes H : "D%{(\<lambda> st . P1 st \<and> P2 st)} {Q}"
-  assumes HP1 : "P1 st"
-  assumes HP2 : "P2 st"
-  shows "(\<exists> n st'. evalYul' D st n = YulResult st' \<and>
+  assumes H : "D%{(\<lambda> st . P1 (result st) \<and> P2 (cont st))} {Q}"
+  assumes HP1 : "P1 res"
+  assumes HP2 : "P2 contn"
+  shows "(\<exists> n st'. evalYul' D \<lparr> result = res, cont = contn \<rparr> n = YulResult st' \<and>
      Q st')"
-  using assms unfolding YulSteps_def by auto
+  using assms unfolding YulSteps_def by (auto)
 
 
 lemma stackEls_sem_cons :
+  fixes h :: "('v, 't) YulStatement"
+  fixes t :: "('g, 'v, 't) StackEl list"
   assumes H1 : "D % {P1} h {P2}"
   assumes H2 : "D %* {P2} t {P3}"
   shows "D %* {P1} (EnterStatement h#t) {P3}"
 proof(rule HTI)
-  fix st1
-  assume "P1 st1 \<and> cont st1 = EnterStatement h # t"
-  hence Hp1 : "P1 st1" and Hcont1 : "cont st1 = EnterStatement h # t"
+  fix st1 :: "('g, 'v, 't) result"
+
+  assume "P1 (result st1) \<and> cont st1 = EnterStatement h # t"
+  then obtain res1 cont1 where
+  RC1 : "st1 = \<lparr> result = res1, cont = cont1 \<rparr>" and
+  Hp1 : "P1 res1" and Hcont1 : "cont1 = EnterStatement h # t"
+    by (cases st1; auto)
+
+  obtain n1 st2 where
+    Eval1 : "evalYul' D \<lparr>result = res1, cont = [EnterStatement h]\<rparr> n1 = 
+                   YulResult st2"
+    and Hp2 : "P2 (result st2)"
+    and Cont2 : "cont st2 = []"
+    using HTE'[OF H1 Hp1 refl] by auto
+
+  obtain res2 where St2 : "st2 = \<lparr> result = res2, cont = [] \<rparr>"
+    using Hp2 Cont2 by(cases st2; auto)
+
+  hence Eval1' : "evalYul' D \<lparr>result = res1, cont = [EnterStatement h]\<rparr> n1 =
+                  YulResult \<lparr> result = res2, cont = [] \<rparr>"
+    using Eval1 by auto
+
+  obtain n2 st3 
+    where Eval2 : "evalYul' D \<lparr>result = res2, cont = t\<rparr> n2 = 
+                   YulResult st3"
+    and Hp3 : "P3 (result st3)"
+    and Hcont3 : "cont st3 = []"
+    using HTE'[OF H2 Hp2 refl] St2
+    by(auto)
+
+  obtain res3 where St3 : "st3 = \<lparr> result = res3, cont = []\<rparr>"
+    using Hcont3 by(cases st3; auto)
+
+  hence Eval2' : "evalYul' D \<lparr>result = res2, cont = t\<rparr> n2 = YulResult \<lparr> result = res3, cont = []\<rparr>"
+    using Eval2 by auto
+
+  have Conc' : "evalYul' D st1 (n1 + n2) = YulResult st3 \<and>
+                  P3 (result st3) \<and> cont st3 = []"
+    using evalYul'_seq[OF Eval1' Eval2'] Hp3 Hcont3 unfolding RC1 Hcont1 St3
     by auto
+   
+  thus "\<exists>n st'.
+           evalYul' D st1 n = YulResult st' \<and>
+           P3 (result st') \<and> cont st' = []"
+    by(blast)
+qed
 
-  obtain st2 where Hp2 : "P2 st2" and Hcont2 : "cont st2 = []"
-    using HTE'[OF H1] by auto
-
-(*
-  (* evalYul'_seq *)
-  obtain st3 where Hp3 : "P3 st3" and Hcont3 : "cont st3 = []"
-    using HTE'[OF H2 Hp2 ]
+(* next step: show the rule for blocks.
+   this will be basically the same, but will have some extra stuff corresponding to the
+    contexts.
 *)
 
+
+
+(* for the precondition in H, we need another clause characterizing funs
+   (by analogy with forward Hoare assignment rule.)
+*)
+(* r_vals = []? *)
+
+(* need to be able to use H to prove that gatherFunctions succeeds
+   (right now we don't have that - we need to prove it succeeds to use H) *)
+(* "P \<longrightarrow> ..." part of the conclusion is probably wrong.
+   what we really want to say is 
+   
+*)
+
+(* formal final clause in conclusion Hoare triple
+hopefully unneeded, as I'm pretty sure it's not true in general.
+hopefully the hypothesis Hoare triple captures all the needed relationships
+
+
+maybe we change this forall to an exists?
+
+(*
+(\<forall> st0 . P st0 \<longrightarrow>
+                        r_funs st = r_funs st0 \<and>
+                        r_locals st = restrict (r_locals st) (r_locals st0)))
+*)
+*)
+
+(* let's look at a backwards version of this Hoare rule, instead. *)
+
+lemma HBlock :
+assumes HP : "\<And> st . P st \<Longrightarrow> (\<exists> f . gatherYulFunctions (r_funs st) ls = Inl f)"
+assumes H : 
+  "D %* {(\<lambda> st . \<exists> funs' . P (st \<lparr> r_funs := funs' \<rparr>) \<and> 
+                   Inl (r_funs st) = gatherYulFunctions (funs') ls)} 
+        (map EnterStatement ls :: ('g, 'v, 't) StackEl list)
+        {Q}"
+shows "D % {X} 
+           YulBlock ls
+           {Q}"
+proof
+
+
+(*
+ the issue is that in the predicate on the final state, we don't actually have the data we
+ need to reconstruct the old values of locals. that is, what new locals were introduced
+ during the block.
+*)
+
+lemma HBlock :
+assumes HP : "\<And> st . P st \<Longrightarrow> (\<exists> f . gatherYulFunctions (r_funs st) ls = Inl f)"
+assumes H : 
+  "D %* {(\<lambda> st . \<exists> funs' . P (st \<lparr> r_funs := funs' \<rparr>) \<and> 
+                   Inl (r_funs st) = gatherYulFunctions (funs') ls)} 
+        (map EnterStatement ls :: ('g, 'v, 't) StackEl list)
+        {Q}"
+shows "D % {P} 
+           YulBlock ls
+           {(\<lambda> st . \<exists> funs' locals' . 
+                Q (st \<lparr> r_funs := funs', r_locals := locals' \<rparr>))}"
+proof
+  fix res :: "('g, 'v, 't) result'"
+  fix contn :: "('g, 'v, 't) StackEl list"
+
+  assume Hres : "P res"
+  assume Hcontn : "contn = [EnterStatement (YulBlock ls)]"
+
+  obtain f where F: "gatherYulFunctions (r_funs res) ls = Inl f"
+    using HP[OF Hres] by auto
+
+  have Hres' : "P (res\<lparr>r_funs := r_funs res\<rparr>)" using Hres by auto
+
+  have Hyp : "P (res\<lparr>r_funs := f, r_funs := r_funs res\<rparr>) \<and>
+                 Inl (r_funs (res\<lparr>r_funs := f\<rparr>)) = gatherYulFunctions (r_funs res) ls"
+    using Hres' F 
+    by(simp del: gatherYulFunctions.simps)
+
+  hence Hyp' : "\<exists> fns . P (res\<lparr>r_funs := f, r_funs := fns\<rparr>) \<and>
+                 Inl (r_funs (res\<lparr>r_funs := f\<rparr>)) = gatherYulFunctions fns ls"
+    by blast
+
+  obtain n1 st1 where
+    "evalYul' D
+      \<lparr>result = res\<lparr>r_funs := f\<rparr>,
+         cont = map EnterStatement ls\<rparr>
+      n1 =
+     YulResult st1 \<and>
+     Q (result st1) \<and> cont st1 = []"
+    using HTE'[OF H Hyp' refl]
+    by blast
+
+  hence Eval1 : "evalYul' D
+      \<lparr>result = res\<lparr>r_funs := f\<rparr>,
+         cont = map EnterStatement ls\<rparr>
+      n1 =
+     YulResult st1"
+    and Q1 : "Q (result st1)"
+    and Cont1 : "cont st1 = []"
+    by auto
+
   show "\<exists>n st'.
-           evalYul' D st1 n = YulResult st' \<and>
-           P3 st' \<and> cont st' = []"
-    using evalYul'_seq
+          evalYul' D \<lparr>result = res, cont = contn\<rparr> n = YulResult st' \<and>
+          (\<exists>funs' locals'.
+              Q ((result st') \<lparr>r_funs := funs', r_locals := locals'\<rparr>) \<and>
+              (\<forall>st0. P st0 \<longrightarrow> r_funs (result st') = r_funs st0 \<and> r_locals (result st') = restrict (r_locals (result st')) (r_locals st0))) \<and>
+          cont st' = []"
+  proof(cases "evalYulStep D \<lparr>result = res, cont = contn\<rparr>")
+    (* idea: if we error here it must either be due to an error inside the block
+       (but this would show up in Eval1 as well, contradiction) or we can't compute
+       the new function context (but this contracticts F) *)
+    case (ErrorResult msg bad)
+
+    then have False
+      using Hcontn F by(simp split: YulMode.splits sum.splits add: updateResult_def)
+
+    thus ?thesis by auto
+  next
+
+    case (YulResult st2)
+
+    obtain cont2 res2 where St2 : "st2 = \<lparr> result = res2, cont = cont2 \<rparr>"
+      by(cases st2; auto)
+
+    show ?thesis
+    proof(cases "r_mode res")
+      case Regular
+      then show ?thesis 
+        sorry
+      next
+
+        (* the idea here is that we are going to
+           skip the entire block, then take another step
+                   *)
+      case Break
+
+      (* NB this is a weird way to express being "done" - for non-Regular operation it means
+         "is about to crash". I think this might actually be OK though. *)
+      have Done : "cont2 = []" using Break St2 YulResult Hcontn
+        by(auto)
+
+      have Conc_Mid : True sorry
+
+(* ok, this should hopefully be fine. 
+   after 1 step we will reach the same place. hopefully...
+*)
+      show ?thesis sorry
+    next
+      case Continue
+      then show ?thesis sorry
+    next
+      case Leave
+      then show ?thesis sorry
+    qed
+
+
+    have Res2 : "res2 = (res \<lparr> r_funs := f \<rparr>)"
+      using Hcontn F St2 YulResult 
+      apply(simp split: YulMode.splits sum.splits add: updateResult_def)
+
+    using HTE'[OF H, of "(res \<lparr> r_funs := f \<rparr>)"
+                        "map EnterStatement ls"]
+
+(*
+idea: want P in conclusion to just be P
+
+** relationship between funs/funs' and locals/locals' is backwards. **
+
+want P1 to be P after enriching context and functions
+
+want Q1 to be whatever it needs to be (?)
+
+want Q to be restriction of Q1
+
+*)
+    
 (*
 proof(induction t)
   case Nil
