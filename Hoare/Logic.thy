@@ -1050,8 +1050,8 @@ maybe we change this forall to an exists?
 *)
 *)
 
-(* let's look at a backwards version of this Hoare rule, instead. *)
 
+(*
 lemma HBlock :
 assumes HP : "\<And> st . P st \<Longrightarrow> (\<exists> f . gatherYulFunctions (r_funs st) ls = Inl f)"
 assumes H : 
@@ -1063,7 +1063,7 @@ shows "D % {X}
            YulBlock ls
            {Q}"
 proof
-
+*)
 
 (*
  the issue is that in the predicate on the final state, we don't actually have the data we
@@ -1071,16 +1071,88 @@ proof
  during the block.
 *)
 
+(* Appel: "{P} c {Q} forall k . {Q} k \<longrightarrow> {P} c;k"
+*)
+
+(* let's look at a backwards version of this Hoare rule, instead. *)
+
+(* if we actually do include the final "exitStatement" in the hypothesis, does this help? *)
+
+(*
+lemma HBlock_inner : 
+  assumes HP : "\<And> st . P st \<Longrightarrow> (\<exists> f . gatherYulFunctions (r_funs st) ls = Inl f)"
+  assumes H : "D %* {(\<lambda> st . \<exists> funs' . P (st \<lparr> r_funs := funs' \<rparr>) \<and> 
+                   Inl (r_funs st) = gatherYulFunctions (funs') ls)} 
+        ((map EnterStatement ls :: ('g, 'v, 't) StackEl list) @
+          [ExitStatement (YulBlock ls) locals funs])
+        {Q}"
+*)
+(* idea: what if we include this in the rule? *)
+(*
+[ExitStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } (r_locals r) (r_funs r)]
+*)
+
+lemma HBlock :
+  assumes H : "D %* {P} 
+                    (map EnterStatement ls :: ('g, 'v, 't) StackEl list) 
+                    {(\<lambda> st . Q (st \<lparr> r_funs := orig_funs
+                                          , r_locals := restrict (r_locals st) orig_locals \<rparr>))}"
+  shows "D % {(\<lambda> st . r_locals st = orig_locals \<and>
+                      r_funs st = orig_funs \<and>
+                      gatherYulFunctions (r_funs st) ls = Inl f \<and>
+                      P (st \<lparr> r_funs := f \<rparr> ))}
+              YulBlock (ls )
+              {Q}"
+proof
+  fix res contn
+
+  assume "r_locals res = orig_locals \<and>
+       r_funs res = orig_funs \<and>
+       gatherYulFunctions (r_funs res) ls = Inl f \<and> P (res\<lparr>r_funs := f\<rparr>)"
+
+  hence Locals : "r_locals res = orig_locals" and
+        Funs : "r_funs res = orig_funs" and
+        Gather : "gatherYulFunctions (r_funs res) ls = Inl f" and
+        HP : "P (res\<lparr>r_funs := f\<rparr>)"
+    by auto
+
+  assume Contn : "contn = ([EnterStatement (YulBlock ls)] :: ('g, 'v, 't) StackEl list)"
+
+  have "\<exists>n st'.
+     evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> n =
+     YulResult st' \<and>
+     Q (result st'
+        \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st')) orig_locals\<rparr>) \<and>
+     cont st' = []"
+    using HTE[OF H, of "\<lparr> result = (res \<lparr> r_funs := f \<rparr>), cont = map EnterStatement ls\<rparr>"]
+    unfolding result.simps using HP
+    by(blast)
+
+  then obtain n1 st1 where
+    Eval : "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> n1 =
+     YulResult st1" and
+    HQ : "Q (result st1
+          \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st1)) orig_locals\<rparr>)" and
+    Cont1 : "cont st1 = []" by blast
+
+  show "\<exists>n st'.
+          evalYul' D \<lparr>result = res, cont = contn\<rparr> n = YulResult st' \<and>
+          Q (result st') \<and> cont st' = []"
+    sorry
+qed
+
+(*
 lemma HBlock :
 assumes HP : "\<And> st . P st \<Longrightarrow> (\<exists> f . gatherYulFunctions (r_funs st) ls = Inl f)"
 assumes H : 
-  "D %* {(\<lambda> st . \<exists> funs' . P (st \<lparr> r_funs := funs' \<rparr>) \<and> 
+  "D %* {(\<lambda> st . P (st \<lparr> r_funs := funs' \<rparr>) \<and> 
+                   r_locals st = locals' \<and>
                    Inl (r_funs st) = gatherYulFunctions (funs') ls)} 
         (map EnterStatement ls :: ('g, 'v, 't) StackEl list)
         {Q}"
 shows "D % {P} 
            YulBlock ls
-           {(\<lambda> st . \<exists> funs' locals' . 
+           {(\<lambda> st .
                 Q (st \<lparr> r_funs := funs', r_locals := locals' \<rparr>))}"
 proof
   fix res :: "('g, 'v, 't) result'"
@@ -1183,7 +1255,7 @@ proof
 
     using HTE'[OF H, of "(res \<lparr> r_funs := f \<rparr>)"
                         "map EnterStatement ls"]
-
+*)
 (*
 idea: want P in conclusion to just be P
 
