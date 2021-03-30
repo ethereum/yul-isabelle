@@ -117,7 +117,7 @@ qed
 
 (* characterize successfully halted states *)
 definition is_halted :: "('g, 'v, 't) result \<Rightarrow> bool" where
-"is_halted r = (cont r = [])"
+"is_halted r = (cont r = [] \<and> mode r = Regular)"
 
 (*
 lemma YSSI' :
@@ -1090,9 +1090,165 @@ lemma HBlock_inner :
 (* idea: what if we include this in the rule? *)
 (*
 [ExitStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } (r_locals r) (r_funs r)]
+*)  
+
+lemma restrict_self_gen :
+  "restrict x (pref @ x) = x"
+proof(induction x arbitrary: pref)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons a x)
+
+  obtain a1 a2 where A: "a = (a1, a2)" by(cases a; auto)
+
+  show ?case
+  proof(cases "map_of pref a1")
+    case None
+    then show ?thesis using A Cons.prems Cons.IH[of "pref @ [(a1, a2)]"]
+      by(auto split: option.splits)
+  next
+    case (Some v)
+    then show ?thesis using A Cons.prems Cons.IH[of "pref @ [(a1, a2)]"]
+      by(auto split: option.splits)
+  qed
+qed
+    
+lemma restrict_self : "restrict x x = x"
+  using restrict_self_gen[of "x" "[]"]
+  by auto
+
+
+definition is_regular :: "YulMode \<Rightarrow> bool" where
+"is_regular x =
+  (x = Regular)"
+
+declare is_regular_def [simp]
+
+definition is_irregular :: "YulMode \<Rightarrow> bool" where
+"is_irregular x =
+  (x \<noteq> Regular)"
+
+declare is_irregular_def [simp]
+
+definition is_break :: "YulMode \<Rightarrow> bool" where
+"is_break x =
+  (x = Break)"
+
+declare is_break_def [simp]
+
+definition is_continue :: "YulMode \<Rightarrow> bool" where
+"is_continue x =
+  (x = Continue)"
+
+declare is_continue_def [simp]
+
+definition is_leave :: "YulMode \<Rightarrow> bool" where
+"is_leave x =
+  (x = Leave)"
+
+declare is_leave_def [simp]
+
+lemma irregular_skips_body :
+  assumes H : "is_irregular (mode st)"
+  assumes Cont : "cont st = (map EnterStatement ls :: ('g, 'v, 't) StackEl list)"
+  assumes Eval : "evalYul' D st n = YulResult st'"
+  shows "result st = result st' \<and> (\<exists> pref . cont st = pref @ cont st')"
+  using assms
+proof(induction n arbitrary: st st' ls)
+  case 0
+  then show ?case by(auto)
+next
+  case (Suc n)
+
+  show ?case
+  proof(cases ls)
+    case Nil
+    then show ?thesis using Suc.prems by(auto)
+  next
+    case (Cons lh lt)
+
+    show ?thesis
+    proof(cases "r_mode (result st)")
+      case Regular
+      then show ?thesis using Suc.prems by(auto)
+    next
+      case Break
+
+      then have St1 : "evalYulStep D st = YulResult (st\<lparr>cont := map EnterStatement lt\<rparr>)"
+        using Suc.prems Cons by auto
+
+      hence Eval' : "evalYul' D (st\<lparr>cont := map EnterStatement lt\<rparr>) n = YulResult st'"
+        using Suc.prems Cons Break 
+        by(auto)
+
+      have ResEq : "result (st\<lparr>cont := map EnterStatement lt\<rparr>) = result st'"
+        using Suc.IH[OF _ _ Eval', of lt] Suc.prems by(auto)
+
+      hence ResEq' : "result (st) = result st'" by auto
+
+      obtain pref where Pref : "cont (st\<lparr>cont := map EnterStatement lt\<rparr>) = pref @ cont st'"
+        using Suc.IH[OF _ _ Eval', of lt] Suc.prems by(auto)
+
+      hence Pref' : "cont st = (EnterStatement lh # pref) @ cont st'"
+        using Suc.prems Cons by auto
+
+      show ?thesis using ResEq' Pref' by auto
+    next
+      case Continue
+
+      then have St1 : "evalYulStep D st = YulResult (st\<lparr>cont := map EnterStatement lt\<rparr>)"
+        using Suc.prems Cons by auto
+
+      hence Eval' : "evalYul' D (st\<lparr>cont := map EnterStatement lt\<rparr>) n = YulResult st'"
+        using Suc.prems Cons Continue
+        by(auto)
+
+      have ResEq : "result (st\<lparr>cont := map EnterStatement lt\<rparr>) = result st'"
+        using Suc.IH[OF _ _ Eval', of lt] Suc.prems by(auto)
+
+      hence ResEq' : "result (st) = result st'" by auto
+
+      obtain pref where Pref : "cont (st\<lparr>cont := map EnterStatement lt\<rparr>) = pref @ cont st'"
+        using Suc.IH[OF _ _ Eval', of lt] Suc.prems by(auto)
+
+      hence Pref' : "cont st = (EnterStatement lh # pref) @ cont st'"
+        using Suc.prems Cons by auto
+
+      show ?thesis using ResEq' Pref' by auto
+    next
+      case Leave
+      then have St1 : "evalYulStep D st = YulResult (st\<lparr>cont := map EnterStatement lt\<rparr>)"
+        using Suc.prems Cons by auto
+
+      hence Eval' : "evalYul' D (st\<lparr>cont := map EnterStatement lt\<rparr>) n = YulResult st'"
+        using Suc.prems Cons Leave
+        by(auto)
+
+      have ResEq : "result (st\<lparr>cont := map EnterStatement lt\<rparr>) = result st'"
+        using Suc.IH[OF _ _ Eval', of lt] Suc.prems by(auto)
+
+      hence ResEq' : "result (st) = result st'" by auto
+
+      obtain pref where Pref : "cont (st\<lparr>cont := map EnterStatement lt\<rparr>) = pref @ cont st'"
+        using Suc.IH[OF _ _ Eval', of lt] Suc.prems by(auto)
+
+      hence Pref' : "cont st = (EnterStatement lh # pref) @ cont st'"
+        using Suc.prems Cons by auto
+
+      show ?thesis using ResEq' Pref' by auto
+    qed
+  qed
+qed
+
+(* TODO: need to figure out whether we can state HBlock this way in the presence of
+   non-Regular execution mode. The problem is that in a non-regular execution mode,
+   empty continuation means "about to crash".
 *)
 
+
 lemma HBlock :
+
   assumes H : "D %* {P} 
                     (map EnterStatement ls :: ('g, 'v, 't) StackEl list) 
                     {(\<lambda> st . Q (st \<lparr> r_funs := orig_funs
@@ -1135,10 +1291,177 @@ proof
           \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st1)) orig_locals\<rparr>)" and
     Cont1 : "cont st1 = []" by blast
 
+  obtain res1 cont1 where St1 : 
+    "st1 = \<lparr> result = res1, cont = cont1 \<rparr>" by(cases st1; auto)
+
+(* i think we want n = n+1
+   st' = st1, but with locals and funs reset.
+*)
   show "\<exists>n st'.
           evalYul' D \<lparr>result = res, cont = contn\<rparr> n = YulResult st' \<and>
           Q (result st') \<and> cont st' = []"
-    sorry
+  proof(cases "evalYulStep D \<lparr>result = res, cont = contn\<rparr>")
+    case (ErrorResult x21 x22)
+    then show ?thesis using Eval Contn Gather
+      by(cases "r_mode res"; simp add: updateResult_def)
+  next
+    case (YulResult res2)
+    show ?thesis
+    proof(cases "r_mode res")
+      case Regular
+
+(* get cont of res2
+   use sequencing lemma to relate it to the inner body premises
+   then combine 
+      first step + body steps + final exit step
+      to get final result
+*)
+
+      show ?thesis
+      proof(cases "cont res2")
+        case Nil
+
+        then have Conc' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult res2 \<and> Q (result res2) \<and> cont res2 = []"
+          using Contn Regular  Gather Eval YulResult HQ St1
+          by(auto simp add: updateResult_def)
+
+        then show ?thesis by blast
+      next
+        case (Cons r2h r2t)
+
+        then have Conc' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> (2 + n1) = 
+          YulResult (\<lparr> result = res1  \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st1)) orig_locals\<rparr>
+                     , cont = []\<rparr>)"
+          using Contn Regular  Gather Eval YulResult HQ St1
+          apply(auto simp add: updateResult_def)
+
+      qed
+(*
+
+      have Conc' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> (2 + n1) = 
+        YulResult (\<lparr> result = res1  \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st1)) orig_locals\<rparr>
+                   , cont = []\<rparr>)"
+        using Eval HQ Cont1 Locals Funs Gather HP Contn YulResult Regular
+        apply(auto)
+*)
+(*
+    next
+      case Break
+
+      have Res1' : "res1 = res\<lparr>r_funs := f\<rparr>"
+        using irregular_skips_body[OF _ _ Eval] Break St1
+        by auto
+
+      have Res2 : "res2 = \<lparr>result = res, cont = []\<rparr>"
+        using YulResult Res1' Break St1 Contn
+        by(auto)
+
+      hence ResQ : "Q res" using HQ St1 Locals Funs Res1'
+        by(cases res; simp add: restrict_self)
+
+      have Conc' : 
+        "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult res2 \<and> 
+                    Q (result res2) \<and> cont res2 = []"
+        using YulResult Res1' Break St1 Contn Res2 ResQ
+        by(auto)
+
+      then show ?thesis by blast
+    next
+      case Continue
+
+      have Res1' : "res1 = res\<lparr>r_funs := f\<rparr>"
+        using irregular_skips_body[OF _ _ Eval] Continue St1
+        by auto
+
+      have Res2 : "res2 = \<lparr>result = res, cont = []\<rparr>"
+        using YulResult Res1' Continue St1 Contn
+        by(auto)
+
+      hence ResQ : "Q res" using HQ St1 Locals Funs Res1'
+        by(cases res; simp add: restrict_self)
+
+      have Conc' : 
+        "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult res2 \<and> 
+                    Q (result res2) \<and> cont res2 = []"
+        using YulResult Res1' Continue St1 Contn Res2 ResQ
+        by(auto)
+
+      then show ?thesis by blast
+    next
+      case Leave
+
+      have Res1' : "res1 = res\<lparr>r_funs := f\<rparr>"
+        using irregular_skips_body[OF _ _ Eval] Leave St1
+        by auto
+
+      have Res2 : "res2 = \<lparr>result = res, cont = []\<rparr>"
+        using YulResult Res1' Leave St1 Contn
+        by(auto)
+
+      hence ResQ : "Q res" using HQ St1 Locals Funs Res1'
+        by(cases res; simp add: restrict_self)
+
+      have Conc' : 
+        "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult res2 \<and> 
+                    Q (result res2) \<and> cont res2 = []"
+        using YulResult Res1' Leave St1 Contn Res2 ResQ
+        by(auto)
+
+      then show ?thesis by blast
+    qed
+  qed
+qed
+*)
+(*
+      proof(rule exI[of _ "1 :: nat"];
+            rule exI[of _ "st1
+            \<lparr>funs := orig_funs, locals := restrict (r_locals (result st1)) orig_locals\<rparr>"])
+
+        show "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 =
+    YulResult (locals_update (\<lambda>_. restrict (r_locals (result st1)) orig_locals) (funs_update (\<lambda>_. orig_funs) st1)) \<and>
+    Q (result (locals_update (\<lambda>_. restrict (r_locals (result st1)) orig_locals) (funs_update (\<lambda>_. orig_funs) st1))) \<and>
+    cont (locals_update (\<lambda>_. restrict (r_locals (result st1)) orig_locals) (funs_update (\<lambda>_. orig_funs) st1)) = []"
+          using Contn Break St1 Eval HQ Cont1
+          apply(simp)
+          apply(cases n1; clarsimp)
+
+      show ?thesis using YulResult Break Contn St1 HQ Cont1
+        apply(simp)
+*)
+(*
+      obtain stc where Stc : "stc = \<lparr> result = result st1
+                                         \<lparr>r_funs := orig_funs,
+                                          r_locals := restrict (r_locals (result st1)) orig_locals \<rparr>
+                                    , cont = [] \<rparr>"
+        by simp
+*)
+(*
+      have Conc' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult stc \<and>
+                      Q (result stc) \<and> cont stc = []"
+        using Eval Contn Gather HQ Cont1 Locals Funs Break Stc
+        apply(cases n1; cases res; simp del: evalYul'.simps; simp)
+*)
+(*
+    then show ?thesis using Eval Contn Gather HQ Cont1 Locals Funs
+      apply(cases st1; cases res; simp del: evalYul'.simps)
+      apply(cases n1; simp)
+       apply(rule_tac x = 1 in exI)
+       apply(simp add: restrict_self)
+      apply(cases ls; simp)
+       apply(clarsimp)
+       apply(rule_tac x = 1 in exI)
+       apply(simp add: restrict_self)
+       apply(clarsimp)
+*)
+      
+    next
+      case Continue
+      then show ?thesis sorry
+    next
+      case Leave
+      then show ?thesis sorry
+    qed
+  qed
 qed
 
 (*

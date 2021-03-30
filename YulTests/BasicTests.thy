@@ -114,6 +114,19 @@ definition prog7 :: "(256 word, unit) YulStatement" where
 
 value "evalYul basicDialect prog7 999"
 
+definition prog8 :: "(256 word, unit) YulStatement" where
+"prog8 \<equiv>
+  (YUL{
+    for {let i := 0 } 1 {i := add(i, 1) }
+    {
+      hello := 0
+      break
+    }
+    print(hello)}
+)"
+value "evalYul basicDialect prog8 999"
+
+
 (* test switch statements *)
 
 (* test function shadowing (should fail) *)
