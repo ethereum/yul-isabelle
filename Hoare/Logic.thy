@@ -1246,13 +1246,18 @@ qed
    empty continuation means "about to crash".
 *)
 
+(* TODO: have a version of this lemma characterizing what happens when we
+   enter irregular execution mode in the middle of a block.
+*)
 
 lemma HBlock :
 
   assumes H : "D %* {P} 
                     (map EnterStatement ls :: ('g, 'v, 't) StackEl list) 
                     {(\<lambda> st . Q (st \<lparr> r_funs := orig_funs
-                                   , r_locals := restrict (r_locals st) orig_locals \<rparr>))}"
+                                   , r_locals := restrict (r_locals st) orig_locals
+                                   , r_vals := [] \<rparr>) \<and> 
+                             r_mode st = Regular)}"
   shows "D % {(\<lambda> st . r_locals st = orig_locals \<and>
                       r_funs st = orig_funs \<and>
                       r_vals st = [] \<and>
@@ -1281,7 +1286,9 @@ proof
      evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> n =
      YulResult st' \<and>
      Q (result st'
-        \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st')) orig_locals\<rparr>) \<and>
+        \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st')) orig_locals
+        , r_vals := []\<rparr>) \<and>
+     r_mode (result st') = Regular \<and>
      cont st' = []"
     using HTE[OF H, of "\<lparr> result = (res \<lparr> r_funs := f \<rparr>), cont = map EnterStatement ls\<rparr>"]
     unfolding result.simps using HP
@@ -1291,8 +1298,11 @@ proof
     Eval : "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> n1 =
      YulResult st1" and
     HQ : "Q (result st1
-          \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st1)) orig_locals\<rparr>)" and
+          \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st1)) orig_locals
+          , r_vals := []\<rparr>)" and
+    Mode1 : "r_mode (result st1) = Regular" and
     Cont1 : "cont st1 = []" by blast
+    
 
   obtain res1 cont1 where St1 : 
     "st1 = \<lparr> result = res1, cont = cont1 \<rparr>" by(cases st1; auto)
@@ -1406,64 +1416,20 @@ proof
             have Res2 : "res2 = (res1 \<lparr>r_vals := []
                 , r_funs := orig_funs
                 , r_locals := restrict (r_locals (res1)) orig_locals\<rparr>)"
-              using Eval2_unfold St1 Locals Funs
-              apply(cases "r_mode res1"; auto simp add: updateResult_def)
+              using Eval2_unfold St1 Locals Funs Mode1
+              by(auto simp add: updateResult_def)
 
-(*
-            have Qfinal : "Q res2"
-              using HQ
+            have Qfinal : "Q (result st3)"
+              using HQ Res2 St1 St3
+              by(cases res1; auto)
 
-            show ?thesis
-*)
+            have Cont3 : "cont st3 = []" using St3 by auto
 
-          show ?thesis using evalYul'_seq_gen[OF Eval_unfold]
-Eval Eval1 Eval2
-evalYul'_cont_extend
-            unfolding Contn
+            show ?thesis using Eval_final Qfinal Cont3
+              by blast
           qed
-
-(* idea: need a lemma here that lets us say that because this failed, the 
-   Eval above will also fail.
-*)
-          qed
-            
-(* have evalFinal : "evalYul' D \<lparr> result = res1, cont = [ExitStatement (YulBlock ls) (r_locals res)
-           (r_funs res)] \<rparr>
-*)
-
-          show ?thesis 
-            (* in this case we can chain together. *)
-            
-            using evalYul'_seq_gen[OF Eval1, of "[]"]
-              
- Eval
-            (* idea: Eval1 = entering block, Eval = block body*)
         qed
-
-(*
-        have Eval' : "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> n1 =
-                       YulResult st1"
-*)
-(*
-        show ?thesis using evalYul'_seq_gen[OF Eval1]
-*)
-(*
-        then have Conc' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> (2 + n1) = 
-          YulResult (\<lparr> result = res1  \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st1)) orig_locals\<rparr>
-                     , cont = []\<rparr>)"
-          using Contn Regular  Gather Eval YulResult HQ St1
-          apply(auto simp add: updateResult_def)
-*)
       qed
-(*
-
-      have Conc' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> (2 + n1) = 
-        YulResult (\<lparr> result = res1  \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st1)) orig_locals\<rparr>
-                   , cont = []\<rparr>)"
-        using Eval HQ Cont1 Locals Funs Gather HP Contn YulResult Regular
-        apply(auto)
-*)
-(*
     next
       case Break
 
@@ -1471,20 +1437,10 @@ evalYul'_cont_extend
         using irregular_skips_body[OF _ _ Eval] Break St1
         by auto
 
-      have Res2 : "res2 = \<lparr>result = res, cont = []\<rparr>"
-        using YulResult Res1' Break St1 Contn
-        by(auto)
+      hence False using St1 Mode1 Break
+        by auto
 
-      hence ResQ : "Q res" using HQ St1 Locals Funs Res1'
-        by(cases res; simp add: restrict_self)
-
-      have Conc' : 
-        "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult res2 \<and> 
-                    Q (result res2) \<and> cont res2 = []"
-        using YulResult Res1' Break St1 Contn Res2 ResQ
-        by(auto)
-
-      then show ?thesis by blast
+      thus ?thesis by auto
     next
       case Continue
 
@@ -1492,20 +1448,10 @@ evalYul'_cont_extend
         using irregular_skips_body[OF _ _ Eval] Continue St1
         by auto
 
-      have Res2 : "res2 = \<lparr>result = res, cont = []\<rparr>"
-        using YulResult Res1' Continue St1 Contn
-        by(auto)
+      hence False using St1 Mode1 Continue
+        by auto
 
-      hence ResQ : "Q res" using HQ St1 Locals Funs Res1'
-        by(cases res; simp add: restrict_self)
-
-      have Conc' : 
-        "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult res2 \<and> 
-                    Q (result res2) \<and> cont res2 = []"
-        using YulResult Res1' Continue St1 Contn Res2 ResQ
-        by(auto)
-
-      then show ?thesis by blast
+      thus ?thesis by auto
     next
       case Leave
 
@@ -1513,24 +1459,13 @@ evalYul'_cont_extend
         using irregular_skips_body[OF _ _ Eval] Leave St1
         by auto
 
-      have Res2 : "res2 = \<lparr>result = res, cont = []\<rparr>"
-        using YulResult Res1' Leave St1 Contn
-        by(auto)
+      hence False using St1 Mode1 Leave
+        by auto
 
-      hence ResQ : "Q res" using HQ St1 Locals Funs Res1'
-        by(cases res; simp add: restrict_self)
-
-      have Conc' : 
-        "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult res2 \<and> 
-                    Q (result res2) \<and> cont res2 = []"
-        using YulResult Res1' Leave St1 Contn Res2 ResQ
-        by(auto)
-
-      then show ?thesis by blast
+      thus ?thesis by auto
     qed
   qed
 qed
-*)
 (*
       proof(rule exI[of _ "1 :: nat"];
             rule exI[of _ "st1
