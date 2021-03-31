@@ -1508,16 +1508,6 @@ qed
        apply(clarsimp)
 *)
       
-    next
-      case Continue
-      then show ?thesis sorry
-    next
-      case Leave
-      then show ?thesis sorry
-    qed
-  qed
-qed
-
 (*
 lemma HBlock :
 assumes HP : "\<And> st . P st \<Longrightarrow> (\<exists> f . gatherYulFunctions (r_funs st) ls = Inl f)"
