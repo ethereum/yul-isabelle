@@ -395,6 +395,14 @@ definition updateResult :: "('g, 'v, 't) StackEl list \<Rightarrow>
       ErrorResult s None)"
 
 
+(* question: do we check for empty value stack on entry
+into statement? *)
+(*
+              (case vals r of
+               [] \<Rightarrow> evalYulEnterStatement D st (result r)
+               | _ \<Rightarrow> ErrorResult (STR ''Nonempty stack on statement entry'') (Some (result r, [])))
+*)
+
 (* need to make sure early loop exit is happening correctly. *)
 fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) result \<Rightarrow>
                     ('g, 'v, 't) YulResult" where

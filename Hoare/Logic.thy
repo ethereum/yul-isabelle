@@ -370,7 +370,7 @@ proof(cases "r_mode r")
   proof(cases h)
     case (EnterStatement st)
     then show ?thesis using assms Regular
-      by(auto simp add: updateResult_def split: YulResult.splits option.splits)
+      by(cases "r_vals r"; auto simp add: updateResult_def split: YulResult.splits option.splits)
   next
     case (ExitStatement st L F)
     then show ?thesis using assms Regular
@@ -414,7 +414,7 @@ proof(cases "r_mode r")
   proof(cases h)
     case (EnterStatement st)
     then show ?thesis using assms Regular
-      by(auto simp add: updateResult_def split: YulResult.splits option.splits)
+      by(cases "r_vals r"; auto simp add: updateResult_def split: YulResult.splits option.splits)
   next
     case (ExitStatement st L F)
     then show ?thesis using assms Regular
@@ -1252,9 +1252,10 @@ lemma HBlock :
   assumes H : "D %* {P} 
                     (map EnterStatement ls :: ('g, 'v, 't) StackEl list) 
                     {(\<lambda> st . Q (st \<lparr> r_funs := orig_funs
-                                          , r_locals := restrict (r_locals st) orig_locals \<rparr>))}"
+                                   , r_locals := restrict (r_locals st) orig_locals \<rparr>))}"
   shows "D % {(\<lambda> st . r_locals st = orig_locals \<and>
                       r_funs st = orig_funs \<and>
+                      r_vals st = [] \<and>
                       gatherYulFunctions (r_funs st) ls = Inl f \<and>
                       P (st \<lparr> r_funs := f \<rparr> ))}
               YulBlock (ls )
@@ -1264,12 +1265,14 @@ proof
 
   assume "r_locals res = orig_locals \<and>
        r_funs res = orig_funs \<and>
+       r_vals res = [] \<and>
        gatherYulFunctions (r_funs res) ls = Inl f \<and> P (res\<lparr>r_funs := f\<rparr>)"
 
   hence Locals : "r_locals res = orig_locals" and
         Funs : "r_funs res = orig_funs" and
         Gather : "gatherYulFunctions (r_funs res) ls = Inl f" and
-        HP : "P (res\<lparr>r_funs := f\<rparr>)"
+        HP : "P (res\<lparr>r_funs := f\<rparr>)" and
+        Vals : "r_vals res = []"
     by auto
 
   assume Contn : "contn = ([EnterStatement (YulBlock ls)] :: ('g, 'v, 't) StackEl list)"
@@ -1294,34 +1297,29 @@ proof
   obtain res1 cont1 where St1 : 
     "st1 = \<lparr> result = res1, cont = cont1 \<rparr>" by(cases st1; auto)
 
-(* i think we want n = n+1
-   st' = st1, but with locals and funs reset.
-*)
+  have Eval_unfold : 
+    "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> n1 = YulResult \<lparr> result = res1, cont = []\<rparr>"
+    using Eval Cont1 unfolding St1 by auto
+
   show "\<exists>n st'.
           evalYul' D \<lparr>result = res, cont = contn\<rparr> n = YulResult st' \<and>
           Q (result st') \<and> cont st' = []"
   proof(cases "evalYulStep D \<lparr>result = res, cont = contn\<rparr>")
     case (ErrorResult x21 x22)
-    then show ?thesis using Eval Contn Gather
-      by(cases "r_mode res"; simp add: updateResult_def)
+
+    then show ?thesis using Eval Contn Gather St1
+     by(cases "r_mode res";  simp add: updateResult_def) 
   next
-    case (YulResult res2)
+    case (YulResult st2)
     show ?thesis
     proof(cases "r_mode res")
       case Regular
 
-(* get cont of res2
-   use sequencing lemma to relate it to the inner body premises
-   then combine 
-      first step + body steps + final exit step
-      to get final result
-*)
-
       show ?thesis
-      proof(cases "cont res2")
+      proof(cases "cont st2")
         case Nil
 
-        then have Conc' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult res2 \<and> Q (result res2) \<and> cont res2 = []"
+        then have Conc' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult st2 \<and> Q (result st2) \<and> cont st2 = []"
           using Contn Regular  Gather Eval YulResult HQ St1
           by(auto simp add: updateResult_def)
 
@@ -1329,12 +1327,133 @@ proof
       next
         case (Cons r2h r2t)
 
+        have St2 :
+          "st2 = \<lparr>result = res\<lparr>r_funs := f\<rparr>
+                  , cont = map EnterStatement ls @ [ExitStatement (YulBlock ls) (r_locals res)
+           (r_funs res)]\<rparr>"
+          using YulResult Regular Cons Contn Gather
+          by(simp add: updateResult_def)
+
+        have Eval1 :
+          "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = 
+            YulResult \<lparr>result = res\<lparr>r_funs := f\<rparr>
+                      , cont = map EnterStatement ls @ [ExitStatement (YulBlock ls) (r_locals res)
+                         (r_funs res)]\<rparr>"
+          using YulResult Regular Cons Contn Gather St2
+          by(simp)
+
+        show ?thesis
+        proof(cases ls)
+          case Nil' : Nil
+
+          have R2H : "r2h = ExitStatement (YulBlock ls) (r_locals res)
+                         (r_funs res)"
+            using Cons St2 Contn Nil'
+            by(simp)
+
+          have St1' : "st1 = \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = []\<rparr>"
+            using Nil' Eval by(cases n1; auto)
+
+          hence Mode1 : "r_mode res1 = Regular" using Regular St1 St1' by auto
+
+          have Conc' :
+            "evalYul' D \<lparr>result = res, cont = contn\<rparr> 2 =
+             YulResult  \<lparr>result = res , cont = [] \<rparr> \<and>
+             Q (result  \<lparr>result = res , cont = []\<rparr>) \<and>
+             cont \<lparr>result = res, cont = []\<rparr> = []"
+            using YulResult Nil' Cons HQ Contn Regular St2 R2H Locals Funs St1 Cont1 St1' Mode1 Vals
+            by(cases res; cases res1; simp add: updateResult_def restrict_self)
+            
+          then show ?thesis by blast
+        next
+          case Cons' : (Cons lh lt)
+
+          show ?thesis
+          proof(cases "evalYulStep D 
+                      \<lparr> result = res1
+                      , cont = [ExitStatement (YulBlock ls) (r_locals res) (r_funs res)]\<rparr>")
+            case ErrorResult' : (ErrorResult x21 x22)
+
+            hence False using Regular St1
+              by(cases "r_mode res1"; auto simp add: updateResult_def)
+            thus ?thesis by auto
+          next
+            case YulResult' : (YulResult st3)
+
+            have Eval2: "evalYul' D \<lparr> result = res1
+                      , cont = [ExitStatement (YulBlock ls) (r_locals res) (r_funs res)]\<rparr> 1 = YulResult st3"
+            using YulResult' Regular Cons Contn Gather
+            by(simp)
+
+            obtain res2 where St3 : "st3 = \<lparr> result = res2, cont = [] \<rparr>"
+              using Eval2 
+              by(cases st3; cases "r_mode res1"; auto simp add:updateResult_def)
+
+            have Eval2_unfold : 
+              "evalYul' D \<lparr> result = res1
+                          , cont = [ExitStatement (YulBlock ls) (r_locals res) (r_funs res)]\<rparr> 1 =
+               YulResult \<lparr> result = res2, cont = [] \<rparr>"
+              using Eval2 St3  by auto
+
+            have Eval_ext : "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls @ 
+                              [ExitStatement (YulBlock ls) (r_locals res) (r_funs res)]\<rparr> (n1 + 1) = YulResult st3"
+              using evalYul'_seq[OF Eval_unfold Eval2_unfold] St3 by auto
+
+            have Eval_final : "evalYul' D \<lparr>result = res, cont = contn\<rparr> (n1 + 2) = YulResult st3"
+              using evalYul'_seq_gen[OF Eval1, of "[]" "n1 + 1"] Eval_ext St3
+              by(auto)
+
+            have Res2 : "res2 = (res1 \<lparr>r_vals := []
+                , r_funs := orig_funs
+                , r_locals := restrict (r_locals (res1)) orig_locals\<rparr>)"
+              using Eval2_unfold St1 Locals Funs
+              apply(cases "r_mode res1"; auto simp add: updateResult_def)
+
+(*
+            have Qfinal : "Q res2"
+              using HQ
+
+            show ?thesis
+*)
+
+          show ?thesis using evalYul'_seq_gen[OF Eval_unfold]
+Eval Eval1 Eval2
+evalYul'_cont_extend
+            unfolding Contn
+          qed
+
+(* idea: need a lemma here that lets us say that because this failed, the 
+   Eval above will also fail.
+*)
+          qed
+            
+(* have evalFinal : "evalYul' D \<lparr> result = res1, cont = [ExitStatement (YulBlock ls) (r_locals res)
+           (r_funs res)] \<rparr>
+*)
+
+          show ?thesis 
+            (* in this case we can chain together. *)
+            
+            using evalYul'_seq_gen[OF Eval1, of "[]"]
+              
+ Eval
+            (* idea: Eval1 = entering block, Eval = block body*)
+        qed
+
+(*
+        have Eval' : "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> n1 =
+                       YulResult st1"
+*)
+(*
+        show ?thesis using evalYul'_seq_gen[OF Eval1]
+*)
+(*
         then have Conc' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> (2 + n1) = 
           YulResult (\<lparr> result = res1  \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st1)) orig_locals\<rparr>
                      , cont = []\<rparr>)"
           using Contn Regular  Gather Eval YulResult HQ St1
           apply(auto simp add: updateResult_def)
-
+*)
       qed
 (*
 
