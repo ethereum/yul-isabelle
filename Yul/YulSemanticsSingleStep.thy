@@ -403,7 +403,7 @@ into statement? *)
                | _ \<Rightarrow> ErrorResult (STR ''Nonempty stack on statement entry'') (Some (result r, [])))
 *)
 
-(* need to make sure early loop exit is happening correctly. *)
+(* updating EvalYulStep *)
 fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) result \<Rightarrow>
                     ('g, 'v, 't) YulResult" where
 "evalYulStep D r =
@@ -434,7 +434,9 @@ fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) result \<
 
         | Break \<Rightarrow>
           (case ch of
-            (ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } c' f') \<Rightarrow>
+            (EnterStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } ) \<Rightarrow>
+              updateResult ct (evalYulEnterStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} }  (result r))
+            | (ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } c' f') \<Rightarrow>
               YulResult (r \<lparr> cont := ct, mode := Regular \<rparr>)
             | (ExitFunctionCall _ _ _ _ _) \<Rightarrow>
               ErrorResult (STR ''Break outside loop body (inside function body)'')
