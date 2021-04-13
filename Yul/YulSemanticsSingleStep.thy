@@ -436,6 +436,8 @@ fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) result \<
           (case ch of
             (EnterStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } ) \<Rightarrow>
               updateResult ct (evalYulEnterStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} }  (result r))
+            | (ExitStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F) \<Rightarrow>
+              updateResult ct (evalYulExitStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F (result r))
             | (ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } c' f') \<Rightarrow>
               YulResult (r \<lparr> cont := ct, mode := Regular \<rparr>)
             | (ExitFunctionCall _ _ _ _ _) \<Rightarrow>
@@ -445,7 +447,11 @@ fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) result \<
 
         | Continue \<Rightarrow>
           (case ch of
-            ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' \<Rightarrow>
+            (EnterStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } ) \<Rightarrow>
+              updateResult ct (evalYulEnterStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} }  (result r))
+            | (ExitStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F) \<Rightarrow>
+              updateResult ct (evalYulExitStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F (result r))
+            | ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' \<Rightarrow>
               YulResult (r \<lparr> cont := EnterStatement YUL_STMT{ {\<guillemotleft>post\<guillemotright>} } #
                                Expression cond #
                                ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' 
@@ -459,7 +465,11 @@ fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) result \<
                 
         | Leave \<Rightarrow>
           (case ch of
-            (ExitFunctionCall _ _ _ _ _) \<Rightarrow> YulResult (r \<lparr> cont := ch#ct, mode := Regular \<rparr>)
+            (EnterStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } ) \<Rightarrow>
+              updateResult ct (evalYulEnterStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} }  (result r))
+            | (ExitStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F) \<Rightarrow>
+              updateResult ct (evalYulExitStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F (result r))
+            | (ExitFunctionCall _ _ _ _ _) \<Rightarrow> YulResult (r \<lparr> cont := ch#ct, mode := Regular \<rparr>)
             | _ \<Rightarrow> YulResult (r \<lparr> cont := ct \<rparr>))))"
 
 

@@ -231,11 +231,11 @@ next
   proof(cases h)
     case (EnterStatement st)
     then show ?thesis using assms Break
-      by(auto simp add: updateResult_def split: YulResult.splits option.splits)
+      by(cases st; auto simp add: updateResult_def split: YulResult.splits option.splits)
   next
     case (ExitStatement st L F)
     then show ?thesis using assms Break
-      by(auto split: YulStatement.split_asm)
+      by(cases st; auto simp add: updateResult_def YulStatement.split_asm)
   next
     case (EnterFunctionCall name fsig)
     then show ?thesis using assms Break
@@ -255,11 +255,11 @@ next
   proof(cases h)
     case (EnterStatement st)
     then show ?thesis using assms Continue
-      by(auto simp add: updateResult_def split: YulResult.splits option.splits)
+      by(cases st; auto simp add: updateResult_def split: YulResult.splits option.splits)
   next
     case (ExitStatement st L F)
     then show ?thesis using assms Continue
-      by(auto split: YulStatement.split_asm)
+      by(cases st; auto simp add: updateResult_def split: YulResult.splits option.splits)
   next
     case (EnterFunctionCall name fsig)
     then show ?thesis using assms Continue
@@ -279,11 +279,11 @@ next
   proof(cases h)
     case (EnterStatement st)
     then show ?thesis using assms Leave
-      by(auto simp add: updateResult_def split: YulResult.splits option.splits)
+      by(cases st; auto simp add: updateResult_def split: YulResult.splits option.splits)
   next
     case (ExitStatement st L F)
     then show ?thesis using assms Leave
-      by(auto split: YulStatement.split_asm)
+      by(cases st; auto simp add: updateResult_def split: YulResult.splits option.splits)
   next
     case (EnterFunctionCall name fsig)
     then show ?thesis using assms Leave
@@ -391,15 +391,75 @@ proof(cases "r_mode r")
 next
   case Break
   then show ?thesis  using Hstep
-    by(cases h; auto split: YulStatement.split_asm)
+  proof(cases h)
+    case (EnterStatement x1)
+    then show ?thesis using Break Hstep
+      by(cases x1; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (ExitStatement x21 x22 x23)
+    then show ?thesis using Break Hstep
+      by(cases x21; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis using Break Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis using Break Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (Expression x5)
+    then show ?thesis using Break Hstep
+      by(auto split: YulStatement.split_asm)
+  qed
 next
   case Continue
-  then show ?thesis using Hstep
-    by(cases h; auto split: YulStatement.split_asm)
+  then show ?thesis  using Hstep
+  proof(cases h)
+    case (EnterStatement x1)
+    then show ?thesis using Continue Hstep
+      by(cases x1; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (ExitStatement x21 x22 x23)
+    then show ?thesis using Continue Hstep
+      by(cases x21; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis using Continue Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis using Continue Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (Expression x5)
+    then show ?thesis using Continue Hstep
+      by(auto split: YulStatement.split_asm)
+  qed
 next
   case Leave
-  then show ?thesis using Hstep
-    by(cases h; auto)
+  then show ?thesis  using Hstep
+  proof(cases h)
+    case (EnterStatement x1)
+    then show ?thesis using Leave Hstep
+      by(cases x1; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (ExitStatement x21 x22 x23)
+    then show ?thesis using Leave Hstep
+      by(cases x21; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis using Leave Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis using Leave Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (Expression x5)
+    then show ?thesis using Leave Hstep
+      by(auto split: YulStatement.split_asm)
+  qed
 qed
 
 
@@ -435,15 +495,75 @@ proof(cases "r_mode r")
 next
   case Break
   then show ?thesis  using Hstep
-    by(cases h; auto split: YulStatement.splits)
+  proof(cases h)
+    case (EnterStatement x1)
+    then show ?thesis using Break Hstep
+      by(cases x1; auto simp add: updateResult_def split: YulResult.splits option.splits)
   next
+    case (ExitStatement x21 x22 x23)
+    then show ?thesis using Break Hstep
+      by(cases x21; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis using Break Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis using Break Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (Expression x5)
+    then show ?thesis using Break Hstep
+      by(auto split: YulStatement.split_asm)
+  qed
+next
   case Continue
   then show ?thesis  using Hstep
-    by(cases h; auto split: YulStatement.splits)
+  proof(cases h)
+    case (EnterStatement x1)
+    then show ?thesis using Continue Hstep
+      by(cases x1; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (ExitStatement x21 x22 x23)
+    then show ?thesis using Continue Hstep
+      by(cases x21; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis using Continue Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis using Continue Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (Expression x5)
+    then show ?thesis using Continue Hstep
+      by(auto split: YulStatement.split_asm)
+  qed
 next
   case Leave
   then show ?thesis  using Hstep
-    by(cases h; auto split: YulStatement.splits)
+  proof(cases h)
+    case (EnterStatement x1)
+    then show ?thesis using Leave Hstep
+      by(cases x1; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (ExitStatement x21 x22 x23)
+    then show ?thesis using Leave Hstep
+      by(cases x21; auto simp add: updateResult_def split: YulResult.splits option.splits)
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis using Leave Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis using Leave Hstep
+      by(auto split: YulStatement.split_asm)
+  next
+    case (Expression x5)
+    then show ?thesis using Leave Hstep
+      by(auto split: YulStatement.split_asm)
+  qed
 qed
 
 
@@ -1149,6 +1269,9 @@ definition is_leave :: "YulMode \<Rightarrow> bool" where
 
 declare is_leave_def [simp]
 
+(* this one is no longer true since we are updating scope.
+*)
+(*
 lemma irregular_skips_body :
   assumes H : "is_irregular (mode st)"
   assumes Cont : "cont st = (map EnterStatement ls :: ('g, 'v, 't) StackEl list)"
@@ -1240,7 +1363,7 @@ next
     qed
   qed
 qed
-
+*)
 (* TODO: need to figure out whether we can state HBlock this way in the presence of
    non-Regular execution mode. The problem is that in a non-regular execution mode,
    empty continuation means "about to crash".
@@ -1256,8 +1379,7 @@ lemma HBlock :
                     (map EnterStatement ls :: ('g, 'v, 't) StackEl list) 
                     {(\<lambda> st . Q (st \<lparr> r_funs := orig_funs
                                    , r_locals := restrict (r_locals st) orig_locals
-                                   , r_vals := [] \<rparr>) \<and> 
-                             r_mode st = Regular)}"
+                                   , r_vals := [] \<rparr>))}"
   shows "D % {(\<lambda> st . r_locals st = orig_locals \<and>
                       r_funs st = orig_funs \<and>
                       r_vals st = [] \<and>
@@ -1287,8 +1409,7 @@ proof
      YulResult st' \<and>
      Q (result st'
         \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st')) orig_locals
-        , r_vals := []\<rparr>) \<and>
-     r_mode (result st') = Regular \<and>
+        , r_vals := []\<rparr>)  \<and>
      cont st' = []"
     using HTE[OF H, of "\<lparr> result = (res \<lparr> r_funs := f \<rparr>), cont = map EnterStatement ls\<rparr>"]
     unfolding result.simps using HP
@@ -1300,10 +1421,8 @@ proof
     HQ : "Q (result st1
           \<lparr>r_funs := orig_funs, r_locals := restrict (r_locals (result st1)) orig_locals
           , r_vals := []\<rparr>)" and
-    Mode1 : "r_mode (result st1) = Regular" and
     Cont1 : "cont st1 = []" by blast
     
-
   obtain res1 cont1 where St1 : 
     "st1 = \<lparr> result = res1, cont = cont1 \<rparr>" by(cases st1; auto)
 
@@ -1322,16 +1441,16 @@ proof
   next
     case (YulResult st2)
     show ?thesis
-    proof(cases "r_mode res")
+(*    proof(cases "r_mode res")
       case Regular
 
-      show ?thesis
+      show ?thesis *)
       proof(cases "cont st2")
         case Nil
 
         then have Conc' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = YulResult st2 \<and> Q (result st2) \<and> cont st2 = []"
-          using Contn Regular  Gather Eval YulResult HQ St1
-          by(auto simp add: updateResult_def)
+          using Contn (*Regular*)  Gather Eval YulResult HQ St1
+          by(cases "r_mode res"; auto simp add: updateResult_def)
 
         then show ?thesis by blast
       next
@@ -1341,15 +1460,15 @@ proof
           "st2 = \<lparr>result = res\<lparr>r_funs := f\<rparr>
                   , cont = map EnterStatement ls @ [ExitStatement (YulBlock ls) (r_locals res)
            (r_funs res)]\<rparr>"
-          using YulResult Regular Cons Contn Gather
-          by(simp add: updateResult_def)
+          using YulResult (*Regular*) Cons Contn Gather
+          by(cases "r_mode res"; simp add: updateResult_def)
 
         have Eval1 :
           "evalYul' D \<lparr>result = res, cont = contn\<rparr> 1 = 
             YulResult \<lparr>result = res\<lparr>r_funs := f\<rparr>
                       , cont = map EnterStatement ls @ [ExitStatement (YulBlock ls) (r_locals res)
                          (r_funs res)]\<rparr>"
-          using YulResult Regular Cons Contn Gather St2
+          using YulResult (*Regular*) Cons Contn Gather St2
           by(simp)
 
         show ?thesis
@@ -1363,16 +1482,16 @@ proof
 
           have St1' : "st1 = \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = []\<rparr>"
             using Nil' Eval by(cases n1; auto)
-
+(*
           hence Mode1 : "r_mode res1 = Regular" using Regular St1 St1' by auto
-
+*)
           have Conc' :
             "evalYul' D \<lparr>result = res, cont = contn\<rparr> 2 =
              YulResult  \<lparr>result = res , cont = [] \<rparr> \<and>
              Q (result  \<lparr>result = res , cont = []\<rparr>) \<and>
              cont \<lparr>result = res, cont = []\<rparr> = []"
-            using YulResult Nil' Cons HQ Contn Regular St2 R2H Locals Funs St1 Cont1 St1' Mode1 Vals
-            by(cases res; cases res1; simp add: updateResult_def restrict_self)
+            using YulResult Nil' Cons HQ Contn (*Regular*) St2 R2H Locals Funs St1 Cont1 St1' (*Mode1*) Vals
+            by(cases res; cases "r_mode res"; cases res1; simp add: updateResult_def restrict_self)
             
           then show ?thesis by blast
         next
@@ -1384,7 +1503,7 @@ proof
                       , cont = [ExitStatement (YulBlock ls) (r_locals res) (r_funs res)]\<rparr>")
             case ErrorResult' : (ErrorResult x21 x22)
 
-            hence False using Regular St1
+            hence False using (*Regular*) St1
               by(cases "r_mode res1"; auto simp add: updateResult_def)
             thus ?thesis by auto
           next
@@ -1392,7 +1511,7 @@ proof
 
             have Eval2: "evalYul' D \<lparr> result = res1
                       , cont = [ExitStatement (YulBlock ls) (r_locals res) (r_funs res)]\<rparr> 1 = YulResult st3"
-            using YulResult' Regular Cons Contn Gather
+            using YulResult' (*Regular*) Cons Contn Gather
             by(simp)
 
             obtain res2 where St3 : "st3 = \<lparr> result = res2, cont = [] \<rparr>"
@@ -1416,8 +1535,8 @@ proof
             have Res2 : "res2 = (res1 \<lparr>r_vals := []
                 , r_funs := orig_funs
                 , r_locals := restrict (r_locals (res1)) orig_locals\<rparr>)"
-              using Eval2_unfold St1 Locals Funs Mode1
-              by(auto simp add: updateResult_def)
+              using Eval2_unfold St1 Locals Funs (* Mode1 *)
+              by(cases "r_mode res1"; auto simp add: updateResult_def)
 
             have Qfinal : "Q (result st3)"
               using HQ Res2 St1 St3
@@ -1430,11 +1549,16 @@ proof
           qed
         qed
       qed
+    qed
+qed
+
+(* old proof for break etc. *)
+(*
     next
       case Break
 
       have Res1' : "res1 = res\<lparr>r_funs := f\<rparr>"
-        using irregular_skips_body[OF _ _ Eval] Break St1
+        using (*irregular_skips_body[OF _ _ Eval]*) Break St1
         by auto
 
       hence False using St1 Mode1 Break
@@ -1466,5 +1590,6 @@ proof
     qed
   qed
 qed
+*)
 
 end
