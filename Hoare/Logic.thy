@@ -1540,7 +1540,7 @@ qed
 
 lemma evalYul'_bisect :
   assumes H : "evalYul' D \<lparr> result = r1, cont = c1@d1 \<rparr> n = YulResult \<lparr> result = r3, cont = [] \<rparr>"
-  shows "\<exists> r2 n n' . evalYul' D \<lparr> result = r1, cont = c1@d1 \<rparr> n' = YulResult \<lparr> result = r2, cont = d1 \<rparr> "
+  shows "\<exists> r2 n' . evalYul' D \<lparr> result = r1, cont = c1@d1 \<rparr> n' = YulResult \<lparr> result = r2, cont = d1 \<rparr> "
   using H
 proof(induction n arbitrary: r1 c1 d1 r3)
   case 0
@@ -1626,7 +1626,7 @@ next
       using Fsig H Suc Hreg
       by(auto simp add: updateResult_def)
   
-    have evalRest :
+    have EvalRest :
       "evalYul' D (\<lparr> result = st
                  , cont = ((map Expression (rev args) @ 
                           [EnterFunctionCall name fsig])@
@@ -1642,20 +1642,117 @@ next
                           [EnterFunctionCall name fsig,
                            ExitFunctionCall name (r_vals st) (r_locals st) (r_funs st) fsig])\<rparr>) n'' = 
         YulResult \<lparr> result = r'', cont = [ExitFunctionCall name (r_vals st) (r_locals st) (r_funs st) fsig] \<rparr>"
-      using evalYul'_bisect[OF evalRest]
+      using evalYul'_bisect[OF EvalRest]
+      by auto
+
+(* idea:
+   - show that we can stitch bisected computation with initial step
+   - show that this means that next step in bisected computation must succeed
+     (since initial step is initial step of full computation which must succeed)
+   - show this implies what we want for all different modes *)
+
+    have InitToExit :
+     "evalYul' D
+         \<lparr>result = st, cont = [Expression (YulFunctionCallExpression (YulFunctionCall name args))]\<rparr>
+         (1 + n'') =
+        YulResult
+         \<lparr>result = r'', cont = [ExitFunctionCall name (r_vals st) (r_locals st) (r_funs st) fsig]\<rparr>" 
+      using
+        evalYul'_steps[OF EvalStep, of n'' "YulResult \<lparr> result = r'', 
+                              cont = [ExitFunctionCall name (r_vals st) (r_locals st) (r_funs st) fsig] \<rparr>"]
+        EvalToExit
+      by(auto simp del: evalYul'.simps)
+
+    have ExitSucceed :
+      "\<exists> resf . evalYul' D \<lparr>result = r'', cont = [ExitFunctionCall name (r_vals st) (r_locals st) (r_funs st) fsig]\<rparr> 1 = 
+        YulResult resf"
+    proof(cases "evalYul' D \<lparr>result = r'', cont = [ExitFunctionCall name (r_vals st) (r_locals st) (r_funs st) fsig]\<rparr> 1")
+      case (ErrorResult msg rbad)
+
+      have EvalBad :
+      "evalYul' D
+           \<lparr>result = st,
+              cont = [Expression (YulFunctionCallExpression (YulFunctionCall name args))]\<rparr>
+           (1 + n'' + 1) =
+          ErrorResult msg rbad"
+        using evalYul'_steps[OF InitToExit ErrorResult] by auto
+
+      have False
+      proof(cases "n < 1 + n'' + 1")
+        case True
+        then show ?thesis 
+          using evalYul'_pres_succeed[OF H, of "1 + n'' + 1"] EvalBad
+          by auto
+      next
+        case False
+        then show ?thesis
+          using evalYul'_pres_fail[OF EvalBad, of "n"] H by auto
+      qed
+
+      then show ?thesis by auto
+    next
+      case (YulResult rfin)
+
+      then show ?thesis by auto
+    qed
+
+    then obtain resf where Resf :
+      "evalYul' D \<lparr>result = r'', cont = [ExitFunctionCall name (r_vals st) (r_locals st) (r_funs st) fsig]\<rparr> 1 = 
+        YulResult resf"
       by auto
 
     show ?thesis
     proof(cases "r_mode r''")
       case Break
-      then show ?thesis sorry
+      then show ?thesis using ExitSucceed by auto
     next
       case Continue
-      then show ?thesis sorry
+      then show ?thesis using ExitSucceed by auto
+    next
+      case Regular
+
+      hence Resf_done : "cont resf = []" using Resf
+        by(auto simp add: updateResult_def split: YulFunctionBody.splits list.splits option.splits)
+
+      have Resf_mode : "mode resf = Regular" using Resf Regular
+        by(auto simp add: updateResult_def split: YulFunctionBody.splits list.splits option.splits)
+
+      have EvalGood :
+      "evalYul' D
+           \<lparr>result = st,
+              cont = [Expression (YulFunctionCallExpression (YulFunctionCall name args))]\<rparr>
+           (1 + n'' + 1) =
+          YulResult resf"
+        using evalYul'_steps[OF InitToExit Resf] by auto
+
+      then show ?thesis 
+      proof(cases "n < 1 + n'' + 1")
+        case True
+        then show ?thesis 
+          using evalYul'_pres_succeed[OF H, of "1 + n'' + 1"] EvalGood Hreg Resf_mode
+          by(auto)
+      next
+        case False
+        then show ?thesis
+          using evalYul'_pres_succeed[OF EvalGood, of "n"] H Hreg Resf_mode Resf_done
+          by auto
+      qed
     next
       case Leave
-      then show ?thesis sorry
-    qed
+
+      have ExitSucceed2 : 
+      "\<exists> resf . evalYul' D \<lparr>result = r'', cont = [ExitFunctionCall name (r_vals st) (r_locals st) (r_funs st) fsig]\<rparr> 2 = 
+        YulResult resf" using Leave
+        apply(auto simp add: updateResult_def split: YulFunctionBody.splits list.splits option.splits)
+
+      obtain resf2 where Resf2 :
+        "evalYul' D \<lparr>result = r'', cont = [ExitFunctionCall name (r_vals st) (r_locals st) (r_funs st) fsig]\<rparr> 2 = YulResult resf2"
+        using Leave Resf ExitSucceed
+        apply(auto simp add: updateResult_def split: YulFunctionBody.splits list.splits option.splits)
+
+
+      then show ?thesis using ExitSucceed Hreg apply(auto)
+    qed 
 (* idea: if r'' is Regular, show this holds after exit
    if r'' is Break, show it crashes
    if r'' is Leave, show it is regular after exit
@@ -1663,9 +1760,6 @@ we should use a lemma to show that we can take a step successfully. that turns t
 cases into contradictions.
 *)
   
-    obtain r''' where 
-        LastStep : "evalYul' D \<lparr> result = r'', cont = [ExitFunctionCall name (r_vals st) (r_locals st) (r_funs st) fsig] \<rparr> 1 = YulResult \<lparr> result = r''', cont = [] \<rparr>"
-      apply(auto)
 
 (* idea:
 evalYul' D \<lparr> result = st, cont = [(Expression YUL_EXPR{ \<guillemotleft>name\<guillemotright>(\<guillemotleft>args\<guillemotright>) })] \<rparr> 1 =
