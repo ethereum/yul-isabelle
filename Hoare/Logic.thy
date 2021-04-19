@@ -1848,19 +1848,13 @@ next
 qed
 
 lemma HIf :
-  (*assumes Hc : "\<And> st . Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> r_vals st = [c]"*)
+  assumes Hc : "\<And> st . Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> \<exists> c . r_vals st = [c]"
   assumes HE : "D %* {P} ([Expression cond] :: ('g, 'v, 't) StackEl list) {Qe}"
-  (*assumes HT : "D % {(\<lambda> st . Qe (st \<lparr> r_vals := [c] \<rparr>) \<and> is_truthy D c)} YulBlock body {Q}"*)
 
-assumes HE' : "\<And> st . Qe st \<Longrightarrow> Qe' (st \<lparr> rvals := [] \<rparr>)"
-(* {(\<lambda> st . \<exists> c . Qe (st \<lparr> r_vals := [c] \<rparr>) \<and> is_truthy c)} YulBlock Body {Q} *)
-assumes HT : "D % {(\<lambda> st . Qe st \<and> (case rvals_st of [c] \<Rightarrow> is_truthy D c | _ \<Rightarrow> False))} YulBlock Body {Q}"
-
-assumes HF : "Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> 
-              (case rvals st of [c] \<Rightarrow> \<not> is_truthy D c | _ \<Rightarrow> False) \<Longrightarrow> 
+assumes HT: "D % {(\<lambda> st . \<exists> c . Qe (st \<lparr> r_vals := [c] \<rparr>) \<and> is_truthy D c)} (YulBlock body) {Q}"
+assumes HF : "\<And> c st . Qe (st \<lparr> r_vals := [c] \<rparr>) \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> \<not> is_truthy D c \<Longrightarrow>  
               Q (st \<lparr> r_vals := [] \<rparr>)"
 
-  (*assumes HF : "\<And> st . Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> \<not> is_truthy D c \<Longrightarrow> Q (st \<lparr> r_vals := [] \<rparr>)" *)
 
   assumes HIrreg : "\<And> st . P st \<Longrightarrow> is_irregular (r_mode st) \<Longrightarrow> Q st"
 
@@ -1977,7 +1971,7 @@ proof
           using Regular eval_expression_mode[of D res cond n1 res1] Eval1 St1 Cont1
           by auto
           
-        hence St1_vals : "vals st1 = [c]"
+        then obtain c where St1_vals : "vals st1 = [c]"
           using Hc[OF HQe] Reg by auto
 
         have St1_Regular' : "is_regular (r_mode (result st1))" using St1_Regular 
@@ -1993,7 +1987,9 @@ proof
         proof(cases "is_truthy D c")
           case False
 
-          have Qst1 : "Q (result (st1 \<lparr>vals := []\<rparr>))" using HF[OF HQe St1_Regular' False] by auto
+          have Qst1 : "Q (result (st1 \<lparr>vals := []\<rparr>))" using HF[of c "(result (st1 \<lparr>vals := []\<rparr>))"]
+              False St1 St1_Regular HQe St1_vals St1
+            by(cases res1; auto) 
 
           have EvalFull_step3 :
             "evalYul' D \<lparr> result = res1, cont = [ExitStatement (YulIf cond body) (r_locals res) (r_funs res)]\<rparr> 1 =
