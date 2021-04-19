@@ -1848,10 +1848,20 @@ next
 qed
 
 lemma HIf :
-  assumes Hc : "\<And> st . Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> r_vals st = [c]"
+  (*assumes Hc : "\<And> st . Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> r_vals st = [c]"*)
   assumes HE : "D %* {P} ([Expression cond] :: ('g, 'v, 't) StackEl list) {Qe}"
-  assumes HT : "D % {(\<lambda> st . Qe (st \<lparr> r_vals := [c] \<rparr>) \<and> is_truthy D c)} YulBlock body {Q}"
-  assumes HF : "\<And> st . Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> \<not> is_truthy D c \<Longrightarrow> Q (st \<lparr> r_vals := [] \<rparr>)"
+  (*assumes HT : "D % {(\<lambda> st . Qe (st \<lparr> r_vals := [c] \<rparr>) \<and> is_truthy D c)} YulBlock body {Q}"*)
+
+assumes HE' : "\<And> st . Qe st \<Longrightarrow> Qe' (st \<lparr> rvals := [] \<rparr>)"
+(* {(\<lambda> st . \<exists> c . Qe (st \<lparr> r_vals := [c] \<rparr>) \<and> is_truthy c)} YulBlock Body {Q} *)
+assumes HT : "D % {(\<lambda> st . Qe st \<and> (case rvals_st of [c] \<Rightarrow> is_truthy D c | _ \<Rightarrow> False))} YulBlock Body {Q}"
+
+assumes HF : "Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> 
+              (case rvals st of [c] \<Rightarrow> \<not> is_truthy D c | _ \<Rightarrow> False) \<Longrightarrow> 
+              Q (st \<lparr> r_vals := [] \<rparr>)"
+
+  (*assumes HF : "\<And> st . Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> \<not> is_truthy D c \<Longrightarrow> Q (st \<lparr> r_vals := [] \<rparr>)" *)
+
   assumes HIrreg : "\<And> st . P st \<Longrightarrow> is_irregular (r_mode st) \<Longrightarrow> Q st"
 
   shows "D % {P} YulIf cond body {Q}"
@@ -2061,4 +2071,76 @@ proof
     qed
   qed
 qed
+
+(*
+
+for loop = pre, condition, post, body
+--------------
+
+Q start \<Longrightarrow>
+Qp (after pre) \<Longrightarrow>
+Qe (after condition) \<Longrightarrow>
+Qd (after body) \<Longrightarrow>
+Qp (after post) \<Longrightarrow>
+Qf (after exit)
+
+--------------
+
+(* classic while loop rule: *)
+{ P \<and> B } S {P} \<Longrightarrow>
+{P} while B do S done {\<not> B \<and> P }
+
+*)
+
+(* 
+v1. {P} (for {init}  {cond} {post} {body}) {Q}
+
+v2. {P} (for {init} {cond}  {post} {body}) {\<not> B \<and> Q}
+
+-- if there were no non-regular modes --
+
+{P} init {Pi}
+
+{Pi} cond {Pc}
+
+Pc st \<Longrightarrow> vals st = [c]
+
+\<not> is_truthy c \<Longrightarrow> Pi \<Longrightarrow> Pf (?)
+
+is_truthy c \<Longrightarrow> {\<lambda> st . (Pc (st \<lparr> vals = [c] \<rparr>))} body {Pb}
+
+{Pb} post {Pi}
+
+then
+
+{P} (for {init} {cond} {post} {body}) {Pf}
+
+(* problem - multiple iterations = multiple values of c? *)
+(* also. need to address modes *)
+
+------
+
+*)
+
+(*
+lemma HFor :
+  assumes Hc : "\<And> st . Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> r_vals st = [c]"
+  assumes HE : "D %* {P} ([Expression cond] :: ('g, 'v, 't) StackEl list) {Qe}"
+  assumes HT : "D % {(\<lambda> st . Qe (st \<lparr> r_vals := [c] \<rparr>) \<and> is_truthy D c)} YulBlock body {Q}"
+  assumes HF : "\<And> st . Qe st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> \<not> is_truthy D c \<Longrightarrow> Q (st \<lparr> r_vals := [] \<rparr>)"
+  assumes HIrreg : "\<And> st . P st \<Longrightarrow> is_irregular (r_mode st) \<Longrightarrow> Q st"
+
+  shows "D % {P} YulIf cond body {Q}"
+proof
+*)
+
+(*
+
+differences in our case
+- handling of modes. both inside loop and outside
+- handling of initialization and "post"
+- handling of condition evaluation in a manner akin to if
+
+*)
+
 end
