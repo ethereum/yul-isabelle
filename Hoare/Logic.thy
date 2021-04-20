@@ -2118,6 +2118,15 @@ then
 
 *)
 
+definition Decr :: "('a \<Rightarrow> nat) \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> bool" where
+"Decr V s1 s2 l =
+(\<forall> 
+
+(* need to work in loop variant.
+P \<and> b \<longrightarrow> E \<ge> 0
+[P \<and> b \<and> E = n] body [P \<and> E < n]
+*)
+
 (* assuming empty init, for simplicity *)
 lemma HFor :
   assumes Hc : "\<And> st . P2 st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> \<exists> c . r_vals st = [c]"
@@ -2127,8 +2136,11 @@ lemma HFor :
   assumes HPS : "D % {P3} YulBlock post {P}"
   assumes HF : "\<And> c st . P2 st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> r_vals st = [c] \<Longrightarrow> \<not> is_truthy D c \<Longrightarrow> Q (st \<lparr> r_vals := [] \<rparr>)"
   assumes HIrreg : "\<And> st . P st \<Longrightarrow> is_irregular (r_mode st) \<Longrightarrow> Q st"
-  (*assumes HIrreg1 : "\<And> st . P1 st \<Longrightarrow> is_irregular (r_mode st) \<Longrightarrow> Q st"*)
 
+  (* loop variant *)
+(*
+  assumes HV0 : "\<And> st c . P2 st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> r_vals st = [c] \<Longrightarrow> is_truthy D c \<Longrightarrow> 0 \<le> V st"
+  *)
 
   shows "D % {P} YulForLoop [] cond post body {Q}"
 proof
@@ -2316,9 +2328,10 @@ might need induction here. but on what?
             using BodySteps by auto
 
           have EvalFull_step3_body : 
-            "evalYul' D \<lparr> result = res1, cont = [ExitStatement (YulIf cond body) (r_locals res) (r_funs res)]\<rparr> (1 + nf) =
+            "evalYul' D \<lparr> result = res1, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res) (r_funs res)]\<rparr> (1 + nf) =
               YulResult \<lparr> result = result stf, cont = [] \<rparr>"
-            using evalYul'_steps[OF EvalFull_step3 BodySteps_eval] BodySteps_cont by auto
+           (* using evalYul'_steps[OF EvalFull_step3 BodySteps_eval] BodySteps_cont by auto *)
+            using evalYul'_steps
 
           have EvalFull_steps23_body :
             "evalYul' D \<lparr> result = res, cont = [Expression cond, ExitStatement (YulIf cond body) (r_locals res) (r_funs res)]\<rparr> (n1 + 1 + nf) =
