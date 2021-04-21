@@ -813,13 +813,6 @@ next
   qed
 qed
 
-lemma evalYul'_cont_extend_fail :
-  assumes Hstep : "evalYul' D \<lparr>result = r, cont = ci\<rparr> n = 
-                   ErrorResult msg bad"
-  shows "evalYul' D \<lparr> result = r, cont = ci @ post \<rparr> n = 
-                      ErrorResult msg bad"
-  sorry
-
 (*
  * A generalized sequencing rule for evalYul'.
  * If we run one continuation stack c1 for n1 steps, getting back a result r2 and a residue
@@ -1007,7 +1000,8 @@ lemma HTE' [elim]:
 (* "Bisect" an evaluation of a smaller piece *)
 lemma evalYul'_bisect :
   assumes H : "evalYul' D \<lparr> result = r1, cont = c1@d1 \<rparr> n = YulResult \<lparr> result = r3, cont = [] \<rparr>"
-  shows "\<exists> r2 n' . evalYul' D \<lparr> result = r1, cont = c1@d1 \<rparr> n' = YulResult \<lparr> result = r2, cont = d1 \<rparr> "
+  shows "\<exists> r2 n' c' . evalYul' D \<lparr> result = r1, cont = c1@d1 \<rparr> n' = YulResult \<lparr> result = r2, cont = d1 \<rparr> \<and>
+                      evalYul' D \<lparr> result = r1, cont = c1 \<rparr> n' = YulResult \<lparr> result = r2, cont = [] \<rparr>"
   using H
 proof(induction n arbitrary: r1 c1 d1 r3)
   case 0
@@ -1037,24 +1031,63 @@ next
       using evalYulStep_cont_prefix_reg[OF _ Eval1, of c1h "c1t @ d1"] Result1'
       by(auto)
 
-    have EvalRest' : "evalYul' D \<lparr> result = r1', cont = (c1'pre@c1t)@d1 \<rparr> n =
-      YulResult \<lparr> result = r3, cont = [] \<rparr>"
-      using EvalRest unfolding C1' Result1' by auto
+    show ?thesis
+    proof(cases "evalYulStep D \<lparr>result = r1, cont = c1h # c1t \<rparr>")
+      case (ErrorResult x21 x22)
 
-    obtain r2 n' where
-      EvalBisect : "evalYul' D \<lparr>result = r1', cont = (c1'pre @ c1t) @ d1\<rparr> n' = YulResult \<lparr>result = r2, cont = d1\<rparr>"
-      using Suc.IH[OF EvalRest'] by auto
+      then have False using Eval1 Result1'
+          evalYulStep_cont_extend_fail[OF ErrorResult] 
+          evalYulStep_cont_extend[of D r1 c1h "c1t @ d1" r1' c1']
+        by(auto simp del: evalYulStep.simps)
 
-    have evalYul'1 : "evalYul' D \<lparr>result = r1, cont = c1h # c1t @ d1\<rparr> 1 = YulResult \<lparr> result = r1', cont = c1' \<rparr>"
-      using Eval1 Result1'
-      by(auto)
+      thus ?thesis by auto
+    next
+      case (YulResult ressub)
 
-    have EvalFullBisect : "evalYul' D \<lparr> result = r1, cont = c1h # c1t @ d1 \<rparr> (1 + n') = YulResult \<lparr> result = r2, cont = d1 \<rparr>"
-      using evalYul'_steps[OF evalYul'1, of n' "YulResult \<lparr>result = r2, cont = d1\<rparr>"] EvalBisect
-      unfolding C1' Result1'
-      by auto
+      obtain rs1 rc1 where Ressub : "ressub = \<lparr> result = rs1, cont = rc1 \<rparr>"
+        by(cases ressub; auto)
 
-    thus ?thesis unfolding Cons append.simps by blast
+      have Rs1 : "rs1 = r1'"
+        using evalYulStep_cont_extend[of D r1 c1h "c1t @ d1" r1' c1']
+              evalYulStep_cont_extend[of D r1 c1h "c1t" rs1 rc1]
+              Eval1 Result1' YulResult Ressub
+        by(auto simp del: evalYulStep.simps)
+
+      have Rc1 : "rc1 = c1'pre @ c1t"
+        using evalYulStep_cont_extend[of D r1 c1h "c1t @ d1" r1' c1']
+              evalYulStep_cont_extend[of D r1 c1h "c1t" rs1 rc1]
+              Eval1 Result1' YulResult Ressub C1'
+        by(auto simp del: evalYulStep.simps)
+
+      have EvalRest' : "evalYul' D \<lparr> result = r1', cont = (c1'pre@c1t)@d1 \<rparr> n =
+        YulResult \<lparr> result = r3, cont = [] \<rparr>"
+        using EvalRest unfolding C1' Result1' by auto
+  
+      obtain r2 n' where
+        EvalBisect : "evalYul' D \<lparr>result = r1', cont = (c1'pre @ c1t) @ d1\<rparr> n' = YulResult \<lparr>result = r2, cont = d1\<rparr>" and
+        EvalBisect_Sub : "evalYul' D \<lparr>result = r1', cont = (c1'pre @ c1t)\<rparr> n' = YulResult \<lparr>result = r2, cont = []\<rparr>"
+        using Suc.IH[OF EvalRest'] by auto
+  
+      have evalYul'1 : "evalYul' D \<lparr>result = r1, cont = c1h # c1t @ d1\<rparr> 1 = YulResult \<lparr> result = r1', cont = c1' \<rparr>"
+        using Eval1 Result1'
+        by(auto)
+  
+      have EvalFullBisect : "evalYul' D \<lparr> result = r1, cont = c1h # c1t @ d1 \<rparr> (1 + n') = YulResult \<lparr> result = r2, cont = d1 \<rparr>"
+        using evalYul'_steps[OF evalYul'1, of n' "YulResult \<lparr>result = r2, cont = d1\<rparr>"] EvalBisect
+        unfolding C1' Result1'
+        by auto
+
+      have evalYul'Sub1 : "evalYul' D \<lparr>result = r1, cont = c1h # c1t \<rparr> 1 = YulResult \<lparr> result = r1', cont = rc1 \<rparr>"
+        using YulResult Ressub Rs1 Rc1
+        by auto
+  
+      have EvalFullBisect_Sub : "evalYul' D \<lparr> result = r1, cont = c1h # c1t \<rparr> (1 + n') = YulResult \<lparr> result = r2, cont = [] \<rparr>"
+        using evalYul'_steps[OF evalYul'Sub1, of n' "YulResult \<lparr>result = r2, cont = []\<rparr>"] EvalBisect_Sub
+        unfolding Rs1 Rc1
+        by auto
+
+      thus ?thesis using EvalFullBisect unfolding Cons append.simps by blast
+    qed
   qed
 qed
 
@@ -1249,7 +1282,6 @@ proof
   obtain res' where Res' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> n = YulResult \<lparr> result = res', cont = [] \<rparr>"
     using Exec Hdone by (cases st'; auto)
 
-(* probably need to do a case split here on whether the consitutent pieces terminate. *)
   show "Q (result st')"
   proof(cases "evalYulStep D \<lparr>result = res, cont = contn\<rparr>")
     case (ErrorResult x21 x22)
@@ -1297,90 +1329,73 @@ proof
       Bisect1 : "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>
                     , cont = map EnterStatement ls @ [ExitStatement (YulBlock ls) (r_locals res)
                        (r_funs res)]\<rparr> nl = YulResult \<lparr> result = rl, cont = [ExitStatement (YulBlock ls) (r_locals res)
-                       (r_funs res)] \<rparr> " 
+                       (r_funs res)] \<rparr> " and
+      Bisect2 : "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> nl = YulResult \<lparr>result = rl, cont = []\<rparr>"
       using evalYul'_bisect[OF Rest ]
       by auto
 
-    show ?thesis
-    proof(cases "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> nl")
-      case (ErrorResult msg bad)
 
-      have False using evalYul'_cont_extend_fail[OF ErrorResult, of "[ExitStatement (YulBlock ls) (r_locals res)
-                       (r_funs res)]"] Bisect1 by auto
+    have LastStep : "evalYul' D \<lparr> result = rl, cont = [ExitStatement (YulBlock ls) (r_locals res)
+                     (r_funs res)]\<rparr> 1 = YulResult st'"
+    proof(cases "evalYul' D \<lparr> result = rl, cont = [ExitStatement (YulBlock ls) (r_locals res)
+                     (r_funs res)]\<rparr> 1")
+      case ErrorResult' : (ErrorResult msg bad)
+
+      have False using evalYul'_steps[OF Bisect1 ErrorResult'] Rest
+      proof(cases "nl + 1 \<le> n")
+        case True
+        then show ?thesis using evalYul'_pres_fail[OF evalYul'_steps[OF Bisect1 ErrorResult'] True] Rest by auto
+      next
+        case False
+
+        have False_alt : "n \<le> nl + 1" using False by auto
+
+        then show ?thesis using evalYul'_pres_succeed[OF Rest _ False_alt] evalYul'_steps[OF Bisect1 ErrorResult'] by auto
+      qed
 
       then show ?thesis by auto
-
     next
-      case YulResult' : (YulResult st'_alt)
 
-      obtain res'_alt cont'_alt where St'_alt : "st'_alt = \<lparr> result = res'_alt, cont = cont'_alt \<rparr>"
-        by(cases st'_alt; auto)
+      case YulResult'' : (YulResult st''_alt)
 
-      hence YulResult'_alt : "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> nl = YulResult \<lparr> result = res'_alt, cont = cont'_alt \<rparr>"
-        using YulResult' by auto
+      have YulResult''_alt : "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls @ [ExitStatement (YulBlock ls) (r_locals res) (r_funs res)]\<rparr> (nl + 1) = YulResult st''_alt"
+        using evalYul'_steps[OF Bisect1 YulResult'']
+        by auto
 
-      have Cont'_alt : "cont'_alt = []"
-      proof(cases "cont'_alt")
-        case Nil
-        then show ?thesis by auto
+      have Cont_st''_alt : "cont st''_alt = []"
+        using YulResult''
+        by(cases "r_mode rl"; auto simp add: updateResult_def)
+
+      then have St'_eq : "st''_alt = st'" 
+        using evalYul'_steps[OF YulResult_alt YulResult''_alt] Exec
+      proof(cases "1 + (nl + 1) \<le> n")
+        case True
+        then show ?thesis using evalYul'_pres_succeed[OF evalYul'_steps[OF YulResult_alt YulResult''_alt] _ True] Cont_st''_alt Exec by auto
       next
-        case (Cons cah cat)
-        then have False 
-          using evalYul'_cont_extend[OF YulResult'_alt Cons, of "[ExitStatement (YulBlock ls) (r_locals res)
-                       (r_funs res)]"]
-              Bisect1
-          by auto
+        case False
 
-        thus ?thesis by auto
+        have False_alt : "n \<le> 1 + (nl + 1)" using False by auto
+
+        then show ?thesis using evalYul'_pres_succeed[OF Exec _ False_alt] evalYul'_steps[OF YulResult_alt YulResult''_alt] Hdone by auto
       qed
 
-
-      have LastStep : "evalYul' D \<lparr> result = rl, cont = [ExitStatement (YulBlock ls) (r_locals res)
-                       (r_funs res)]\<rparr> 1 = YulResult st'"
-      proof(cases "evalYul' D \<lparr> result = rl, cont = [ExitStatement (YulBlock ls) (r_locals res)
-                       (r_funs res)]\<rparr> 1")
-        case ErrorResult' : (ErrorResult msg bad)
-
-        have False using evalYul'_steps[OF Bisect1 ErrorResult'] Rest
-          apply(simp) sorry
-
-        then show ?thesis by auto
-      next
-
-        case YulResult'' : (YulResult st''_alt)
-
-        have YulResult''_alt : "evalYul' D \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls @ [ExitStatement (YulBlock ls) (r_locals res) (r_funs res)]\<rparr> (nl + 1) = YulResult st''_alt"
-          using evalYul'_steps[OF Bisect1 YulResult'']
-          by auto
-
-        have Cont_st''_alt : "cont st''_alt = []"
-          using YulResult''
-          by(cases "r_mode rl"; auto simp add: updateResult_def)
-
-          then have St'_eq : "st''_alt = st'" 
-            sorry (* hopefully last remaining nontrivial thing *)
-
-        then show ?thesis using YulResult'' unfolding St'_eq by auto
-      qed
-
-      have H_premise : "P (result \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr>) \<and> cont \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> = map EnterStatement ls"
-        using HP by auto
-
-(* not 100% sure why this is true *)
-      have Res'_alt_rl : "res'_alt = rl" sorry
-
-      have Q1 : "Q (rl\<lparr>r_funs := r_funs res, r_locals := restrict (r_locals res'_alt) (r_locals res), r_vals := []\<rparr>)"
-        using HTE[OF H H_premise YulResult'] St'_alt Cont'_alt Funs Locals HTE[OF H] Res'_alt_rl
-        by( auto)
-
-      have "rl\<lparr>r_funs := r_funs res, r_locals := restrict (r_locals res'_alt) (r_locals res), r_vals := []\<rparr> = result st'"
-        using LastStep Res'_alt_rl by(cases "r_mode rl"; auto simp add: updateResult_def)
-
-
-      thus ?thesis using Q1 by auto
+      then show ?thesis using YulResult'' unfolding St'_eq by auto
     qed
+
+    have H_premise : "P (result \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr>) \<and> cont \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> = map EnterStatement ls"
+      using HP by auto
+
+    have Q1 : "Q (rl\<lparr>r_funs := r_funs res, r_locals := restrict (r_locals rl) (r_locals res), r_vals := []\<rparr>)"
+      using HTE[OF H H_premise Bisect2]  Funs Locals HTE[OF H] 
+      by( auto)
+
+    have "rl\<lparr>r_funs := r_funs res, r_locals := restrict (r_locals rl) (r_locals res), r_vals := []\<rparr> = result st'"
+      using LastStep  by(cases "r_mode rl"; auto simp add: updateResult_def)
+
+    thus ?thesis using Q1 by auto
   qed
 qed
+
 
 
 
