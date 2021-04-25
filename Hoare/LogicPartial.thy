@@ -1827,12 +1827,6 @@ proof
             using Regular Res1_reg C True
             by(auto simp add: updateResult_def)
 
-(* i think we need to subtract here... *)          
-(*
-          obtain n2 res2 where
-        hence EvalFull_rest_alt : "evalYul' D \<lparr> result = res, cont = [Expression cond] @ [ExitStatement (YulIf cond body) (r_locals res) (r_funs res)]\<rparr> n' = YulResult \<lparr> result = res', cont = [] \<rparr>"
-          by simp
-*)
           have EvalFull_steps23 :
             "evalYul' D \<lparr>result = res, cont = [Expression cond, ExitStatement (YulIf cond body) (r_locals res) (r_funs res)] \<rparr> (n1 + 1) =
              YulResult (\<lparr> result = res1 \<lparr> r_vals := [] \<rparr>, cont = [EnterStatement (YulBlock body)]\<rparr>)"
@@ -1930,23 +1924,228 @@ then
 
 {P} (for {init} {cond} {post} {body}) {Pf}
 
-(* problem - multiple iterations = multiple values of c? *)
-(* also. need to address modes *)
 
 ------
 
 *)
 
-definition Decr :: "('a \<Rightarrow> nat) \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> bool" where
-"Decr V s1 s2 l =
-(\<forall> 
+(* need a stronger induction hypothesis.
+   also need to account for irregular exit
+ *)
+lemma for_final_iteration:
 
-(* need to work in loop variant.
-P \<and> b \<longrightarrow> E \<ge> 0
-[P \<and> b \<and> E = n] body [P \<and> E < n]
+assumes Hn' : "n' \<le> n"
+assumes Reg : "r_mode res = Regular"
+assumes H: "evalYul' D \<lparr> result = res, cont = [ExitStatement (YulForLoop [] cond post body) locs funcs] \<rparr> n' = YulResult \<lparr> result = res', cont = [] \<rparr>"
+
+shows "\<exists> nl resl c locs' funcs' .
+          evalYul' D  \<lparr> result = res, cont = [ExitStatement (YulForLoop [] cond post body) locs funcs] \<rparr> nl = YulResult \<lparr> result = resl, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs'] \<rparr> \<and>
+          ((r_vals resl = [c] \<and> \<not> is_truthy D c \<and> r_mode resl = Regular) \<or>
+           (is_irregular (r_mode resl)))" using assms
+proof(induction n arbitrary: n' res res' cond post body locs funcs)
+  case 0
+  then show ?case by(auto)
+next
+  case (Suc n)
+  show ?case
+  proof(cases n')
+    case 0
+    then show ?thesis using Suc.prems by auto
+  next
+    case Suc' : (Suc n'1)
+
+    show ?thesis
+    proof(cases "r_vals res")
+      case Nil
+      hence False using Suc.prems Suc' by(auto simp add: updateResult_def)
+      thus ?thesis by auto
+    next
+      case (Cons c vt)
+
+      hence Vt : "vt = []" using Suc.prems Suc' by(cases vt; auto simp add: updateResult_def)
+
+      hence V : "r_vals res = [c]" using Cons by auto
+
+      show ?thesis
+      proof(cases "is_irregular (r_mode res)")
+        case T_Irreg : True
+        then show ?thesis by auto
+      next
+        case F_Irreg : False
+        hence Reg : "r_mode res = Regular"
+          by(cases "r_mode res"; auto)
+
+        show ?thesis
+        proof(cases "is_truthy D c")
+          case F_Truthy : False
+
+          have C1 : "evalYul' D
+                      \<lparr>result = res,
+                         cont = [ExitStatement (YulForLoop [] cond post body) locs funcs]\<rparr>
+                      0 =
+                     YulResult
+                      \<lparr>result = res,
+                         cont = [ExitStatement (YulForLoop [] cond post body) locs funcs]\<rparr>"
+            by auto
+
+          have C2 : "(r_vals res = [c] \<and> \<not> is_truthy D c \<and> r_mode res = Regular)"
+            using F_Truthy V Reg
+            by auto
+
+          show ?thesis using C1 C2 by auto
+        next
+          case T_Truthy : True
+
+          have Exec1 : "evalYul' D
+                        \<lparr>result = res,
+                           cont = [ExitStatement (YulForLoop [] cond post body) locs funcs]\<rparr>
+                        1 =
+                     YulResult
+                      \<lparr>result = (res \<lparr> r_vals := [] \<rparr>),
+                         cont = [EnterStatement (YulBlock body),
+                                EnterStatement (YulBlock post),
+                                Expression cond,
+                                ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )]\<rparr>"
+            using Suc' Suc.prems T_Truthy Reg V
+            by(auto simp add: updateResult_def)
+
+          have Exec1' : "evalYul' D
+                        \<lparr>result = (res \<lparr> r_vals := [] \<rparr>),
+                         cont = [EnterStatement (YulBlock body),
+                                EnterStatement (YulBlock post),
+                                Expression cond,
+                                ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )]\<rparr>
+                         (n' - 1) =
+                         YulResult \<lparr> result = res', cont = [] \<rparr>"
+            using evalYul'_subtract[OF Exec1 Suc.prems(3)] Suc' Suc.prems(3)
+            by(auto simp del: evalYul'.simps)
+
+          hence Exec1'_alt : "evalYul' D
+                        \<lparr>result = (res \<lparr> r_vals := [] \<rparr>),
+                         cont = [EnterStatement (YulBlock body),
+                                EnterStatement (YulBlock post),
+                                Expression cond] @
+                                [ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )]\<rparr>
+                         (n' - 1) =
+                         YulResult \<lparr> result = res', cont = [] \<rparr>" by simp
+
+          obtain res1x n1x where 
+              Exec1'' : 
+              "evalYul' D
+                        \<lparr>result = (res \<lparr> r_vals := [] \<rparr>),
+                         cont = [EnterStatement (YulBlock body),
+                                EnterStatement (YulBlock post),
+                                Expression cond,
+                                ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )]\<rparr>
+                         n1x =
+                         YulResult \<lparr> result = res1x, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )] \<rparr>"
+               and Exec1''_sub : 
+                "evalYul' D \<lparr>result = (res \<lparr> r_vals := [] \<rparr>),
+                         cont = [EnterStatement (YulBlock body),
+                                EnterStatement (YulBlock post),
+                                Expression cond ]\<rparr> n1x =  YulResult \<lparr> result = res1x, cont = [] \<rparr>"
+            using evalYul'_bisect[OF Exec1'_alt] by auto
+
+
+(* subtract again here to get our final statement that we can then plug into the induction hypothesis.
+we then need to do a case split on the mode - not exactly sure how to deal with all of the
+non-regular cases. *)
+
+          have Nlt : "n1x < n' - 1"
+          proof(cases "n1x < n' - 1")
+            case True
+            then show ?thesis by auto
+          next
+            case False
+
+            then have False' : "n' - 1 \<le> n1x" by auto
+
+            hence False using evalYul'_pres_succeed[OF Exec1' _ False'] Exec1'' by auto
+
+            thus ?thesis by auto
+          qed
+
+          hence Nleq : "n1x \<le> n' - 1" by auto
+
+          have Exec1''' : 
+          "evalYul' D \<lparr> result = res1x, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )] \<rparr> ((n' - 1) - n1x) =
+            YulResult \<lparr> result = res', cont = [] \<rparr>"
+            using evalYul'_subtract[OF Exec1'' Exec1' Nleq] by auto
+
+          have Exec1Full :
+            "evalYul' D \<lparr>result = res, cont = [ExitStatement (YulForLoop [] cond post body) locs funcs]\<rparr> (1 + n1x) =
+              YulResult \<lparr> result = res1x, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )] \<rparr>"
+            using evalYul'_steps[OF Exec1 Exec1''] by auto
+
+          obtain n1x' where N1x': "n' - 1 - n1x = Suc n1x'"
+            using Nlt
+            by(cases "n' - 1 - n1x"; auto)
+
+          show ?thesis
+          proof(cases "r_mode res1x")
+          case Regular
+            then show ?thesis sorry
+          next
+            case Break
+
+            have "is_irregular (r_mode res')" using Exec1''' N1x'
+              
+              
+
+            then show ?thesis 
+          next
+            case Continue
+            then show ?thesis sorry
+          next
+            case Leave
+            then show ?thesis sorry
+          qed
+
+          show ?thesis using Suc.prems Suc.IH[OF _] Exec1'''
+
+(*          have Nlt' : "(n' - 1) - n1x" *)
+
+(*
+          have Exec2 :
+"evalYul' \<lparr> result = res1x, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )] \<rparr> (n' - n1x) =
+  \<lparr> result = res', cont = [] \<rparr>"
+ True using Suc.IH
 *)
+(* bisect and subtract *)
+
+          obtain nf resf where ExecLast :
+            "evalYul' D \<lparr>result = res,
+                           cont = [ExitStatement (YulForLoop [] cond post body) locs funcs]\<rparr> nf =
+              \<lparr> resf \<rparr>
+         
+          apply(auto)
+
+
+      qed
+
+
+        
+
+      have Exec1 : 
+
+      then show ?thesis
+    qed
+
+    obtain c where C: "r_vals res = [c]"
+      using Suc.prems Suc
+      apply(cases "r_vals res";  auto simp add: updateResult_def)
+
+    then show ?thesis using Suc.prems
+      apply(simp add: updateResult_def)
+
+  qed
+    
+qed
+
 
 (* assuming empty init, for simplicity *)
+(* we might need to strengthen this by saying
+that the condition is false at the end. *)
 lemma HFor :
   assumes Hc : "\<And> st . P2 st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> \<exists> c . r_vals st = [c]"
   (*assumes HI : "D %* {P} map EnterStatementinit {P1}"*)
@@ -1956,17 +2155,186 @@ lemma HFor :
   assumes HF : "\<And> c st . P2 st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> r_vals st = [c] \<Longrightarrow> \<not> is_truthy D c \<Longrightarrow> Q (st \<lparr> r_vals := [] \<rparr>)"
   assumes HIrreg : "\<And> st . P st \<Longrightarrow> is_irregular (r_mode st) \<Longrightarrow> Q st"
 
-  (* loop variant *)
-(*
-  assumes HV0 : "\<And> st c . P2 st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> r_vals st = [c] \<Longrightarrow> is_truthy D c \<Longrightarrow> 0 \<le> V st"
-  *)
 
   shows "D % {P} YulForLoop [] cond post body {Q}"
 proof
-  fix res contn
+  fix res contn n st'
   assume P : "P res"
   assume Contn : "contn = ([EnterStatement (YulForLoop [] cond post body)] :: ('g, 'v, 't) StackEl list)"
+  assume Exec : "evalYul' D \<lparr> result = res, cont = contn \<rparr> n = YulResult st'"
+  assume Done : "cont st' = []"
 
+  obtain res' where Res' : "evalYul' D \<lparr>result = res, cont = contn\<rparr> n = YulResult \<lparr> result = res', cont = [] \<rparr>"
+    using Exec Done by (cases st'; auto)
+
+  show "Q (result st')"
+  proof(cases "evalYulStep D \<lparr>result = res, cont = contn\<rparr>")
+    case (ErrorResult x21 x22)
+
+    then show ?thesis using Exec Contn 
+     by(cases "r_mode res";  simp add: updateResult_def) 
+  next
+    case (YulResult st2)
+
+    show ?thesis
+    proof(cases "cont st2")
+      case Nil
+
+      show ?thesis
+      proof(cases "is_regular (r_mode res)")
+        case Irreg : False
+
+        have "st2 = \<lparr>result = res, cont = []\<rparr>" using YulResult Nil Irreg Contn
+          by (cases "r_mode res"; auto)
+
+        obtain n' where N' : "n = Suc n'" using  Nil Irreg Exec Contn Res'
+          by(cases n; auto)
+
+        have Eval1'_step : "evalYul' D \<lparr>result = res, cont = [Expression cond]\<rparr> 1 = YulResult \<lparr> result = res, cont = [] \<rparr>"
+          using N' Exec Irreg
+          by(cases "r_mode res"; auto)
+
+        have Eval1' : "st' = \<lparr> result = res, cont = [] \<rparr>"
+          using evalYul'_pres_succeed[OF Eval1'_step, of n] Exec N' Contn Irreg
+          by(cases "r_mode res"; auto)
+
+        (* TODO: we originally had an assumption about Qe implying Q. not sure which is better.
+           i  think they are equivalent. but it is simpler this way; probably we can clean
+           up this proof a bit here *)
+        have Qres : "Q res" using HIrreg[OF P] Irreg Eval1' by(auto)
+
+        have EvalFull_step : "evalYul' D \<lparr>result = res, cont = [EnterStatement (YulForLoop [] cond post body)]\<rparr> 1 
+          = YulResult \<lparr> result = res, cont = []\<rparr>"
+          using YulResult Contn Irreg
+          by(cases "r_mode res"; auto)
+
+        have Conc' : "Q (result \<lparr> result = res, cont = []\<rparr>)"
+          using Qres Contn by auto
+
+        thus ?thesis unfolding Eval1' by blast
+      next
+        case Reg : True
+
+        hence Regular : "r_mode res = Regular" by(cases "r_mode res"; auto)
+
+        (* contradiction: we are in Regular mode but threw away the entire computation. *)
+        have False using YulResult Regular Contn Nil
+          by(auto simp add: updateResult_def)
+
+        thus ?thesis by auto
+      qed
+    next
+      case (Cons cont2h cont2t)
+
+      show ?thesis
+      proof(cases "is_regular (r_mode res)")
+        case Irreg : False
+
+        (* contradiction: we should have thrown away the computation but didn't. *)
+        have False using YulResult Irreg Contn Cons
+          by(cases "r_mode res"; auto simp add: updateResult_def)
+
+        thus ?thesis by auto
+      next
+        case Reg : True
+
+        hence Regular : "r_mode res = Regular" by(cases "r_mode res"; auto)
+
+        (* the "happy-path" case.
+           idea here is that we run the expression, then (if applicable) the body
+        *)
+
+        have EvalFull_step1 :
+          "evalYul' D \<lparr>result = res, cont = [EnterStatement (YulForLoop [] cond post body)]\<rparr> 1 
+            = YulResult \<lparr> result = res, cont = [Expression cond, ExitStatement (YulForLoop [] cond post body) (r_locals res) (r_funs res)]\<rparr>"
+          using Regular
+          by(auto simp add: updateResult_def)
+
+        obtain n' where N' : "n = Suc n'" using Exec Contn Done by (cases n; auto)
+
+        have EvalFull_rest :
+          "evalYul' D \<lparr> result = res, cont = [Expression cond, ExitStatement (YulForLoop [] cond post body) (r_locals res) (r_funs res)]\<rparr> n' = YulResult \<lparr> result = res', cont = [] \<rparr>"
+          using evalYul'_subtract[OF EvalFull_step1, of n st'] Exec Res' unfolding N' Contn
+          by(auto simp del: evalYul'.simps)
+
+        hence EvalFull_rest_alt : "evalYul' D \<lparr> result = res, cont = [Expression cond] @ [ExitStatement (YulForLoop [] cond post body) (r_locals res) (r_funs res)]\<rparr> n' = YulResult \<lparr> result = res', cont = [] \<rparr>"
+          by simp
+
+        obtain n1 res1 where
+          Res1 : "evalYul' D \<lparr> result = res, cont = [Expression cond, ExitStatement (YulForLoop [] cond post body) (r_locals res) (r_funs res)]  \<rparr> n1 =
+            YulResult \<lparr> result = res1, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res) (r_funs res)] \<rparr>" and
+          Res1_sub : "evalYul' D \<lparr> result = res, cont = [Expression cond] \<rparr> n1 = 
+            YulResult \<lparr> result = res1, cont = [] \<rparr>"
+          using evalYul'_bisect[OF EvalFull_rest_alt] by auto
+
+        have Qe : "P2 (res1)" using HTE[OF HE _ Res1_sub] P by auto
+
+        have Res1_reg : "is_regular (r_mode res1)"
+          using eval_expression_mode[OF Res1_sub] Reg by auto
+
+        obtain c where C: "r_vals res1 = [c]"
+          using Hc[OF Qe Res1_reg] by auto
+
+        show ?thesis
+        proof(cases "is_truthy D c")
+          case False
+
+          have Qst1 : "Q ((res1 \<lparr>r_vals := []\<rparr>))" using HF[OF Qe]
+              False Res1_reg Qe C 
+            by(cases res1; auto) 
+
+          have EvalFull_step3 :
+            "evalYul' D \<lparr> result = res1, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res) (r_funs res)]\<rparr> 1 =
+              YulResult \<lparr> result = (res1 \<lparr> r_vals := [] \<rparr>), cont = [] \<rparr>"
+            using Regular Res1_reg C False
+            by(auto simp add: updateResult_def)
+
+          have EvalFull_steps23 :
+            "evalYul' D \<lparr>result = res, cont = [Expression cond, ExitStatement (YulForLoop [] cond post body) (r_locals res) (r_funs res)] \<rparr> (n1 + 1) =
+             YulResult (\<lparr> result = res1 \<lparr> r_vals := [] \<rparr>, cont = []\<rparr>)"
+            using evalYul'_seq[OF Res1_sub EvalFull_step3] 
+            by auto
+
+          have EvalFull_steps123 :
+            "evalYul' D \<lparr>result = res, cont = [EnterStatement (YulForLoop [] cond post body)]\<rparr> (1 + (n1 + 1)) =
+             YulResult (\<lparr> result = res1 \<lparr> r_vals := [] \<rparr>, cont = [] \<rparr>)"
+            using evalYul'_steps[OF EvalFull_step1 EvalFull_steps23] by auto
+
+          have Res1_eq : "(res1 \<lparr> r_vals := [] \<rparr> = result st')"
+            using evalYul'_agree_succeed[OF EvalFull_steps123, of n res'] Res' Contn Exec
+            by auto
+            
+          thus ?thesis using Qst1 by auto
+        next
+          case True
+
+(* YulBlock body, YulBlock post, Expression cond, Statement (same for ) *)
+
+          have EvalFull_step3 :
+            "evalYul' D \<lparr> result = res1, cont = [ ExitStatement (YulForLoop [] cond post body) (r_locals res) (r_funs res)]\<rparr> 1 =
+              YulResult \<lparr> result = (res1 \<lparr> r_vals := [] \<rparr>)
+                        , cont = [ EnterStatement (YulBlock body)
+                                 , EnterStatement (YulBlock post)
+                                 , Expression cond
+                                 , ExitStatement (YulForLoop [] cond post body) (r_locals res1) (r_funs res1)] \<rparr>"
+            using Regular Res1_reg C True
+            by(auto simp add: updateResult_def)
+
+(* 
+
+i think we need to "slice" the full execution as follows:
+- last iteration (?)
+  - ok, but how do we "work backward" from the end? can we have any way
+    to actually
+
+maybe have a lemma about the last iteration
+
+*)
+
+(* the key idea here is that we need to "slice up" the known good execution *)
+
+
+(*
   have EvalCond :
     "\<exists> n st' . evalYul' D \<lparr>result = res, cont = [Expression cond]\<rparr> n =
                YulResult st' \<and>
@@ -2172,7 +2540,19 @@ might need induction here. but on what?
     qed
   qed
 qed
+*)
 
+(*
+lemma assumes "D % {P} YUL{for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>}} {Q}"
+  shows "D % {P} YUL{for {\<guillemotleft>pre\<guillemotright>} 1 {\<guillemotleft>post\<guillemotright>} { if iszero( \<guillemotleft>cond\<guillemotright> ) { break } {\<guillemotleft>body\<guillemotright>}}} {Q}"
+
+
+lemma
+    assumes "D % {P} YUL{for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>}} {\<lambda> st . False}"
+  shows "D % {P} YUL{for {\<guillemotleft>pre\<guillemotright>} 1 {\<guillemotleft>post\<guillemotright>} { if iszero( \<guillemotleft>cond\<guillemotright> ) { break } {\<guillemotleft>body\<guillemotright>}}} {\<lambda> st . False}"
+
+
+*)
 
 (*
 
