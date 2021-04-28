@@ -998,7 +998,7 @@ lemma HTE' [elim]:
   by(auto)
 
 (* "Bisect" an evaluation of a smaller piece *)
-lemma evalYul'_bisect :
+lemma evalYul'_bisect' :
   assumes H : "evalYul' D \<lparr> result = r1, cont = c1@d1 \<rparr> n = YulResult \<lparr> result = r3, cont = [] \<rparr>"
   shows "\<exists> r2 n'  . evalYul' D \<lparr> result = r1, cont = c1@d1 \<rparr> n' = YulResult \<lparr> result = r2, cont = d1 \<rparr> \<and>
                       evalYul' D \<lparr> result = r1, cont = c1 \<rparr> n' = YulResult \<lparr> result = r2, cont = [] \<rparr>"
@@ -1090,6 +1090,12 @@ next
     qed
   qed
 qed
+
+lemma evalYul'_bisect :
+  assumes H : "evalYul' D \<lparr> result = r1, cont = c1@d1 \<rparr> n = YulResult \<lparr> result = r3, cont = [] \<rparr>"
+  shows "\<exists> r2 n'  . evalYul' D \<lparr> result = r1, cont = c1@d1 \<rparr> n' = YulResult \<lparr> result = r2, cont = d1 \<rparr> \<and>
+                      evalYul' D \<lparr> result = r1, cont = c1 \<rparr> n' = YulResult \<lparr> result = r2, cont = [] \<rparr>"
+  using assms evalYul'_bisect' by blast
 
 lemma restrict_self_gen :
   "restrict x (pref @ x) = x"
@@ -2203,7 +2209,7 @@ shows "\<exists> nl resl c locs' funcs' .
            (r_mode resl = Break) \<or>
            (r_mode resl = Leave))" using assms for_final_iteration'[OF _ H, of n']
   by blast
-
+(*
 lemma for_invariant' :
   assumes HN : "n1 \<le> n"
   assumes HNf : "nf \<le> n"
@@ -2368,26 +2374,63 @@ next
                         \<lparr>result = resf, cont = []\<rparr>"
               by simp
 
-            obtain n2' res2' where Exec2' : 
-              "evalYul' D
+            have Exec2'_exists : "\<exists> n2' . \<exists> res2' locs' funcs' . 
+                  evalYul' D
                           \<lparr>result = (res1 \<lparr> r_vals := [] \<rparr>),
                            cont = [EnterStatement (YulBlock body),
                                   EnterStatement (YulBlock post),
                                   Expression cond,
                                   ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr> n2' =
                        YulResult
-                        \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr>" and
-              Exec2'_Sub :
-              "evalYul' D
-                          \<lparr>result = (res1 \<lparr> r_vals := [] \<rparr>),
-                           cont = [EnterStatement (YulBlock body),
-                                  EnterStatement (YulBlock post),
-                                  Expression cond]\<rparr> n2' =
-                       YulResult
-                        \<lparr>result = res2', cont = []\<rparr>"
+                        \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr>"
               using evalYul'_bisect[OF Exec1_halts_alt]
               unfolding append.simps
               by blast
+
+(* one option is to show this equals n2' *)
+            obtain n2's res2's where Exec2'_sub :
+                  "evalYul' D
+                          \<lparr>result = (res1 \<lparr> r_vals := [] \<rparr>),
+                           cont = [EnterStatement (YulBlock body),
+                                  EnterStatement (YulBlock post),
+                                  Expression cond]\<rparr> n2's =
+                       YulResult
+                        \<lparr>result = res2's, cont = []\<rparr>"
+              using evalYul'_bisect[OF Exec1_halts_alt]
+              unfolding append.simps
+              by blast
+
+            obtain n2' where Exec2'_eq_least : "n2' = (LEAST X . \<exists> res2' locs' funcs' . evalYul' D
+                          \<lparr>result = (res1 \<lparr> r_vals := [] \<rparr>),
+                           cont = [EnterStatement (YulBlock body),
+                                  EnterStatement (YulBlock post),
+                                  Expression cond,
+                                  ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr> X =
+                       YulResult
+                        \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr>)"
+              by (auto simp del: evalYul'.simps)
+
+            obtain res2' locs'' funcs'' where Exec2' : 
+              "evalYul' D \<lparr>result = (res1 \<lparr> r_vals := [] \<rparr>),
+                           cont = [EnterStatement (YulBlock body),
+                                  EnterStatement (YulBlock post),
+                                  Expression cond,
+                                  ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr> n2' =
+                       YulResult
+                        \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) locs'' funcs'']\<rparr>"
+              using Exec2'_eq_least LeastI_ex[OF Exec2'_exists]
+              by blast
+
+(* obtain least number of steps for executing prefix?
+(YOU ARE HERE) *)
+(*
+split:
+- body
+- post+cond
+*)
+
+(* another option - show that we are also the least number of steps in sub
+*)
 
             obtain nb resb where Exec2_body :
               "evalYul' D
@@ -2416,16 +2459,6 @@ next
                     Suc.prems(6) Exec2'_body_Sub V T_Truthy
               by(cases res1; auto)
 
-            hence Exec1_halts_alt_post : "evalYul' D
-                          \<lparr>result = (res1 \<lparr> r_vals := [] \<rparr>),
-                           cont = [EnterStatement (YulBlock body),
-                                  EnterStatement (YulBlock post)]@
-                                  [Expression cond,
-                                  ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr> (nf - 1) =
-                       YulResult
-                        \<lparr>result = resf, cont = []\<rparr>"
-              using Exec1_halts
-              by simp
 
             have Exec2_body_alt : "evalYul' D
                           \<lparr>result = (res1 \<lparr> r_vals := [] \<rparr>),
@@ -2439,14 +2472,131 @@ next
                                   ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr>" 
               using Exec2_body by simp
 
-(* this will require some work - hopefully not too difficult . *)
-(* P2 res1 \<rightarrow> P3 after body \<rightarrow> P after post \<rightarrow> P after cond *)
-            have P2_Res2' : "P2 res2'" using HTE[OF Suc.prems(3) _ ] sorry
+            have Nb_leq : "nb \<le> nf - 1 "
+            proof(cases "nb \<le> nf - 1 ")
+              case True thus ?thesis by auto
+            next
+              case False
+
+              hence Nb_leq' : "nf - 1 \<le> nb" by auto
+              hence False using evalYul'_pres_succeed[OF Exec1_halts _ Nb_leq'] Exec2_body by auto
+              thus ?thesis by auto
+            qed
+
+            have Exec3_halts : 
+              "evalYul' D
+                          \<lparr>result = resb, cont = [EnterStatement (YulBlock post),
+                                  Expression cond,
+                                  ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr> (nf - 1 - nb) =
+                  YulResult \<lparr>result = resf, cont = []\<rparr>"
+              using evalYul'_subtract[OF Exec2_body Exec1_halts Nb_leq]
+              by auto
+
+            hence Exec3_halts_alt :
+              "evalYul' D
+                          \<lparr>result = resb, cont = [EnterStatement (YulBlock post)]@
+                                  [Expression cond,
+                                  ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr> (nf - 1 - nb) =
+                  YulResult \<lparr>result = resf, cont = []\<rparr>"
+              by simp
+
+            obtain np resp where 
+              Exec3_post :
+              "evalYul' D
+                          \<lparr>result = resb, cont = [EnterStatement (YulBlock post),
+                                  Expression cond,
+                                  ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr> np =
+                       YulResult
+                        \<lparr>result = resp, cont = [Expression cond,
+                                  ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr>" and
+              Exec3_post_Sub :
+              " evalYul' D
+                    \<lparr>result = resb,
+                       cont = [EnterStatement (YulBlock post)]\<rparr>
+                    np =
+                   YulResult \<lparr>result = resp, cont = []\<rparr>"
+              using evalYul'_bisect[OF Exec3_halts_alt]
+              unfolding append.simps              
+              by blast
+
+            have P_resp : "P resp"
+              using HTE[OF Suc.prems(5) _ Exec3_post_Sub] P3_resb
+              by(simp)
+
+            have Np_leq : "np \<le> nf - 1 - nb "
+            proof(cases "np \<le> nf - 1 - nb ")
+              case True thus ?thesis by auto
+            next
+              case False
+
+              hence Np_leq' : "nf - 1 - nb \<le> np" by auto
+              hence False using evalYul'_pres_succeed[OF Exec3_halts _ Np_leq'] Exec3_post by auto
+              thus ?thesis by auto
+            qed
+
+            have Exec4_halts : 
+              "evalYul' D
+                          \<lparr>result = resp, cont = [Expression cond,
+                                  ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr> (nf - 1 - nb - np) =
+                  YulResult \<lparr>result = resf, cont = []\<rparr>"
+              using evalYul'_subtract[OF Exec3_post Exec3_halts Np_leq]
+              by auto
+
+            hence Exec4_halts_alt : 
+              "evalYul' D
+                          \<lparr>result = resp, cont = [Expression cond] @
+                                  [ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr> (nf - 1 - nb - np) =
+                  YulResult \<lparr>result = resf, cont = []\<rparr>"
+              by simp
+
+            obtain resc nc where Exec4_cond : 
+              "evalYul' D
+              \<lparr>result = resp,
+                 cont =
+                   [Expression cond, 
+                    ExitStatement
+                     (YulForLoop [] cond post body)
+                     (r_locals res1) (r_funs res1)]\<rparr>
+              nc =
+             YulResult
+              \<lparr>result = resc,
+                 cont =
+                   [ExitStatement
+                     (YulForLoop [] cond post body)
+                     (r_locals res1) (r_funs res1)]\<rparr>" and
+              Exec4_cond_Sub : 
+              "evalYul' D
+                    \<lparr>result = resp, cont = [Expression cond]\<rparr> nc =
+                   YulResult \<lparr>result = resc, cont = []\<rparr>"
+              using evalYul'_bisect[OF Exec4_halts_alt]
+              unfolding append.simps
+              by blast
+
+(* need to show resc = res2 *)
+
+            have P2_resc : "P2 resc"
+              using HTE[OF Suc.prems(3) _ Exec4_cond_Sub] P_resp
+              by auto
+
+            have Reassoc : "(1 + (nb + (np + nc))) = 1 + nb + np + nc" by simp
+
+            have Exec1234 : "evalYul' D
+                          \<lparr>result = res1,
+                             cont = [ExitStatement (YulForLoop [] cond post body) locs funcs]\<rparr> (1 + nb + np + nc) = 
+                        YulResult
+                              \<lparr>result = resc,
+                                 cont =
+                                   [ExitStatement
+                                     (YulForLoop [] cond post body)
+                                     (r_locals res1) (r_funs res1)]\<rparr>"
+              using evalYul'_steps[OF Exec1 evalYul'_steps[OF Exec2_body evalYul'_steps[OF Exec3_post Exec4_cond]]]
+              unfolding Reassoc
+              by simp
 
             have Exec12 : "evalYul' D
                           \<lparr>result = res1,
                              cont = [ExitStatement (YulForLoop [] cond post body) locs funcs]\<rparr> (1 + n2') =
-                    YulResult \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr>" 
+                    YulResult \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) (locs'') (funcs'')]\<rparr>" 
               using evalYul'_steps[OF Exec1 Exec2'] by auto
 
             have N2'_leq : "1 + n2' \<le> nf"
@@ -2471,19 +2621,15 @@ next
               thus ?thesis by auto
             qed
 
-(* this case is slightly more interesting - we need to show that basically if this doesn't hold
-we "are already done" since we already went past our target.
-or, show a contradiction stemming from similar *)
             show ?thesis
-
             proof(cases "1 + n2' \<le> n1")
               case True 
 
-              have Exec12_done : "evalYul' D \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr>
+              have Exec12_done : "evalYul' D \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) locs'' funcs'']\<rparr>
                 (nf - (1 + n2')) = YulResult \<lparr> result = resf, cont = [] \<rparr>"
                 using evalYul'_subtract[OF Exec12 Suc.prems(8) N2'_leq] by auto
   
-              have Exec12_res2 : "evalYul' D \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr>
+              have Exec12_res2 : "evalYul' D \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) locs'' funcs'']\<rparr>
                 (n1 - (1 + n2')) = YulResult \<lparr>result = res2, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr>"
                 using evalYul'_subtract[OF Exec12 Suc.prems(7) True] by auto
   
@@ -2493,169 +2639,45 @@ or, show a contradiction stemming from similar *)
               have N_leq3 : "(nf - (1 + n2')) \<le> n"
                 using Suc.prems(2) by auto
 
+              have P2_Res2' : "P2 res2'" using P2_resc
+
+
               show ?thesis using Suc.IH[OF N_leq N_leq3 Suc.prems(3) Suc.prems(4) Suc.prems(5) P2_Res2' Exec12_res2 Exec12_done] by auto                
             next
               case False
 
-              have False_lt : "n1 < 1 + n2'" using False by auto
-              hence False_leq : "n1 \<le> 1 + n2'" using False by auto
+              have N1_nz : "1 \<le> n1" using Suc'  by auto
 
+              have N1_meets_n2'_spec :
+                "\<exists>res2' locs' funcs' .
+                 evalYul' D
+                  \<lparr>result = res1\<lparr>r_vals := []\<rparr>,
+                     cont = [EnterStatement (YulBlock body), EnterStatement (YulBlock post), Expression cond, ExitStatement (YulForLoop [] cond post body) (r_locals res1) (r_funs res1)]\<rparr>
+                  (n1 - 1) =
+                 YulResult \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr>"
+                using evalYul'_subtract[OF Exec1 Suc.prems(7) N1_nz] 
+                by blast
+                
+              have N2_is_least : "n2' \<le> n1 - 1"
+                using Least_le[of "(\<lambda> X . \<exists>res2' locs'' funcs''.
+                 evalYul' D
+                  \<lparr>result = res1\<lparr>r_vals := []\<rparr>,
+                     cont = [EnterStatement (YulBlock body), EnterStatement (YulBlock post), Expression cond, ExitStatement (YulForLoop [] cond post body) (r_locals res1) (r_funs res1)]\<rparr>
+                  X =
+                 YulResult \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) locs'' funcs'']\<rparr>)" "n1 - 1", OF N1_meets_n2'_spec ]
+                unfolding sym[OF Exec2'_eq_least]
+                by blast
 
-              have NF_leq : "1 + n1 \<le> nf"
-                using N2'_leq False by auto
+              hence False using False Suc'
+                by(auto)
 
-              have N_leq3 : "(nf - (1 + n2')) \<le> n"
-                using Suc.prems(2) by auto
-
-
-              have N1_leq : "n1 \<le> n" using Suc.prems using NF_leq by auto
-
-              have Exec12_done : "evalYul' D \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr>
-                (nf - (1 + n2')) = YulResult \<lparr> result = resf, cont = [] \<rparr>"
-                using evalYul'_subtract[OF Exec12 Suc.prems(8) N2'_leq] by auto
-
-              have Exec12_res2 : "evalYul' D \<lparr>result = res2, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr>
-                (1 + n2' - n1) = YulResult \<lparr>result = res2', cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res1 ) (r_funs res1 )]\<rparr>"
-                using evalYul'_subtract[OF Suc.prems(7) Exec12 False_leq]
-                by auto
-
-              have Exec12_concat : "evalYul' D \<lparr>result = res2, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr>
-                (nf - n1) = YulResult \<lparr> result = resf, cont = [] \<rparr>"
-                using evalYul'_steps[OF Exec12_res2 Exec12_done] False_lt N2'_leq Suc'
-                by(simp del: evalYul'.simps)
-
-(*
-
-*)
-
-              have "nf \<le> n"
-
-              show ?thesis using Suc.IH[OF N1_leq _ Suc.prems(3) Suc.prems(4) Suc.prems(5) Suc.prems(6) Suc.prems(7) Suc.prems(8)]
-
-
-(*
-              have Exec12_sub : "evalYul' D \<lparr>result = res2, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr>
-                (nf - n1) = YulResult \<lparr> result = resf, cont = [] \<rparr>"
-                using evalYul'_subtract[]
-*)
-
-(* maybe we can do something with distance to the end...*)
-
-(*
-
-we go from beginning to res2, then to res2'
-
-*)
-
-(*
-  OK - so let's see again
-  - let's see let's see
-*)
-
-              show ?thesis using Suc.IH[OF _ _ Suc.prems(3) Suc.prems(4) Suc.prems(5) P2_Res2' _ Exec12_done]
-
-
-
-              have "nf \<le> n" using N2'_leq False_lt N1_leq Suc.prems(1) Suc.prems(2)
-
-
-
-(* in this case the loop itself occurs somewhere in its own first iteration
-this should be a contradiction *)
-
-
-              show ?thesis using Suc.IH[OF N1_leq _ Suc.prems(3) Suc.prems(4) Suc.prems(5) P2_Res2' _ Exec12_done]
-
-(* YOU ARE HERE *)
-
-
-              have Exec_Res2_done : "evalYul' D \<lparr>result = res2, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr> (nf - (n1)) = YulResult \<lparr> result = resf, cont = [] \<rparr>"
-                using evalYul'_subtract[OF Suc.prems(7) Suc.prems(8) N1_leq] by auto
-
-              then have False using Exec12 Suc.prems(7)
-
-              show ?thesis using Suc.IH[OF _ _ Suc.prems(3) Suc.prems(4) Suc.prems(5)]
-
-(* perhaps we need another lemma? *)
-(*
-            have Exec1'_alt' : "evalYul' D
-                          \<lparr>result = (res1 \<lparr> r_vals := [] \<rparr>),
-                           cont = [EnterStatement (YulBlock body),
-                                  EnterStatement (YulBlock post),
-                                  Expression cond] \<rparr>
-                           (n' - 1) =
-                           YulResult \<lparr> result = resf, cont = [] \<rparr>"
-  
-            obtain res1x n1x where 
-                Exec1'' : 
-                "evalYul' D
-                          \<lparr>result = (res \<lparr> r_vals := [] \<rparr>),
-                           cont = [EnterStatement (YulBlock body),
-                                  EnterStatement (YulBlock post),
-                                  Expression cond,
-                                  ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )]\<rparr>
-                           n1x =
-                           YulResult \<lparr> result = res1x, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )] \<rparr>"
-                 and Exec1''_sub : 
-                  "evalYul' D \<lparr>result = (res \<lparr> r_vals := [] \<rparr>),
-                           cont = [EnterStatement (YulBlock body),
-                                  EnterStatement (YulBlock post),
-                                  Expression cond ]\<rparr> n1x =  YulResult \<lparr> result = res1x, cont = [] \<rparr>"
-              using evalYul'_bisect[OF Exec1'_alt] by auto
-  *)
-            have Nlt : "n1x < n' - 1"
-            proof(cases "n1x < n' - 1")
-              case True
-              then show ?thesis by auto
-            next
-              case False
-  
-              then have False' : "n' - 1 \<le> n1x" by auto
-  
-              hence False using evalYul'_pres_succeed[OF Exec1' _ False'] Exec1'' by auto
-  
               thus ?thesis by auto
             qed
-  
-            hence Nleq : "n1x \<le> n' - 1" by auto
-  
-            have Exec1''' : 
-            "evalYul' D \<lparr> result = res1x, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )] \<rparr> ((n' - 1) - n1x) =
-              YulResult \<lparr> result = res', cont = [] \<rparr>"
-              using evalYul'_subtract[OF Exec1'' Exec1' Nleq] by auto
-  
-            have Exec1Full :
-              "evalYul' D \<lparr>result = res, cont = [ExitStatement (YulForLoop [] cond post body) locs funcs]\<rparr> (1 + n1x) =
-                YulResult \<lparr> result = res1x, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res ) (r_funs res )] \<rparr>"
-              using evalYul'_steps[OF Exec1 Exec1''] by auto
-  
-            obtain n1x' where N1x': "n' - 1 - n1x = Suc n1x'"
-              using Nlt
-              by(cases "n' - 1 - n1x"; auto)
-
-            have Nlt_x : "(n' - 1) - n1x \<le> n" using Suc' Suc.prems(1) Nlt
-              by(simp)
-
-            obtain nl resl c locs' funcs' where Execl :
-                "evalYul' D \<lparr>result = res1x, cont = [ExitStatement (YulForLoop [] cond post body) (r_locals res) (r_funs res)]\<rparr>
-                      nl =
-                     YulResult \<lparr>result = resl, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr>" and
-                SpecL : "(r_vals resl = [c] \<and> \<not> is_truthy D c \<and> r_mode resl = Regular \<or> r_mode resl = Break \<or> r_mode resl = Leave)"
-              using Suc.IH[OF Nlt_x Exec1'''] by blast
-
-            have Exec1L_Full : 
-              "evalYul' D \<lparr>result = res, cont = [ExitStatement (YulForLoop [] cond post body) locs funcs]\<rparr> (1 + n1x + nl) = 
-                YulResult \<lparr>result = resl, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr>"
-              using evalYul'_steps[OF Exec1Full Execl] by auto
-
-            show ?thesis using SpecL Exec1L_Full by blast
           qed
         qed
       qed
     qed
   qed
-qed
-
 qed 
 
 lemma for_invariant :
@@ -2667,8 +2689,11 @@ lemma for_invariant :
                YulResult \<lparr>result = res2, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr>"
   assumes Hhalt : "evalYul' D \<lparr>result = res1, cont = [ExitStatement (YulForLoop [] cond post body) locs funcs]\<rparr> nf =
     YulResult \<lparr> result = resf, cont = [] \<rparr>"
-  shows "P2 res2" using assms
-  using for_invariant' by blast
+  shows "P2 res2" 
+  
+  (*using assms
+  using for_invariant'[of n1 nf nf] by blast*)
+  sorry
 
 (*
 proof(induction n arbitrary: n' locs funcs locs' funcs' res1 resf)
