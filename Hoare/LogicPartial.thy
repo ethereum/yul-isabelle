@@ -2382,7 +2382,6 @@ next
 
       then show ?thesis by auto
     next
-(* the following is copied from final_iteration *)
       case Continue
 
       have Exec1 : "evalYul' D \<lparr> result = res1, cont = [ExitStatement (YulForLoop [] cond post body) locs funcs] \<rparr> 1 = 
@@ -2901,8 +2900,10 @@ lemma HFor :
   assumes HT : "D % {(\<lambda> st . \<exists> c . P2 (st \<lparr> r_vals := [c] \<rparr>) \<and> is_truthy D c)} YulBlock body {P3}"
   assumes HPS : "D % {P3} YulBlock post {P}"
   assumes HF : "\<And> c st . P2 st \<Longrightarrow> is_regular (r_mode st) \<Longrightarrow> r_vals st = [c] \<Longrightarrow> \<not> is_truthy D c \<Longrightarrow> Q (st \<lparr> r_vals := [] \<rparr>)"
-  assumes HIrreg : "\<And> st . P st \<Longrightarrow> is_irregular (r_mode st) \<Longrightarrow> Q st"
+  assumes HIrreg : "\<And> st . P st \<Longrightarrow> \<not> is_regular (r_mode st) \<Longrightarrow> Q (st)"
 
+  assumes HBreak : "\<And> st . P2 st \<Longrightarrow> r_mode st = Break \<Longrightarrow> Q (st \<lparr> r_mode := Regular \<rparr>)"
+  assumes HLeave :  "\<And> st . P2 st \<Longrightarrow> r_mode st = Leave \<Longrightarrow> Q (st )"
 
   shows "D % {P} YulForLoop [] cond post body {Q}"
 proof
@@ -2946,20 +2947,19 @@ proof
           using evalYul'_pres_succeed[OF Eval1'_step, of n] Exec N' Contn Irreg
           by(cases "r_mode res"; auto)
 
+        have P2 : "P2 res"
+          using HTE[OF HE _ Eval1'_step] P by auto
+
         (* TODO: we originally had an assumption about Qe implying Q. not sure which is better.
            i  think they are equivalent. but it is simpler this way; probably we can clean
            up this proof a bit here *)
-        have Qres : "Q res" using HIrreg[OF P] Irreg Eval1' by(auto)
 
         have EvalFull_step : "evalYul' D \<lparr>result = res, cont = [EnterStatement (YulForLoop [] cond post body)]\<rparr> 1 
           = YulResult \<lparr> result = res, cont = []\<rparr>"
           using YulResult Contn Irreg
           by(cases "r_mode res"; auto)
-
-        have Conc' : "Q (result \<lparr> result = res, cont = []\<rparr>)"
-          using Qres Contn by auto
-
-        thus ?thesis unfolding Eval1' by blast
+        
+        then show ?thesis using HIrreg[OF P Irreg] Eval1' by auto
       next
         case Reg : True
 
@@ -3148,16 +3148,87 @@ proof
               by auto
           next
             case Break
-            then show ?thesis (* need to "rewind"; show it was irregular before condition *)
-              sorry
+
+            have P2_final : "P2 resf" using for_invariant[OF HE HT HPS Qe EvalFinal EvalFull_step3_rest] by auto
+
+            have Lt_nf : "nf < n - (1 + n1) "
+            proof(cases "nf < n - (1 + n1)")
+              case True
+              then show ?thesis by auto
+            next
+              case False
+
+              hence False_leq : "n - (1 + n1) \<le> nf"
+                by auto
+
+              hence False using evalYul'_pres_succeed[OF EvalFull_step3_rest _ False_leq] EvalFinal by auto
+
+              then show ?thesis by auto
+            qed
+            hence Leq_nf : "nf \<le> n - (1 + n1) " by auto
+
+            (* use subtract again to get resf \<rightarrow> res' *)
+            have LastStep : "evalYul' D \<lparr>result = resf, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr> (n - (1 + n1) - nf) =
+             YulResult \<lparr> result = res', cont = [] \<rparr>"
+              using evalYul'_subtract[OF EvalFinal EvalFull_step3_rest Leq_nf] by auto
+
+            have LastStep' : "evalYul' D \<lparr>result = resf, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr> (n - (1 + n1) - nf) =
+               YulResult \<lparr> result = resf \<lparr> r_mode := Regular \<rparr>, cont = [] \<rparr>"
+              using Break Lt_nf 
+              by(auto simp add: updateResult_def)
+
+            have Resf_eq : "res' = resf \<lparr> r_mode := Regular \<rparr>"
+              using evalYul'_agree_succeed[OF LastStep' LastStep] by auto
+
+            have "Q (resf\<lparr>r_mode := Regular \<rparr> )"
+              using HBreak[OF P2_final Break] by auto
+
+            thus ?thesis using Exec Res' unfolding Resf_eq 
+              by auto
           next
             case Continue
             hence False using EvalFinal_spec by auto
             then show ?thesis by auto
           next
             case Leave
-            then show ?thesis (* need to "rewind"; show it was irregular before condition *)
-              sorry
+
+            have P2_final : "P2 resf" using for_invariant[OF HE HT HPS Qe EvalFinal EvalFull_step3_rest] by auto
+
+            have Lt_nf : "nf < n - (1 + n1) "
+            proof(cases "nf < n - (1 + n1)")
+              case True
+              then show ?thesis by auto
+            next
+              case False
+
+              hence False_leq : "n - (1 + n1) \<le> nf"
+                by auto
+
+              hence False using evalYul'_pres_succeed[OF EvalFull_step3_rest _ False_leq] EvalFinal by auto
+
+              then show ?thesis by auto
+            qed
+            hence Leq_nf : "nf \<le> n - (1 + n1) " by auto
+
+            (* use subtract again to get resf \<rightarrow> res' *)
+            have LastStep : "evalYul' D \<lparr>result = resf, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr> (n - (1 + n1) - nf) =
+             YulResult \<lparr> result = res', cont = [] \<rparr>"
+              using evalYul'_subtract[OF EvalFinal EvalFull_step3_rest Leq_nf] by auto
+
+            have LastStep' : "evalYul' D \<lparr>result = resf, cont = [ExitStatement (YulForLoop [] cond post body) locs' funcs']\<rparr> (n - (1 + n1) - nf) =
+               YulResult \<lparr> result = resf, cont = [] \<rparr>"
+              using Leave Lt_nf 
+              by(auto simp add: updateResult_def)
+
+            have Resf_eq : "res' = resf"
+              using evalYul'_agree_succeed[OF LastStep' LastStep] by auto
+
+            have "Q (resf )"
+              using HLeave[OF P2_final Leave] by auto
+
+            thus ?thesis using Exec Res' unfolding Resf_eq 
+              by auto
+
           qed
         qed
       qed
@@ -3386,26 +3457,4 @@ might need induction here. but on what?
 qed
 *)
 
-(*
-lemma assumes "D % {P} YUL{for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>}} {Q}"
-  shows "D % {P} YUL{for {\<guillemotleft>pre\<guillemotright>} 1 {\<guillemotleft>post\<guillemotright>} { if iszero( \<guillemotleft>cond\<guillemotright> ) { break } {\<guillemotleft>body\<guillemotright>}}} {Q}"
-
-
-lemma
-    assumes "D % {P} YUL{for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>}} {\<lambda> st . False}"
-  shows "D % {P} YUL{for {\<guillemotleft>pre\<guillemotright>} 1 {\<guillemotleft>post\<guillemotright>} { if iszero( \<guillemotleft>cond\<guillemotright> ) { break } {\<guillemotleft>body\<guillemotright>}}} {\<lambda> st . False}"
-
-
-*)
-
-(*
-
-differences in our case
-- handling of modes. both inside loop and outside
-- handling of initialization and "post"
-- handling of condition evaluation in a manner akin to if
-
-*)
-*)
-*)
 end
