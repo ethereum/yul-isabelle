@@ -944,7 +944,7 @@ abbreviation YulStepsStmt ::
    bool" 
 ("_ % {_} _ {_}") where
 "(D % {P} c {Q}) \<equiv>
-  (D % {(\<lambda> st . P (result st) \<and> cont st = [EnterStatement c])}
+  (D % {(\<lambda> st . cont st = [EnterStatement c] \<and> P (result st))}
        {(\<lambda> st . Q (result st))})"
 
 (* A slightly lower-level version of these triples, talking about the continuation stack
@@ -958,7 +958,7 @@ abbreviation YulStepsStackEls ::
    bool" 
 ("_ %* {_} _ {_}") where
 "(D %* {P} els {Q}) \<equiv>
-  (D % {(\<lambda> st . P (result st) \<and> cont st = els)}
+  (D % {(\<lambda> st . cont st = els \<and> P (result st))}
        {(\<lambda> st . Q (result st))})"
 
 lemma stackEls_sem_nil :
@@ -975,11 +975,11 @@ lemma HTI' [intro]:
       evalYul' D \<lparr>result = res, cont = contn \<rparr> n = YulResult st' \<Longrightarrow>
       cont st' = [] \<Longrightarrow>
       Q st'"
-  shows "D % {(\<lambda> st . P1 (result st) \<and> P2 (cont st))} {Q}" 
+  shows "D % {(\<lambda> st . P2 (cont st) \<and> P1 (result st))} {Q}" 
 proof
   fix st st' :: "('a, 'b, 'c) result"
   fix n
-  assume Assm : "P1 (result st) \<and> P2 (cont st)"
+  assume Assm : "P2 (cont st) \<and> P1 (result st) "
   assume Exec : "evalYul' D st n = YulResult st'"
   assume Done : "cont st' = []"
 
@@ -1072,7 +1072,7 @@ qed
 
 
 lemma HTE' [elim]:
-  assumes H : "D%{(\<lambda> st . P1 (result st) \<and> P2 (cont st))} {Q}"
+  assumes H : "D%{(\<lambda> st . P2 (cont st) \<and> P1 (result st) )} {Q}"
   assumes HP1 : "P1 res"
   assumes HP2 : "P2 contn"
   assumes Hexec : "evalYul' D \<lparr> result = res, cont = contn \<rparr> n = YulResult st'"
@@ -1359,7 +1359,6 @@ definition is_leave :: "YulMode \<Rightarrow> bool" where
 
 declare is_leave_def [simp]
 
-
 lemma HBlock :
 
   assumes H : "D %* {P} 
@@ -1497,7 +1496,7 @@ proof
       then show ?thesis using YulResult'' unfolding St'_eq by auto
     qed
 
-    have H_premise : "P (result \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr>) \<and> cont \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> = map EnterStatement ls"
+    have H_premise : " cont \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr> = map EnterStatement ls \<and> P (result \<lparr>result = res\<lparr>r_funs := f\<rparr>, cont = map EnterStatement ls\<rparr>)"
       using HP by auto
 
     have Q1 : "Q (rl\<lparr>r_funs := r_funs res, r_locals := restrict (r_locals rl) (r_locals res), r_vals := []\<rparr>)"
@@ -3493,4 +3492,44 @@ proof
 qed
 
 
+
+lemma loop_rewrite1 :
+  assumes X1 : "stm1 = YUL_STMT{ for {} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>}}"
+  assumes X2 : "stm2 = YUL_STMT{ for {} 1 {\<guillemotleft>post\<guillemotright>} {\<guillemotleft> YUL_STMT{ if eq(0, \<guillemotleft>cond\<guillemotright> ) {break} }  # body \<guillemotright>} }"
+
+  assumes H1 : "D % {P} stm1 {Q}"
+  shows "D % {P} stm2 {Q}" 
+  unfolding X2
+ (* apply(rule HFor[of "\<lambda> st . r_vals st = [1] \<and> P (st \<lparr> r_vals := [] \<rparr>)"]) *)
+  apply(rule HFor)
+          apply(fastforce)
+         defer
+  apply(rule HT_conseq)
+           apply(rule HBlock)
+  
+           apply(fastforce)
+  apply(clarsimp)
+
+          defer
+          apply(fastforce)
+
+         apply(auto)
+
+
+
+         apply(rule HBlock) defer
+  apply(rule HBlock)
+
+  apply(auto)
+
+(*
+  apply(rule HBlock)
+          defer
+          defer
+  apply(rule HIf)
+          apply(simp)
+         apply(rule HTI)
+  apply(case_tac n; simp)
+  apply(auto)
+*)
 end
