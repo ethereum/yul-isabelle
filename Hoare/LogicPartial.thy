@@ -3506,6 +3506,13 @@ lemma loop_rewrite1 :
          defer
   apply(rule HT_conseq)
            apply(rule HBlock)
+           defer
+           defer
+  apply(fastforce)
+  apply(simp)
+           apply(auto)
+
+  
   
            apply(fastforce)
   apply(clarsimp)
@@ -3514,13 +3521,12 @@ lemma loop_rewrite1 :
           apply(fastforce)
 
          apply(auto)
+  apply(rule HT_conseq)
+           apply(rule HBlock)
+             apply(auto)
 
-
-
-         apply(rule HBlock) defer
-  apply(rule HBlock)
-
-  apply(auto)
+               defer
+  defer
 
 (*
   apply(rule HBlock)
