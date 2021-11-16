@@ -1,30 +1,7 @@
 theory Renamer
-  imports YulSyntax YulSemanticsSingleStep
+  imports "../Yul/YulSyntax" "../Yul/YulSemanticsSingleStep"
 
 begin
-
-(* find the first occurrence of an item in a list *)
-(*
-fun position' :: "'a list \<Rightarrow> 'a \<Rightarrow> nat \<Rightarrow> nat option" where
-"position' [] _ _ = None"
-| "position' (h#t) k n =
-  (if h = k then Some n
-   else position' t k (Suc n))"
-
-definition position :: "'a list \<Rightarrow> 'a \<Rightarrow> nat option" where
-"position l k = position' l k 0"
-
-definition digits :: "char list" where
-"digits = 
-  [ (CHR ''0''), (CHR ''1''), (CHR ''2''), (CHR ''3''), (CHR ''4'')
-  , (CHR ''5''), (CHR ''6''), (CHR ''7''), (CHR ''8''), (CHR ''9'')
-  ]"
-
-fun digit_to_nat :: "char \<Rightarrow> nat option" where
-"digit_to_nat c =
-  position digits c"
-*)
-
 
 definition digit_to_nat :: "char \<Rightarrow> nat option"
   where
