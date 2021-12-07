@@ -301,27 +301,276 @@ proof-
         simp del: nat_to_digits'.simps digits_to_nat'.simps)
 qed
 
+lemma nat_to_digit_Some :
+  assumes "n < 10"
+  shows "\<exists> d . nat_to_digit n = Some d"
+  using assms
+  by(auto simp add: nat_to_digit_def split: nat.splits)
+
+lemma nat_to_digits_Some' :
+  "\<exists> l . nat_to_digits' n = Some l"
+proof(induction rule: full_nat_induct)
+  case (1 n)
+
+  have "n mod 10 < 10"
+    by auto
+
+  then obtain d1 where D1 : "nat_to_digit (n mod 10) = Some d1"
+    using nat_to_digit_Some[of "n mod 10"]
+    by (auto )
+
+  show ?case
+  proof(cases "n div 10 = 0")
+    case True
+
+    then have "n mod 10 = n"
+      by auto
+
+    then show ?thesis using D1
+      by(auto)
+  next
+    case False
+
+    then have "(\<exists>l. nat_to_digits' (n div 10) = Some l)"
+      using spec[OF "1.IH", of "n div 10"]
+      by(auto)
+
+    then obtain l' where IH' : "nat_to_digits' (n div 10) = Some l'"
+      by auto
+
+    then show ?thesis using D1
+      by(auto)
+  qed
+qed
+
+lemma nat_to_digits_Some :
+  "\<exists> l . nat_to_digits n = Some l"
+  using nat_to_digits_Some'[of n]
+  unfolding nat_to_digits_def
+  by(auto)
+
+definition nat_to_digits_tot :: "nat \<Rightarrow> char list" where
+"nat_to_digits_tot n =
+  (case nat_to_digits n of
+    Some dl \<Rightarrow> dl)"
+
+definition fresh_suffix :: "nat \<Rightarrow> char list" where
+"fresh_suffix n = CHR ''_'' # nat_to_digits_tot n"
+
+definition fresh_name :: "YulIdentifier \<Rightarrow> nat \<Rightarrow> YulIdentifier" where
+"fresh_name v n =
+  (if n = 0 then v
+  else String.implode (String.explode v @ fresh_suffix n))"
 
 (* we need to do something about leading zeroes here. *)
 
-(*
-  gather function defs
-  depth?
-*)
-(*
+function freshen' :: "YulIdentifier \<Rightarrow> nat \<Rightarrow> YulIdentifier list \<Rightarrow> YulIdentifier" where
+"freshen' v n l =
+  (if List.member l (fresh_name v n)
+   then freshen' v (Suc n) (remove1 (fresh_name v n) l)
+   else fresh_name v n)"
+  by pat_completeness auto
+
+termination freshen'
+proof(relation "measure (\<lambda> (v, n, l) . length l)")
+  show "wf (measure (\<lambda>(v, n, l). length l))"
+    by auto
+next
+  fix v n l
+  assume "List.member l (fresh_name v n)"
+  then have "fresh_name v n \<in> set l"
+    by (auto simp add: List.member_def)
+  then show "((v, Suc n, remove1 (fresh_name v n) l), v, n, l)
+       \<in> measure (\<lambda>(v, n, y). length y)"
+   by(cases "length l"; auto simp add: length_remove1)
+qed
+
 definition freshen :: "YulIdentifier \<Rightarrow> YulIdentifier list \<Rightarrow> YulIdentifier" where
-"freshen i l =
-  
+"freshen v l = freshen' v 0 l"
+
+datatype YulStatementElement=
+  SiBlock
+  | SiIf
+  | SiFunctionBody
+  | SiForPre
+  | SiForPost
+  | SiForBody
+  | SiCase nat
+
+type_synonym YulStatementIndex = 
+  "(YulStatementElement * nat) list"
+
+fun yul_statement_get ::
+  "('v, 't) YulStatement \<Rightarrow>
+   YulStatementIndex \<Rightarrow>
+   ('v, 't) YulStatement option"
+(*
+and
+  yul_statement_get_list ::
+  "('v, 't) YulStatement list"
+*)
+  where
+"yul_statement_get
+  x [] = Some x"
+| "yul_statement_get
+  (YulBlock l) ((SiBlock, n)#t) =
+    (if length l < n then None
+     else yul_statement_get (l ! n) t)"
+| "yul_statement_get
+  (YulIf _ l) ((SiIf, n)#t)=
+    (if length l < n then None
+     else yul_statement_get (l ! n) t)"
+| "yul_statement_get
+  (YulFunctionDefinitionStatement
+    (YulFunctionDefinition _ _ _ l)) ((SiFunctionBody, n)#t) =
+    (if length l < n then None
+     else yul_statement_get (l!n) t)"
+| "yul_statement_get (YulForLoop l _ _ _) ((SiForPre, n)#t) =
+    (if length l < n then None
+     else yul_statement_get (l!n) t)"
+| "yul_statement_get (YulForLoop _ _ l _) ((SiForBody, n)#t) =
+    (if length l < n then None
+     else yul_statement_get (l!n) t)"
+| "yul_statement_get (YulForLoop _ _ _ l) ((SiForPost, n)#t) =
+    (if length l < n then None
+     else yul_statement_get (l!n) t)"
+| "yul_statement_get (YulSwitch _ cl) ((SiCase cn, n)#t) =
+    (if length cl < cn then None
+     else (case cl ! cn of (YulSwitchCase _ l) \<Rightarrow>
+       (if length l < n then None
+        else yul_statement_get (l!n) t)))"
+| "yul_statement_get _ _ = None"
+
+fun yul_statement_update ::
+  "(('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement) \<Rightarrow>
+   ('v, 't) YulStatement \<Rightarrow>
+   YulStatementIndex \<Rightarrow>
+   ('v, 't) YulStatement option" where
+"yul_statement_update
+  f x [] = Some (f x)"
+| "yul_statement_update f
+  (YulBlock l) ((SiBlock, n)#t) =
+    (if length l < n then None
+     else (case yul_statement_update f (l ! n) t of
+      None \<Rightarrow> None
+      | Some ln' \<Rightarrow> Some (YulBlock (take n l @ ln' # drop (n+1) l))))"
+| "yul_statement_update f
+  (YulIf c l) ((SiIf, n)#t)=
+    (if length l < n then None
+     else (case yul_statement_update f (l ! n) t of
+      None \<Rightarrow> None
+      | Some ln' \<Rightarrow> Some (YulIf c (take n l @ ln' # drop (n +1) l))))"
+| "yul_statement_update f
+  (YulFunctionDefinitionStatement
+    (YulFunctionDefinition x1 x2 x3 l)) ((SiFunctionBody, n)#t) =
+    (if length l < n then None
+     else (case yul_statement_update f (l!n) t of
+      None \<Rightarrow> None
+      | Some ln' \<Rightarrow> Some (YulFunctionDefinitionStatement (YulFunctionDefinition
+          x1 x2 x3
+          (take n l @ ln' # drop (n+1) l)))))"
+| "yul_statement_update f (YulForLoop l x2 x3 x4) ((SiForPre, n)#t) =
+    (if length l < n then None
+     else (case yul_statement_update f (l!n) t of
+      None \<Rightarrow> None
+      | Some ln' \<Rightarrow> Some (YulForLoop (take n l @ ln' # drop (n+1) l) x2 x3 x4)))"
+| "yul_statement_update f (YulForLoop x1 x2 l x4) ((SiForBody, n)#t) =
+    (if length l < n then None
+     else (case yul_statement_update f (l!n) t of
+      None \<Rightarrow> None
+      | Some ln' \<Rightarrow> Some (YulForLoop x1 x2 (take n l @ ln' # drop (n+1) l) x4)))"
+| "yul_statement_update f (YulForLoop x1 x2 x3 l) ((SiForPost, n)#t) =
+    (if length l < n then None
+     else (case yul_statement_update f (l!n) t of
+      None \<Rightarrow> None
+      | Some ln' \<Rightarrow> Some (YulForLoop x1 x2 x3 (take n l @ ln' # drop (n+1) l))))"
+| "yul_statement_update f (YulSwitch ce cl) ((SiCase cn, n)#t) =
+    (if length cl < cn then None
+     else (case cl ! cn of (YulSwitchCase e l) \<Rightarrow>
+       (if length l < n then None
+        else (case yul_statement_update f (l!n) t of
+          None \<Rightarrow> None
+          | Some ln' \<Rightarrow>
+            Some (YulSwitch ce (take cn cl @ 
+                               (YulSwitchCase e (take n l @ ln' # drop (n+1) l)) #
+                               (drop (cn +1) cl)))))))"
+| "yul_statement_update _ _ _ = None"
+
+(* need to either catch duplicate ids in the same scope, or have a pass that does *)
 
 (* restriction: can't define functions in init block of for loop *)
+(* one approach to renaming: walk the tree and do the renaming in one pass.
+ *)
+(* this current one won't catch duplicate ids in the same scope. *)
+(* this one also just renames declaration sites, not usage sites.
+ * still hopefully it will give a flavor of what the rest should look like. *)
 fun rename_inplace' ::
   "('v, 't) YulStatement \<Rightarrow>
    YulIdentifier list \<Rightarrow>
-   ('v, 't) YulStatement option"
+   (('v, 't) YulStatement * YulIdentifier list) option"
+and
+  rename_inplace'_list ::
+  "('v, 't) YulStatement list \<Rightarrow>
+   YulIdentifier list \<Rightarrow>
+   (('v, 't) YulStatement list * YulIdentifier list) option"
+and
+  rename_inplace'_switch ::
+  "('v, 't) YulSwitchCase list \<Rightarrow>
+   YulIdentifier list \<Rightarrow>
+   (('v, 't) YulSwitchCase list * YulIdentifier list) option"
   where
+(* do we need to rename the parameters to functions? *)
 "rename_inplace' (YulFunctionDefinitionStatement
-  (YulFunctionDefinition name _ _ body)) =
-    ()"
-  | "rename_inplace' x l = Some x"
-*)
+  (YulFunctionDefinition name p1 p2 body)) ids =
+    (let name' = freshen name ids in
+     (case rename_inplace'_list body (name'#ids) of
+      Some (body', ids') \<Rightarrow> 
+        Some ((YulFunctionDefinitionStatement
+              (YulFunctionDefinition name' p1 p2 body')), (ids'))
+      | None \<Rightarrow> None))"
+| "rename_inplace' (YulBlock ls) ids = 
+   (case rename_inplace'_list ls ids of
+      Some (ls', ids') \<Rightarrow> Some (YulBlock ls', ids')
+     | None \<Rightarrow> None)"
+| "rename_inplace' (YulIf c body) ids =
+   (case rename_inplace'_list body ids of
+      Some (body', ids') \<Rightarrow> Some (YulIf c body', ids')
+      | None \<Rightarrow> None)"
+| "rename_inplace' (YulSwitch c cases) ids = 
+   (case rename_inplace'_switch cases ids of
+    Some (cases', ids') \<Rightarrow> Some (YulSwitch c cases', ids')
+    | _ \<Rightarrow> None)"
+| "rename_inplace' (YulForLoop pre c post body) ids =
+    (case rename_inplace'_list pre ids of
+     Some (pre', ids') \<Rightarrow> 
+      (case rename_inplace'_list post ids' of
+       Some (post', ids'') \<Rightarrow>
+       (case rename_inplace'_list body ids'' of
+        Some (body', ids''') \<Rightarrow>
+          Some (YulForLoop pre' c post' body', ids''')
+          | _ \<Rightarrow> None)
+       | _ \<Rightarrow> None)
+     | _ \<Rightarrow> None)"
+
+| "rename_inplace' x ids = Some (x, ids)"
+
+| "rename_inplace'_list [] ids = Some ([], ids)"
+| "rename_inplace'_list (h#t) ids = 
+    (case rename_inplace' h ids of
+     None \<Rightarrow> None
+     | Some (h', ids') \<Rightarrow>
+       (case rename_inplace'_list t (ids') of
+        None \<Rightarrow> None
+        | Some (t', ids'') \<Rightarrow> Some (h'#t', ids'')))"
+
+| "rename_inplace'_switch [] ids = Some ([], ids)"
+| "rename_inplace'_switch ((YulSwitchCase c body)#t) ids =
+   (case rename_inplace'_list body ids of
+    Some (body', ids') \<Rightarrow>
+     (case rename_inplace'_switch t ids' of
+      Some (t', ids'') \<Rightarrow> Some ((YulSwitchCase c body')#t', ids'')
+      | None \<Rightarrow> None)
+    | None \<Rightarrow> None)"
+
+
 end
