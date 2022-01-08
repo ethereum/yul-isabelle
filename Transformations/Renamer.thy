@@ -388,58 +388,122 @@ qed
 definition freshen :: "YulIdentifier \<Rightarrow> YulIdentifier list \<Rightarrow> YulIdentifier" where
 "freshen v l = freshen' v 0 l"
 
-datatype YulStatementElement=
-  SiBlock
+(* statements vs expressions *)
+datatype YulIndexElement=
+  SiFunctionCallStatementArgs
+  | SiFunctionCallExpressionArgs
+  | SiAssignmentRhsArgs
+  | SiVariableDeclarationRhsArgs
+  | SiBlock
   | SiIf
+  | SiSwitchExprArgs
+  | SiSwitchCase
   | SiFunctionBody
   | SiForPre
+  | SiForCondArgs
   | SiForPost
   | SiForBody
-  | SiCase nat
 
-type_synonym YulStatementIndex = 
-  "(YulStatementElement * nat) list"
+type_synonym YulIndex = 
+  "(YulIndexElement * nat) list"
 
-fun yul_statement_get ::
-  "('v, 't) YulStatement \<Rightarrow>
-   YulStatementIndex \<Rightarrow>
-   ('v, 't) YulStatement option"
+fun yul_idx_get ::
+  "(('v, 't) YulStatement + ('v, 't) YulExpression)\<Rightarrow>
+   YulIndex \<Rightarrow>
+   (('v, 't) YulStatement + ('v, 't) YulExpression) option"
 (*
 and
   yul_statement_get_list ::
   "('v, 't) YulStatement list"
 *)
   where
-"yul_statement_get
+(* done *)
+"yul_idx_get
   x [] = Some x"
-| "yul_statement_get
-  (YulBlock l) ((SiBlock, n)#t) =
+
+(* Raw function calls *)
+| "yul_idx_get 
+  (Inl (YulFunctionCallStatement (YulFunctionCall _ args))) 
+  ((SiFunctionCallStatementArgs, n)#t) =
+  (if length args < n then None
+   else yul_idx_get (Inr (args ! n)) t)"
+| "yul_idx_get
+  (Inr (YulFunctionCallExpression (YulFunctionCall _ args)))
+  ((SiFunctionCallExpressionArgs, n)#t) =
+  (if length args < n then None
+   else yul_idx_get (Inr (args ! n)) t)"
+
+(* Assignments and declarations, if RHS is a function call *)
+| "yul_idx_get
+   (Inl (YulAssignmentStatement (YulAssignment _ (YulFunctionCallExpression (YulFunctionCall _ args)))))
+   ((SiAssignmentRhsArgs, n)#t) =
+   (if length args < n then None
+    else yul_idx_get (Inr (args ! n)) t)"
+(* Assignments and declarations, if RHS is a function call *)
+| "yul_idx_get
+   (Inl (YulVariableDeclarationStatement
+        (YulVariableDeclaration _
+          (Some (YulFunctionCallExpression (YulFunctionCall _ args))))))
+   ((SiVariableDeclarationRhsArgs, n)#t) =
+   (if length args < n then None
+    else yul_idx_get (Inr (args ! n)) t)"
+
+(* Function definition *)
+| "yul_idx_get
+  (Inl (YulFunctionDefinitionStatement (YulFunctionDefinition _ _ _ l)))
+  ((SiFunctionBody, n)#t) =
     (if length l < n then None
-     else yul_statement_get (l ! n) t)"
-| "yul_statement_get
-  (YulIf _ l) ((SiIf, n)#t)=
+     else yul_idx_get (Inl (l!n)) t)"
+
+(* Control constructs *)
+| "yul_idx_get
+  (Inl (YulBlock l))
+  ((SiBlock, n)#t) =
     (if length l < n then None
-     else yul_statement_get (l ! n) t)"
-| "yul_statement_get
-  (YulFunctionDefinitionStatement
-    (YulFunctionDefinition _ _ _ l)) ((SiFunctionBody, n)#t) =
+     else yul_idx_get (Inl (l ! n)) t)"
+
+| "yul_idx_get
+  (Inl (YulIf _ l)) ((SiIf, n)#t)=
     (if length l < n then None
-     else yul_statement_get (l!n) t)"
-| "yul_statement_get (YulForLoop l _ _ _) ((SiForPre, n)#t) =
+     else yul_idx_get (Inl (l ! n)) t)"
+
+| "yul_idx_get 
+    (Inl (YulForLoop l _ _ _)) 
+    ((SiForPre, n)#t) =
     (if length l < n then None
-     else yul_statement_get (l!n) t)"
-| "yul_statement_get (YulForLoop _ _ l _) ((SiForBody, n)#t) =
+     else yul_idx_get (Inl (l!n)) t)"
+| "yul_idx_get (Inl (YulForLoop _ _ l _))
+    ((SiForBody, n)#t) =
     (if length l < n then None
-     else yul_statement_get (l!n) t)"
-| "yul_statement_get (YulForLoop _ _ _ l) ((SiForPost, n)#t) =
+     else yul_idx_get (Inl (l!n)) t)"
+| "yul_idx_get (Inl (YulForLoop _ _ _ l)) 
+    ((SiForPost, n)#t) =
     (if length l < n then None
-     else yul_statement_get (l!n) t)"
-| "yul_statement_get (YulSwitch _ cl) ((SiCase cn, n)#t) =
-    (if length cl < cn then None
-     else (case cl ! cn of (YulSwitchCase _ l) \<Rightarrow>
-       (if length l < n then None
-        else yul_statement_get (l!n) t)))"
-| "yul_statement_get _ _ = None"
+     else yul_idx_get (Inl (l!n)) t)"
+
+| "yul_idx_get
+    (Inl (YulForLoop _ (YulFunctionCallExpression (YulFunctionCall _ args)) _ _))
+    ((SiForCondArgs, n)#t) =
+    (if length args < n then None
+     else yul_idx_get (Inr (args ! n)) t)"
+
+(* switch *)
+
+| "yul_idx_get
+    (Inl (YulSwitch (YulFunctionCallExpression (YulFunctionCall _ args)) _))
+    ((SiSwitchExprArgs, n)#t) =
+    (if length args < n then None
+     else yul_idx_get (Inr (args ! n)) t)"
+
+| "yul_idx_get
+    (Inl (YulSwitch _ l))
+    ((SiSwitchCase, n)#t) =
+    (if length l < n then None
+     else
+      (case (l!n) of
+       (YulSwitchCase _ body) \<Rightarrow> yul_idx_get (Inl (body ! n)) t))"
+
+| "yul_idx_get _ _ = None"
 
 fun yul_statement_update ::
   "(('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement) \<Rightarrow>
