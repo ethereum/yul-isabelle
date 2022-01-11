@@ -1,5 +1,5 @@
 theory Renamer
-  imports "../Yul/YulSyntax" "../Yul/YulSemanticsSingleStep"
+  imports "../Yul/YulSyntax" "../Yul/YulSemanticsSingleStep" 
 
 begin
 
@@ -407,6 +407,7 @@ datatype YulIndexElement=
 type_synonym YulIndex = 
   "(YulIndexElement * nat) list"
 
+
 fun yul_idx_get ::
   "(('v, 't) YulStatement + ('v, 't) YulExpression)\<Rightarrow>
    YulIndex \<Rightarrow>
@@ -423,142 +424,168 @@ and
 
 (* Raw function calls *)
 | "yul_idx_get 
-  (Inl (YulFunctionCallStatement (YulFunctionCall _ args))) 
+  x
   ((SiFunctionCallStatementArgs, n)#t) =
-  (if length args < n then None
-   else yul_idx_get (Inr (args ! n)) t)"
+  (case x of
+   (Inl (YulFunctionCallStatement (YulFunctionCall _ args))) \<Rightarrow>
+    (if length args < n then None
+     else yul_idx_get (Inr (args ! n)) t)
+   | _ \<Rightarrow> None)"
 | "yul_idx_get
-  (Inr (YulFunctionCallExpression (YulFunctionCall _ args)))
+  x
   ((SiFunctionCallExpressionArgs, n)#t) =
-  (if length args < n then None
-   else yul_idx_get (Inr (args ! n)) t)"
+  (case x of
+   (Inr (YulFunctionCallExpression (YulFunctionCall _ args))) \<Rightarrow>
+    (if length args < n then None
+     else yul_idx_get (Inr (args ! n)) t)
+   | _ \<Rightarrow> None)"
 
 (* Assignments and declarations, if RHS is a function call *)
 | "yul_idx_get
-   (Inl (YulAssignmentStatement (YulAssignment _ (YulFunctionCallExpression (YulFunctionCall _ args)))))
+   x
    ((SiAssignmentRhsArgs, n)#t) =
-   (if length args < n then None
-    else yul_idx_get (Inr (args ! n)) t)"
+   (case x of
+    (Inl (YulAssignmentStatement (YulAssignment _ (YulFunctionCallExpression (YulFunctionCall _ args))))) \<Rightarrow>
+     (if length args < n then None
+      else yul_idx_get (Inr (args ! n)) t)
+    | _ \<Rightarrow> None)"
 (* Assignments and declarations, if RHS is a function call *)
 | "yul_idx_get
-   (Inl (YulVariableDeclarationStatement
-        (YulVariableDeclaration _
-          (Some (YulFunctionCallExpression (YulFunctionCall _ args))))))
+   x
    ((SiVariableDeclarationRhsArgs, n)#t) =
-   (if length args < n then None
-    else yul_idx_get (Inr (args ! n)) t)"
+   (case x of
+    (Inl (YulVariableDeclarationStatement
+            (YulVariableDeclaration _
+              (Some (YulFunctionCallExpression (YulFunctionCall _ args)))))) \<Rightarrow>
+     (if length args < n then None
+      else yul_idx_get (Inr (args ! n)) t)
+    | _ \<Rightarrow> None)"
 
 (* Function definition *)
 | "yul_idx_get
-  (Inl (YulFunctionDefinitionStatement (YulFunctionDefinition _ _ _ l)))
+  x
   ((SiFunctionBody, n)#t) =
+  (case x of
+   (Inl (YulFunctionDefinitionStatement (YulFunctionDefinition _ _ _ l))) \<Rightarrow>
     (if length l < n then None
-     else yul_idx_get (Inl (l!n)) t)"
+     else yul_idx_get (Inl (l!n)) t)
+   | _ \<Rightarrow> None)"
 
 (* Control constructs *)
 | "yul_idx_get
-  (Inl (YulBlock l))
+  x
   ((SiBlock, n)#t) =
-    (if length l < n then None
-     else yul_idx_get (Inl (l ! n)) t)"
+  (case x of
+    (Inl (YulBlock l)) \<Rightarrow>
+      (if length l < n then None
+       else yul_idx_get (Inl (l ! n)) t)
+    | _ \<Rightarrow> None)"
 
 | "yul_idx_get
-  (Inl (YulIf _ l)) ((SiIf, n)#t)=
-    (if length l < n then None
-     else yul_idx_get (Inl (l ! n)) t)"
+  x
+  ((SiIf, n)#t) =
+  (case x of
+    (Inl (YulIf _ l)) \<Rightarrow>
+      (if length l < n then None
+       else yul_idx_get (Inl (l ! n)) t)
+    | _ \<Rightarrow> None)"
+
 
 | "yul_idx_get 
-    (Inl (YulForLoop l _ _ _)) 
+    x
     ((SiForPre, n)#t) =
-    (if length l < n then None
-     else yul_idx_get (Inl (l!n)) t)"
-| "yul_idx_get (Inl (YulForLoop _ _ l _))
-    ((SiForBody, n)#t) =
-    (if length l < n then None
-     else yul_idx_get (Inl (l!n)) t)"
-| "yul_idx_get (Inl (YulForLoop _ _ _ l)) 
-    ((SiForPost, n)#t) =
-    (if length l < n then None
-     else yul_idx_get (Inl (l!n)) t)"
+    (case x of
+      (Inl (YulForLoop l _ _ _)) \<Rightarrow>
+        (if length l < n then None
+         else yul_idx_get (Inl (l!n)) t)
+    | _ \<Rightarrow> None)"
 
 | "yul_idx_get
-    (Inl (YulForLoop _ (YulFunctionCallExpression (YulFunctionCall _ args)) _ _))
+    x
+    ((SiForBody, n)#t) =
+    (case x of
+      (Inl (YulForLoop _ _ l _)) \<Rightarrow>
+        (if length l < n then None
+         else yul_idx_get (Inl (l!n)) t)
+      | _ \<Rightarrow> None)"
+| "yul_idx_get
+    x
+    ((SiForPost, n)#t) =
+    (case x of
+      (Inl (YulForLoop _ _ _ l)) \<Rightarrow>
+        (if length l < n then None
+         else yul_idx_get (Inl (l!n)) t)
+      | _ \<Rightarrow> None)"
+
+| "yul_idx_get
+    x
     ((SiForCondArgs, n)#t) =
-    (if length args < n then None
-     else yul_idx_get (Inr (args ! n)) t)"
+    (case x of
+      (Inl (YulForLoop _ (YulFunctionCallExpression (YulFunctionCall _ args)) _ _)) \<Rightarrow>
+        (if length args < n then None
+         else yul_idx_get (Inr (args ! n)) t)
+      | _ \<Rightarrow> None)"
 
 (* switch *)
 
 | "yul_idx_get
-    (Inl (YulSwitch (YulFunctionCallExpression (YulFunctionCall _ args)) _))
+    x
     ((SiSwitchExprArgs, n)#t) =
-    (if length args < n then None
-     else yul_idx_get (Inr (args ! n)) t)"
+    (case x of
+      (Inl (YulSwitch (YulFunctionCallExpression (YulFunctionCall _ args)) _)) \<Rightarrow>
+        (if length args < n then None
+         else yul_idx_get (Inr (args ! n)) t)
+      | _ \<Rightarrow> None)"
 
 | "yul_idx_get
-    (Inl (YulSwitch _ l))
+    x
     ((SiSwitchCase, n)#t) =
-    (if length l < n then None
-     else
-      (case (l!n) of
-       (YulSwitchCase _ body) \<Rightarrow> yul_idx_get (Inl (body ! n)) t))"
+    (case x of 
+      (Inl (YulSwitch _ l)) \<Rightarrow>
+        (if length l < n then None
+         else
+          (case (l!n) of
+           (YulSwitchCase _ body) \<Rightarrow> yul_idx_get (Inl (body ! n)) t))
+      | _ \<Rightarrow> None)"
 
-| "yul_idx_get _ _ = None"
 
-fun yul_statement_update ::
-  "(('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement) \<Rightarrow>
-   ('v, 't) YulStatement \<Rightarrow>
-   YulStatementIndex \<Rightarrow>
-   ('v, 't) YulStatement option" where
-"yul_statement_update
-  f x [] = Some (f x)"
-| "yul_statement_update f
-  (YulBlock l) ((SiBlock, n)#t) =
-    (if length l < n then None
-     else (case yul_statement_update f (l ! n) t of
-      None \<Rightarrow> None
-      | Some ln' \<Rightarrow> Some (YulBlock (take n l @ ln' # drop (n+1) l))))"
-| "yul_statement_update f
-  (YulIf c l) ((SiIf, n)#t)=
-    (if length l < n then None
-     else (case yul_statement_update f (l ! n) t of
-      None \<Rightarrow> None
-      | Some ln' \<Rightarrow> Some (YulIf c (take n l @ ln' # drop (n +1) l))))"
-| "yul_statement_update f
-  (YulFunctionDefinitionStatement
-    (YulFunctionDefinition x1 x2 x3 l)) ((SiFunctionBody, n)#t) =
-    (if length l < n then None
-     else (case yul_statement_update f (l!n) t of
-      None \<Rightarrow> None
-      | Some ln' \<Rightarrow> Some (YulFunctionDefinitionStatement (YulFunctionDefinition
-          x1 x2 x3
-          (take n l @ ln' # drop (n+1) l)))))"
-| "yul_statement_update f (YulForLoop l x2 x3 x4) ((SiForPre, n)#t) =
-    (if length l < n then None
-     else (case yul_statement_update f (l!n) t of
-      None \<Rightarrow> None
-      | Some ln' \<Rightarrow> Some (YulForLoop (take n l @ ln' # drop (n+1) l) x2 x3 x4)))"
-| "yul_statement_update f (YulForLoop x1 x2 l x4) ((SiForBody, n)#t) =
-    (if length l < n then None
-     else (case yul_statement_update f (l!n) t of
-      None \<Rightarrow> None
-      | Some ln' \<Rightarrow> Some (YulForLoop x1 x2 (take n l @ ln' # drop (n+1) l) x4)))"
-| "yul_statement_update f (YulForLoop x1 x2 x3 l) ((SiForPost, n)#t) =
-    (if length l < n then None
-     else (case yul_statement_update f (l!n) t of
-      None \<Rightarrow> None
-      | Some ln' \<Rightarrow> Some (YulForLoop x1 x2 x3 (take n l @ ln' # drop (n+1) l))))"
-| "yul_statement_update f (YulSwitch ce cl) ((SiCase cn, n)#t) =
-    (if length cl < cn then None
-     else (case cl ! cn of (YulSwitchCase e l) \<Rightarrow>
-       (if length l < n then None
-        else (case yul_statement_update f (l!n) t of
-          None \<Rightarrow> None
-          | Some ln' \<Rightarrow>
-            Some (YulSwitch ce (take cn cl @ 
-                               (YulSwitchCase e (take n l @ ln' # drop (n+1) l)) #
-                               (drop (cn +1) cl)))))))"
-| "yul_statement_update _ _ _ = None"
+(*
+ inductive specification of renaming of Yul programs
+*)
+(*
+type_synonym renaming = 
+  "(YulIndex, YulIdentifier) alist"
+
+definition renaming_ok' :: "('x * 'y) list \<Rightarrow> bool" where
+"renaming_ok' r =
+  (distinct o map snd) r"
+
+lift_definition renaming_ok :: "renaming \<Rightarrow> bool" is renaming_ok' .
+*)
+
+type_synonym renaming = 
+  "(YulIndex * YulIdentifier) list"
+
+(* TODO: we can do better than requiring new variable names to be distinct -
+ * but this requires reasoning about contexts/blocks to ensure there are
+ * no name collisions generated *)
+definition renaming_ok :: "renaming \<Rightarrow> bool" where
+"renaming_ok r =
+  ((distinct o map fst) r \<and>
+   (distinct o map snd) r)"
+
+
+
+(*
+ * some kind of trie thing?
+ *)
+(*
+inductive
+yul_statement_renames_to :: 
+  "('x, 'y) YulStatement \<Rightarrow> renaming \<Rightarrow> ('x, 'y) YulStatement \<Rightarrow> bool" and
+yul_expression_renames_to ::
+  "('x, 'y) YulExpression \<Rightarrow> renaming \<Rightarrow> ('x, 'y) YulExpression \<Rightarrow> bool" where
+*)
 
 (* need to either catch duplicate ids in the same scope, or have a pass that does *)
 
