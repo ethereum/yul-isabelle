@@ -404,6 +404,8 @@ datatype YulIndexElement=
   | SiForPost
   | SiForBody
 
+(* need to add FunctionDefinitionArgs, FunctionDefinitionRets *)
+
 type_synonym YulIndex = 
   "(YulIndexElement * nat) list"
 
@@ -569,22 +571,136 @@ type_synonym renaming =
 (* TODO: we can do better than requiring new variable names to be distinct -
  * but this requires reasoning about contexts/blocks to ensure there are
  * no name collisions generated *)
+
+(* TODO :
+ * Currently we are not guaranteeing that the results of substitution don't cause collisions with
+ * existing variables. I.e., cases where substitution causes variable shadowing where there wasn't before.
+ *)
 definition renaming_ok :: "renaming \<Rightarrow> bool" where
 "renaming_ok r =
   ((distinct o map fst) r \<and>
    (distinct o map snd) r)"
 
+(* if name matches, rename to new name, otherwise leave *)
+definition rename_v ::
+  "YulIdentifier \<Rightarrow> YulIdentifier \<Rightarrow> YulIdentifier \<Rightarrow> YulIdentifier" where
+"rename_v old new x =
+  (if x = old then new else x)"
 
+definition rename_v_t ::
+  "YulIdentifier \<Rightarrow> YulIdentifier \<Rightarrow> 't YulTypedName \<Rightarrow> 't YulTypedName" where
+"rename_v_t old new x =
+  (case x of
+    (YulTypedName n t) \<Rightarrow>
+    (YulTypedName (rename_v old new n) t))"
+
+(* same, for lists of assigned values. here we assume we have already ensured the list does not contain duplicates. *)
+definition rename_vs ::
+  "YulIdentifier \<Rightarrow> YulIdentifier \<Rightarrow> YulIdentifier list \<Rightarrow> YulIdentifier list" where
+"rename_vs old new xs =
+  map (rename_v old new) xs"
+
+definition rename_vs_t ::
+  "YulIdentifier \<Rightarrow> YulIdentifier \<Rightarrow> 't YulTypedName list \<Rightarrow> 't YulTypedName list" where
+"rename_vs_t old new xs =
+  map (rename_v_t old new) xs"
+
+(* in the foregoing, we are assuming that we have no shadowing. *)
+
+(* helper function used once we encounter a binder being renamed. 
+ * it renames all occurrences of that variable in the subtree, not checking for collisions.*)
+fun rename1_statement ::
+  "YulIdentifier \<Rightarrow> YulIdentifier \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement" 
+and rename1_expr ::
+  "YulIdentifier \<Rightarrow> YulIdentifier \<Rightarrow> ('v, 't) YulExpression \<Rightarrow> ('v, 't) YulExpression"
+(* might be able to remove this third function *)
+and rename1_switch_case ::
+  "YulIdentifier \<Rightarrow> YulIdentifier \<Rightarrow> ('v, 't) YulSwitchCase \<Rightarrow> ('v, 't) YulSwitchCase"
+  where
+"rename1_statement v v'
+  (YulFunctionCallStatement (YulFunctionCall n args)) =
+  (YulFunctionCallStatement (YulFunctionCall (rename_v v v' n)
+    (map (rename1_expr v v') args)))"
+
+| "rename1_statement v v'
+   (YulAssignmentStatement (YulAssignment ns e)) =
+   (YulAssignmentStatement (YulAssignment (rename_vs v v' ns) (rename1_expr v v' e)))"
+
+(* TODO: this is almost definitely an error case, but we assume the error has already
+ * been signaled and do the naive thing *)
+| "rename1_statement v v'
+   (YulVariableDeclarationStatement (YulVariableDeclaration ns oe)) =
+   (YulVariableDeclarationStatement
+    (YulVariableDeclaration
+      (rename_vs_t v v' ns)
+      (case oe of None \<Rightarrow> None | Some e \<Rightarrow> Some (rename1_expr v v' e))))"
+
+| "rename1_statement v v'
+  (YulFunctionDefinitionStatement (YulFunctionDefinition n args rets body)) =
+  (YulFunctionDefinitionStatement
+    (YulFunctionDefinition (rename_v v v' n)
+                           (rename_vs_t v v' args)
+                           (rename_vs_t v v' rets)
+                           (map (rename1_statement v v') body)))"
+
+| "rename1_statement v v'
+  (YulIf e body) =
+  (YulIf (rename1_expr v v' e)
+         (map (rename1_statement v v') body))"
+
+| "rename1_statement v v'
+  (YulSwitch e cs) =
+  (YulSwitch (rename1_expr v v' e)
+             (map (rename1_switch_case v v') cs))"
+
+| "rename1_statement v v'
+  (YulForLoop pre cond post body) =
+  (YulForLoop (map (rename1_statement v v') pre)
+              (rename1_expr v v' cond)
+              (map (rename1_statement v v') post)
+              (map (rename1_statement v v') body))"
+
+| "rename1_statement v v'
+   (YulBlock l) =
+   (YulBlock (map (rename1_statement v v') l))"
+
+| "rename1_statement v v' x = x"
+
+| "rename1_switch_case v v'
+  (YulSwitchCase x body) =
+  (YulSwitchCase x (map (rename1_statement v v') body))"
+
+| "rename1_expr v v' (YulFunctionCallExpression (YulFunctionCall n args)) =
+   (YulFunctionCallExpression (YulFunctionCall (rename_v v v' n)
+    (map (rename1_expr v v') args)))"
+
+| "rename1_expr v v' (YulIdentifier n) =
+   (YulIdentifier (rename_v v v' n))"
+
+| "rename1_expr v v' x = x"
+
+(* problem is that function definitions also declare parameters
+ * (inputs + outputs), and we need to properly handle those. *)
+fun find_and_rename_statement ::
+  "YulIndex \<Rightarrow> YulIdentifier \<Rightarrow>
+    ('v, 't) YulStatement \<Rightarrow>
+    ('v, 't) YulStatement option" where
+
+(* base cases must correspond to a variable binding. *)
+
+(* we assume we are applied at the block level. *)
+(* this doesn't check for use before define *)
+"find_and_rename_statement [] v st = None"
+| "find_and_rename_statement
+    [(ix, n)] v st =
+    let v_old =
+      (case yul_idx_get [(ix, n)] st of
+        Some (YulFunctionDefinitionStatement (YulFunctionDefinition)
+    
 
 (*
- * some kind of trie thing?
- *)
-(*
-inductive
-yul_statement_renames_to :: 
-  "('x, 'y) YulStatement \<Rightarrow> renaming \<Rightarrow> ('x, 'y) YulStatement \<Rightarrow> bool" and
-yul_expression_renames_to ::
-  "('x, 'y) YulExpression \<Rightarrow> renaming \<Rightarrow> ('x, 'y) YulExpression \<Rightarrow> bool" where
+fun rename_statement ::
+  "renaming \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement"
 *)
 
 (* need to either catch duplicate ids in the same scope, or have a pass that does *)
