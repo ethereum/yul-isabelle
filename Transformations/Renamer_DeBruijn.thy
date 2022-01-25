@@ -422,16 +422,36 @@ fun yul_statement_to_deBruijn ::
       (case those (map (yul_statement_to_deBruijn scopes') \<comment> \<open> (drop (fn + vn) body)) \<close> body) of
         None \<Rightarrow> None
         | Some body' \<Rightarrow> Some (YulBlock body')))))"
-(*
-          (case yul_statements_to_deBruijn_norec body' scopes' of
-            None \<Rightarrow> None
-            | Some body'' \<Rightarrow> Some (YulBlock body''))))))"
-*)
-(*| "yul_statement_to_deBruijn _ x = Some x"*)
 
+(* tests *)
 
-(* to convert to de Bruijn, we need to carry around some extra data.
- * list of scopes
- * depth = how many scopes we have to go through to find our target
- *)
+term \<open>YUL{
+{
+                    let x := 1
+}
+                    }\<close>
+
+definition rename_test1 :: "(256 word, unit) YulStatement" where
+  "rename_test1 \<equiv>
+    (YUL{
+    { let y : uint256
+    {
+    let x : uint256
+    function print() {}
+    x := 1
+    print()
+    }
+    }})
+    "
+
+value "rename_test1"
+
+definition rename_test1' :: "(256 word, unit) YulStatement list" where
+"rename_test1' =
+  (case rename_test1 of (YulBlock x) \<Rightarrow> x)"
+
+value "get_var_decls rename_test1'"
+
+value "yul_statement_to_deBruijn [] rename_test1"
+
 end
