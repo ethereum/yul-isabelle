@@ -3,50 +3,7 @@ theory Renamer_DeBruijn_Ext
 imports Renamer
 begin
 
-(*
- * To make an index-based approach more workable, we need to do a couple of transformations:
- * 1. Pull out for loop "pre"
- * 2. Pre-declare all variables (assumes variables are valid 
- *)
-
-(*
-
-YulFunctionCallStatement "('v, 't) YulFunctionCall" |
-  YulAssignmentStatement "('v, 't) YulAssignment" |
-  YulVariableDeclarationStatement "('v, 't) YulVariableDeclaration" |
-  YulFunctionDefinitionStatement "('v, 't) YulFunctionDefinition" |
-  YulIf (YulIfCondition: "('v, 't) YulExpression") (YulIfBody: "('v, 't) YulStatement list") |
-  YulSwitch (YulSwitchExpression: "('v, 't) YulExpression") 
-            (YulSwitchCases: "('v, 't) YulSwitchCase list") |
-  YulForLoop (YulForLoopPre: "('v, 't) YulStatement list") 
-             (YulForLoopCondition: "('v, 't) YulExpression") 
-             (YulForLoopPost: "('v, 't) YulStatement list") 
-             (YulForLoopBody: "('v, 't) YulStatement list")|
-  YulBreak |
-  YulContinue |
-  YulLeave |
-  YulBlock (YulBlockStatements: "('v, 't) YulStatement list")
-and ('v, 't) YulSwitchCase = YulSwitchCase (YulSwitchCaseValue: "('v, 't) YulLiteral option")
-                                           (YulSwitchCaseBody: "('v, 't) YulStatement list")
-and ('v, 't) YulFunctionDefinition = YulFunctionDefinition
-                                      (YulFunctionDefinitionName: YulIdentifier)
-                                      (YulFunctionDefinitionArguments: "'t YulTypedName list")
-                                      (YulFunctionDefinitionReturnValues: "'t YulTypedName list")
-                                      (YulFunctionDefinitionBody: "('v, 't) YulStatement list")
-*)
-
-(*datatype 
-  ('v, 't) YulFunctionCall =
-  YulFunctionCall (YulFunctionCallName: YulIdentifier) 
-                  (YulFunctionCallArguments: "('v, 't) YulExpression list")
-and ('v, 't) YulExpression = YulFunctionCallExpression "('v, 't) YulFunctionCall"
-     | YulIdentifier YulIdentifier
-     | YulLiteralExpression "('v, 't) YulLiteral"
-
-*)
-
-(* gather declarations for a particular block-like context.
- * this way we can pre-declare them. *)
+(* gather declarations for a particular block-like context. *)
 fun yul_gather_var_declarations ::
   "('v, 't) YulStatement list \<Rightarrow> 't YulTypedName list" where
 "yul_gather_var_declarations [] = []"
@@ -73,15 +30,16 @@ fun yul_gather_fun_declarations ::
 (*
  * first index is the scope number relative to where we are
  * second index is the variable number in that scope (since there may be more than one)
+ * functions and variables share a namespace
  *)
 datatype DbIx = 
-  DbB_V
+  DbB_V (* represents a (nameless) binder *)
+  (* represents a variable reference. First argument is scope depth, second is
+   * which variable within the scope we want *)
   | DbI_V (DbScope_V : nat) (DbVar_V : nat)
-  | DbB_F
-  | DbI_F (DbScope_F : nat) (DbVar_F : nat)
 
-(* NB: assuming decls have been consolidated into one statement
- * we are still going to miss function-local variables.
+
+(* NB: function-local declarations (parameters and returns) handled separately
  *)
 fun get_var_decls' ::
   "('v, 't) YulStatement list \<Rightarrow> nat \<Rightarrow>
@@ -99,7 +57,6 @@ definition get_var_decls ::
   (case get_var_decls' l 0 of
     (l', _) \<Rightarrow> l')"
 
-(* natural number tracks how many statements we are consuming *)
 fun get_fun_decls' ::
 "('v, 't) YulStatement list \<Rightarrow> nat \<Rightarrow>
  (YulIdentifier list * nat)" where
@@ -154,19 +111,6 @@ fun yul_expr_to_deBruijn ::
        None \<Rightarrow> None
         | Some argsi \<Rightarrow> Some (YulFunctionCallExpression (YulFunctionCall fni argsi))))"
 
-(*
-  ('n, 'v, 't) YulFunctionCall' =
-  YulFunctionCall (YulFunctionCallName: 'n) 
-                  (YulFunctionCallArguments: "('n, 'v, 't) YulExpression' list")
-and ('n, 'v, 't) YulExpression' = YulFunctionCallExpression "('n, 'v, 't) YulFunctionCall'"
-     | YulIdentifier 'n
-     | YulLiteralExpression "('v, 't) YulLiteral"
-*)
-
-(*
-fun yul_statements_to_deBruijn_norec ::
-  "(YulIdentifier list list) \<Rightarrow> ('v, 't) YulStatement list \<Rightarrow> (DbIx, 'v, 't) YulStatement' list option" where
-*)
 
 (* build a de-Bruijn representation of our Yul program,
  * assuming that we have done all the prior passes (pulling all declarations to front)
@@ -240,10 +184,9 @@ fun yul_statement_to_deBruijn ::
      None \<Rightarrow> None
      | Some cases' \<Rightarrow> Some (YulSwitch e' cases'))))"
 
-(* TODO: fix handling of pre.
- * need to calculate pre first, supply scopes to cond,
- * as well as everything else (as prefix)
- * function definitions not allowed in pre?*)
+(* TODO: Function definitions shouldn't be allowed in pre, IIRC.
+ * Probably it makes sense to exclude them in a separate pass, though
+ * since we are handling most other similar constraints on Yul code that way.*)
 
 | "yul_statement_to_deBruijn scopes (YulForLoop pre cond post body) =
   (let decls_pre = get_var_decls pre in
@@ -263,23 +206,6 @@ fun yul_statement_to_deBruijn ::
         (Some pre', Some post', Some body') \<Rightarrow>
           Some (YulForLoop pre' cond' post' body')
         | _ \<Rightarrow> None))))))"
-
-(*
-| "yul_statement_to_deBruijn scopes (YulForLoop pre cond post body) =
-   (case yul_expr_to_deBruijn scopes cond of
-    None \<Rightarrow> None
-    | Some cond' \<Rightarrow>
-    (let opost =
-      (let scopes'_post = (get_var_decls post @ get_fun_decls post) # scopes in
-      (those (map (yul_statement_to_deBruijn scopes'_post) post))) in
-    (let obody =
-      (let scopes'_body = (get_var_decls body @ get_fun_decls body) # scopes in
-      (those (map (yul_statement_to_deBruijn scopes'_body) body))) in
-    (case (opost, obody) of
-      (Some post', Some body') \<Rightarrow>
-        Some (YulForLoop [] cond' post' body')
-      | _ \<Rightarrow> None))))"
-*)
 
 | "yul_statement_to_deBruijn scopes YulBreak = Some YulBreak"
 | "yul_statement_to_deBruijn scopes YulContinue = Some YulContinue"
