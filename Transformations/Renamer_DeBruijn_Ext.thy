@@ -86,22 +86,38 @@ datatype DbIx =
 fun get_var_decls' ::
   "('v, 't) YulStatement list \<Rightarrow> nat \<Rightarrow>
    (YulIdentifier list * nat)" where
-"get_var_decls' [] n = ([], n)"
-| "get_var_decls' ((YulVariableDeclarationStatement (YulVariableDeclaration decls x))#t) =
-   ((map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls), 1)"
-| "get_var_decls' (h#t) = ([], 0)"
+"get_var_decls' [] i = ([], i)"
+| "get_var_decls' ((YulVariableDeclarationStatement (YulVariableDeclaration decls v))#t) i =
+   (case get_var_decls' t (i + length decls) of
+    (l', i') \<Rightarrow>
+    ((map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls) @ l', i'))"
+| "get_var_decls' (h#t) i = get_var_decls' t i"
+
+definition get_var_decls ::
+  "('v, 't) YulStatement list \<Rightarrow> YulIdentifier list" where
+"get_var_decls l =
+  (case get_var_decls' l 0 of
+    (l', _) \<Rightarrow> l')"
 
 (* natural number tracks how many statements we are consuming *)
-fun get_fun_decls ::
-"('v, 't) YulStatement list \<Rightarrow>
+fun get_fun_decls' ::
+"('v, 't) YulStatement list \<Rightarrow> nat \<Rightarrow>
  (YulIdentifier list * nat)" where
-"get_fun_decls [] = ([], 0)"
-| "get_fun_decls ((YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body))#t) =
-   (case get_fun_decls t of
-     (rest, n) \<Rightarrow> 
-     (name # rest
-     , (1+n)))"
-| "get_fun_decls (h#t) = ([], 0)"
+"get_fun_decls' [] i = ([], i)"
+| "get_fun_decls' ((YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body))#t) i =
+   (case get_fun_decls' t (i + 1) of
+     (l', i') \<Rightarrow> 
+     (name # l'
+     , i'))"
+| "get_fun_decls' (h#t) i = 
+    get_fun_decls' t i"
+
+definition get_fun_decls ::
+"('v, 't) YulStatement list \<Rightarrow>
+ (YulIdentifier list)" where
+"get_fun_decls l =
+  (case get_fun_decls' l 0 of
+    (l', _) \<Rightarrow> l')"
 
 fun index_of :: "'a list \<Rightarrow> 'a \<Rightarrow> nat option" where
 "index_of [] _ = None"
@@ -166,6 +182,7 @@ fun yul_statement_to_deBruijn ::
       (case those (map (yul_expr_to_deBruijn scopes) args) of
         None \<Rightarrow> None
         | Some args' \<Rightarrow> Some (YulFunctionCallStatement (YulFunctionCall i args'))))"
+
 | "yul_statement_to_deBruijn scopes (YulAssignmentStatement (YulAssignment ns e)) =
   (case yul_expr_to_deBruijn scopes e of
     None \<Rightarrow> None
@@ -173,6 +190,7 @@ fun yul_statement_to_deBruijn ::
       (case those (map (get_index scopes) ns) of
         None \<Rightarrow> None
         | Some ns' \<Rightarrow> Some (YulAssignmentStatement (YulAssignment ns' e'))))"
+
 | "yul_statement_to_deBruijn scopes
     (YulVariableDeclarationStatement (YulVariableDeclaration ns e)) =
     (case e of
@@ -190,31 +208,23 @@ fun yul_statement_to_deBruijn ::
       (let fnscope = 
         ((map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> n) args) @
          (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> n) rets))  in
-        (case get_var_decls body of
-             (vds, vn) \<Rightarrow>
-             (case get_fun_decls (drop vn body) of
-              (fds, fn) \<Rightarrow>
-                (let scopes' = (fnscope @ vds @ fds) # scopes in
-                (case those (map (yul_statement_to_deBruijn scopes') body) of
-                  None \<Rightarrow> None
-                  | Some body' \<Rightarrow> 
-                    Some (YulFunctionDefinitionStatement
-                         (YulFunctionDefinition DbB_V
-                          (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> YulTypedName DbB_V t) args) 
-                          (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> YulTypedName DbB_V t) rets) body')))))))"
+            (let scopes' = (fnscope @ (get_var_decls body) @ (get_fun_decls body)) # scopes in
+            (case those (map (yul_statement_to_deBruijn scopes') body) of
+              None \<Rightarrow> None
+              | Some body' \<Rightarrow> 
+                Some (YulFunctionDefinitionStatement
+                     (YulFunctionDefinition DbB_V
+                      (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> YulTypedName DbB_V t) args) 
+                      (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> YulTypedName DbB_V t) rets) body')))))"
 
 | "yul_statement_to_deBruijn scopes (YulIf e body) =
    (case yul_expr_to_deBruijn scopes e of
     None \<Rightarrow> None
     | Some e' \<Rightarrow>
-    (case get_var_decls body of
-     (vds, vn) \<Rightarrow>
-     (case get_fun_decls (drop vn body) of
-      (fds, fn) \<Rightarrow>
-        (let scopes' = (vds @ fds) # scopes in
-        (case those (map (yul_statement_to_deBruijn scopes') body) of
-          None \<Rightarrow> None
-          | Some body' \<Rightarrow> Some (YulIf e' body'))))))"
+      (let scopes' = (get_var_decls body @ get_fun_decls body) # scopes in
+      (case those (map (yul_statement_to_deBruijn scopes') body) of
+        None \<Rightarrow> None
+        | Some body' \<Rightarrow> Some (YulIf e' body'))))"
 
 | "yul_statement_to_deBruijn scopes (YulSwitch e cases) =
    (case yul_expr_to_deBruijn scopes e of
@@ -222,62 +232,66 @@ fun yul_statement_to_deBruijn ::
     | Some e' \<Rightarrow>
     (let ocases =
       (map (\<lambda> c . case c of (YulSwitchCase v body) \<Rightarrow>
-        (case get_var_decls body of
-         (vds, vn) \<Rightarrow>
-         (case get_fun_decls (drop vn body) of
-          (fds, fn) \<Rightarrow>
-            (let scopes' = (vds @ fds) # scopes in
-            (case those (map (yul_statement_to_deBruijn scopes') body) of
-              None \<Rightarrow> None
-              | Some body' \<Rightarrow> Some (YulSwitchCase v body')))))) cases) in
+        (let scopes' = ((get_var_decls body) @ (get_fun_decls body)) # scopes in
+        (case those (map (yul_statement_to_deBruijn scopes') body) of
+          None \<Rightarrow> None
+          | Some body' \<Rightarrow> Some (YulSwitchCase v body')))) cases) in
     (case (those ocases) of
      None \<Rightarrow> None
      | Some cases' \<Rightarrow> Some (YulSwitch e' cases'))))"
 
-| "yul_statement_to_deBruijn scopes (YulForLoop [] cond post body) =
+(* TODO: fix handling of pre.
+ * need to calculate pre first, supply scopes to cond,
+ * as well as everything else (as prefix)
+ * function definitions not allowed in pre?*)
+
+| "yul_statement_to_deBruijn scopes (YulForLoop pre cond post body) =
+  (let decls_pre = get_var_decls pre in
+  (case yul_expr_to_deBruijn (decls_pre # scopes) cond of
+    None \<Rightarrow> None
+    | Some cond' \<Rightarrow>
+      (let opre = 
+        (let scopes'_pre = decls_pre # scopes in
+         those (map (yul_statement_to_deBruijn scopes'_pre) pre)) in
+      (let opost =
+        (let scopes'_post = (decls_pre @ get_var_decls post @ get_fun_decls post) # scopes in
+        (those (map (yul_statement_to_deBruijn scopes'_post) post))) in
+      (let obody =
+        (let scopes'_body = (decls_pre @ get_var_decls body @ get_fun_decls body) # scopes in
+        (those (map (yul_statement_to_deBruijn scopes'_body) body))) in
+      (case (opre, opost, obody) of
+        (Some pre', Some post', Some body') \<Rightarrow>
+          Some (YulForLoop pre' cond' post' body')
+        | _ \<Rightarrow> None))))))"
+
+(*
+| "yul_statement_to_deBruijn scopes (YulForLoop pre cond post body) =
    (case yul_expr_to_deBruijn scopes cond of
     None \<Rightarrow> None
     | Some cond' \<Rightarrow>
     (let opost =
-      (case get_var_decls post of
-        (vds_post, vn_post) \<Rightarrow>
-        (case get_fun_decls (drop vn_post post) of
-          (fds_post, fn_post) \<Rightarrow>
-            (let scopes'_post = (vds_post @ fds_post) # scopes in
-            (those (map (yul_statement_to_deBruijn scopes'_post) post))))) in
+      (let scopes'_post = (get_var_decls post @ get_fun_decls post) # scopes in
+      (those (map (yul_statement_to_deBruijn scopes'_post) post))) in
     (let obody =
-      (case get_var_decls body of
-        (vds_body, vn_body) \<Rightarrow>
-        (case get_fun_decls (drop vn_body body) of
-          (fds_body, fn_body) \<Rightarrow>
-            (let scopes'_body = (vds_body @ fds_body) # scopes in
-            (those (map (yul_statement_to_deBruijn scopes'_body) body))))) in
+      (let scopes'_body = (get_var_decls body @ get_fun_decls body) # scopes in
+      (those (map (yul_statement_to_deBruijn scopes'_body) body))) in
     (case (opost, obody) of
       (Some post', Some body') \<Rightarrow>
         Some (YulForLoop [] cond' post' body')
       | _ \<Rightarrow> None))))"
-
-| "yul_statement_to_deBruijn scopes (YulForLoop (h#t) cond post body) = None"
+*)
 
 | "yul_statement_to_deBruijn scopes YulBreak = Some YulBreak"
 | "yul_statement_to_deBruijn scopes YulContinue = Some YulContinue"
 | "yul_statement_to_deBruijn scopes YulLeave = Some YulLeave"
 
 | "yul_statement_to_deBruijn scopes (YulBlock body)  =
-  (case get_var_decls body of
-   (vds, vn) \<Rightarrow>
-   (case get_fun_decls (drop vn body) of
-    (fds, fn) \<Rightarrow>
-      (let scopes' = (vds @ fds) # scopes in
-      (case those (map (yul_statement_to_deBruijn scopes') \<comment> \<open> (drop (fn + vn) body)) \<close> body) of
-        None \<Rightarrow> None
-        | Some body' \<Rightarrow> Some (YulBlock body')))))"
+    (let scopes' = (get_var_decls body @ get_fun_decls body) # scopes in
+    (case those (map (yul_statement_to_deBruijn scopes') body) of
+      None \<Rightarrow> None
+      | Some body' \<Rightarrow> Some (YulBlock body')))"
 
 (* tests *)
-
-definition preprocess_and_rename :: "('v, 't) YulStatement \<Rightarrow> (DbIx, 'v, 't) YulStatement' option" where
-"preprocess_and_rename x =
-  ()"
 
 term \<open>YUL{
 {
@@ -290,9 +304,11 @@ definition rename_test1 :: "(256 word, unit) YulStatement" where
     (YUL{
     { let y : uint256
     {
+    let z : uint256 
     let x : uint256
     function print() {}
     x := 1
+    y := 2
     print()
     }
     }})
