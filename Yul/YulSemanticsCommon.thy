@@ -3,7 +3,7 @@ theory YulSemanticsCommon imports YulSyntax     "HOL-Library.Word"
 begin
 
 (* Primitives common to both small and big step Yul semantics *)
-datatype YulMode =
+datatype mode =
   Regular
   | Break
   | Continue
@@ -157,19 +157,18 @@ syntax plus_literal_inst.plus_literal :: "String.literal \<Rightarrow> String.li
 
 (* store results of yul statements *)
 record ('g, 'v, 't) result =
-  r_global :: "'g"
-  r_locals :: "'v locals"
+  global :: "'g"
+  locals :: "'v locals"
   (* value stack, used within expression evaluation, as well as
      for assignments and function arguments *)
-  r_vals :: "'v list"  
+  vals :: "'v list"  
   (* which functions are currently visible *)
-  r_funs :: "('g, 'v, 't) function_sig locals"
-  r_mode :: YulMode
+  funs :: "('g, 'v, 't) function_sig locals"
 
-datatype ('x) YulResult =
-  YulResult "('x)"
+datatype ('g, 'v, 't, 'z) YulResult =
+  YulResult "('g, 'v, 't, 'z) result_scheme"
   (* errors can optionally carry failed state *)
-  | ErrorResult "String.literal" "'x option"
+  | ErrorResult "String.literal" "('g, 'v, 't, 'z) result_scheme option"
 
 (* pre-passes for constructing function signature environments *)
 (* first, construct an environment of function_sigs *)

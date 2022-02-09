@@ -29,89 +29,46 @@ datatype ('g, 'v, 't) StackEl =
 
 type_synonym errf = "String.literal option"
 
-(*
 record ('g, 'v, 't) result =
   "('g, 'v, 't) YulSemanticsCommon.result" +
   cont :: "('g, 'v, 't) StackEl list"
 
 type_synonym ('g, 'v, 't) YulResult =
-  "('g, 'v, 't) YulResult"
+  "('g, 'v, 't, \<lparr>cont :: ('g, 'v, 't) StackEl list\<rparr>) YulResult"
 
 type_synonym ('g, 'v, 't) YulInput =
   "('g, 'v, 't) result"
-*)
-
-
-type_synonym ('g, 'v, 't) result' = "('g, 'v, 't) YulSemanticsCommon.result"
-
-record ('g, 'v, 't) result =
-  result :: "('g, 'v, 't) YulSemanticsCommon.result"
-  cont :: "('g, 'v, 't) StackEl list"
-
-(* convenience abbreviations to let us pretend like result is an extended record *)
-abbreviation global where
-"global \<equiv> r_global o result"
-abbreviation global_update where
-"global_update \<equiv> result_update o r_global_update"
-
-abbreviation locals where
-"locals \<equiv> r_locals o result"
-abbreviation locals_update where
-"locals_update \<equiv> result_update o r_locals_update"
-
-abbreviation vals where
-"vals \<equiv> r_vals o result"
-abbreviation vals_update where
-"vals_update \<equiv> result_update o r_vals_update"
-
-abbreviation funs where
-"funs \<equiv> r_funs o result"
-abbreviation funs_update where
-"funs_update \<equiv> result_update o r_funs_update"
-
-abbreviation mode where
-"mode \<equiv> r_mode o result"
-abbreviation mode_update where
-"mode_update \<equiv> result_update o r_mode_update"
-
-(* idea: for each step, we return a new prefix to add on to the continuation *)
-type_synonym ('g, 'v, 't) YulStepResult =
-  "(('g, 'v, 't) result' * ('g, 'v, 't) StackEl list) YulResult"
-
-type_synonym ('g, 'v, 't) YulResult =
-  "(('g, 'v, 't) result) YulResult"
 
 fun evalYulStatement ::
- "('g, 'v, 't) YulDialect \<Rightarrow>
-  ('v, 't) YulStatement \<Rightarrow> 
-  ('g, 'v, 't) result' \<Rightarrow>
-  ('g, 'v, 't) YulStepResult" where
+"('g, 'v, 't) YulDialect \<Rightarrow>
+ ('v, 't) YulStatement \<Rightarrow> ('g, 'v, 't) YulInput \<Rightarrow>
+  ('g, 'v, 't) YulResult" where
  "evalYulStatement D st r =
-   YulResult (r, [EnterStatement st])"
+   YulResult (r \<lparr> cont := EnterStatement st # cont r \<rparr>)"
 
 fun evalYulExpression ::
 "('g, 'v, 't) YulDialect \<Rightarrow>
  ('v, 't) YulExpression \<Rightarrow>
- ('g, 'v, 't) result' \<Rightarrow>
- ('g, 'v, 't) YulStepResult" where
+ ('g, 'v, 't) YulInput \<Rightarrow>
+ ('g, 'v, 't) YulResult" where
   "evalYulExpression D (YulIdentifier idn) r =
-   (case map_of (r_locals r) idn of
-    None \<Rightarrow> ErrorResult (STR ''Undefined variable '' @@ idn) (Some (r, []))
+   (case map_of (locals r) idn of
+    None \<Rightarrow> ErrorResult (STR ''Undefined variable '' @@ idn) (Some r)
     | Some v \<Rightarrow>
-      YulResult ((r \<lparr> r_vals :=  v # r_vals r \<rparr>), []))"
+      YulResult (r \<lparr> vals :=  v # vals r \<rparr>))"
 
 | "evalYulExpression D (YulLiteralExpression (YulLiteral v _)) r =
-   YulResult (r \<lparr> r_vals := v # r_vals r \<rparr>, [])"
+   YulResult (r \<lparr> vals := v # vals r \<rparr>)"
 
 | "evalYulExpression D YUL_EXPR{ \<guillemotleft>name\<guillemotright>(\<guillemotleft>args\<guillemotright>) } r =
-   (case map_of (r_funs r) name of
-    None \<Rightarrow> ErrorResult (STR ''Undefined function '' @@ name) (Some (r, []))
+   (case map_of (funs r) name of
+    None \<Rightarrow> ErrorResult (STR ''Undefined function '' @@ name) (Some r)
     | Some fsig \<Rightarrow>
-      YulResult (r, (map Expression (rev args) @ 
-                     [EnterFunctionCall name fsig,
-                      ExitFunctionCall name (r_vals r) (r_locals r) (r_funs r) fsig])))"
+      YulResult (r \<lparr> cont := map Expression (rev args) @ 
+                             EnterFunctionCall name fsig #
+                             ExitFunctionCall name (vals r) (locals r) (funs r) fsig #
+                             cont r \<rparr>))"
 
-(*
 fun yulBreak :: "('g, 'v, 't) YulDialect \<Rightarrow>
                  ('g, 'v, 't) StackEl list \<Rightarrow>
                  ('g, 'v, 't) YulInput \<Rightarrow>
@@ -147,55 +104,63 @@ fun yulLeave :: "('g, 'v, 't) YulDialect \<Rightarrow>
   "yulLeave D [] r = ErrorResult (STR ''Leave outside function body'') (Some r)"
 | "yulLeave D (ch#ct) r = (if is_ExitFunctionCall ch then YulResult (r \<lparr> cont := ch#ct \<rparr>) 
                            else yulLeave D ct r)"
-*)
-
 
 (* TODO: could check to ensure stack is empty here *)
 fun evalYulEnterStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
                               ('v, 't) YulStatement \<Rightarrow> 
-                              ('g, 'v, 't) result' \<Rightarrow>
-                              ('g, 'v, 't) YulStepResult"
+                              ('g, 'v, 't) YulInput \<Rightarrow>
+                              ('g, 'v, 't) YulResult"
   where
   "evalYulEnterStatement D YUL_STMT{ \<guillemotleft>ids\<guillemotright> := \<guillemotleft>e\<guillemotright> } r =
-  YulResult (r,  [Expression e, 
-                  ExitStatement YUL_STMT{ \<guillemotleft>ids\<guillemotright> := \<guillemotleft>e\<guillemotright> } (r_locals r) (r_funs r)])"
+  YulResult (r \<lparr> cont := (Expression e # 
+                         ExitStatement YUL_STMT{ \<guillemotleft>ids\<guillemotright> := \<guillemotleft>e\<guillemotright> } (locals r) (funs r) # 
+                         cont r) \<rparr>)"
 
 | "evalYulEnterStatement D YUL_STMT{ let \<guillemotleft>ids\<guillemotright> := \<guillemotleft>e\<guillemotright> } r =
-  YulResult (r, [Expression e,
-                 ExitStatement YUL_STMT{ let \<guillemotleft>ids\<guillemotright> := \<guillemotleft>e\<guillemotright> } (r_locals r) (r_funs r)])"
+  YulResult (r \<lparr> cont := Expression e # 
+                         ExitStatement YUL_STMT{ let \<guillemotleft>ids\<guillemotright> := \<guillemotleft>e\<guillemotright> } (locals r) (funs r) #
+                         cont r \<rparr>)"
 
 | "evalYulEnterStatement D YUL_STMT{ if \<guillemotleft>cond\<guillemotright> {\<guillemotleft>body\<guillemotright>} } r =
-  YulResult (r, [Expression cond,
-                 ExitStatement YUL_STMT{ if \<guillemotleft>cond\<guillemotright> {\<guillemotleft>body\<guillemotright>} } (r_locals r) (r_funs r)])"
+  YulResult (r \<lparr> cont := Expression cond #
+                         ExitStatement YUL_STMT{ if \<guillemotleft>cond\<guillemotright> {\<guillemotleft>body\<guillemotright>} } (locals r) (funs r) # 
+                         cont r \<rparr>)"
 
 | "evalYulEnterStatement D YUL_STMT{ switch \<guillemotleft>cond\<guillemotright> \<guillemotleft>cases\<guillemotright> } r =
-  YulResult (r, [Expression cond,
-                 ExitStatement YUL_STMT{ switch \<guillemotleft>cond\<guillemotright> \<guillemotleft>cases\<guillemotright> } (r_locals r) (r_funs r)])"
+  YulResult (r \<lparr> cont := Expression cond #
+                         ExitStatement YUL_STMT{ switch \<guillemotleft>cond\<guillemotright> \<guillemotleft>cases\<guillemotright> } (locals r) (funs r) #
+                         cont r\<rparr>)"
 
 (* empty pre = proceed with for loop *)
 | "evalYulEnterStatement D YUL_STMT{ for {} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } r = 
-    YulResult (r, 
-      [Expression cond,
-       ExitStatement YUL_STMT{ for {} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } (r_locals r) (r_funs r)])"
+    YulResult (r \<lparr> cont := Expression cond # 
+                           ExitStatement YUL_STMT{ for {} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } (locals r) 
+                                                                                     (funs r) # 
+                           cont r \<rparr>)"
 
-(* for loop with non empty pre *)
+(* non empty pre *)
 | "evalYulEnterStatement D YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } r = 
-    YulResult (r, [EnterStatement (YulBlock (pre@[YUL_STMT{ for {} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} }]))])"
+    YulResult (r \<lparr> cont := EnterStatement 
+                            (YulBlock (pre@[YUL_STMT{ for {} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} }])) # 
+                           cont r \<rparr>)"
 
 | "evalYulEnterStatement D YUL_STMT{ \<guillemotleft>f\<guillemotright>(\<guillemotleft>args\<guillemotright>) } r =
-  (YulResult (r, [Expression YUL_EXPR{ \<guillemotleft>f\<guillemotright>(\<guillemotleft>args\<guillemotright>) }, 
-                  ExitStatement YUL_STMT{ \<guillemotleft>f\<guillemotright>(\<guillemotleft>args\<guillemotright>) } (r_locals r) (r_funs r)]))"
+  (YulResult (r \<lparr> vals := []
+                , cont := Expression YUL_EXPR{ \<guillemotleft>f\<guillemotright>(\<guillemotleft>args\<guillemotright>) } # 
+                          ExitStatement YUL_STMT{ \<guillemotleft>f\<guillemotright>(\<guillemotleft>args\<guillemotright>) } (locals r) (funs r) # 
+                          cont r \<rparr>))"
 
 (* does enterStatement need function scope argument? *)
 | "evalYulEnterStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } r =
-  (case gatherYulFunctions (r_funs r) sl of
-    Inr fbad \<Rightarrow> ErrorResult (STR ''Duplicate function declaration: '' @@ fbad) (Some (r, []))
-    | Inl F \<Rightarrow> YulResult ((r \<lparr> r_funs := F \<rparr>),
-                  map EnterStatement sl @
-                  [ExitStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } (r_locals r) (r_funs r)]))"
+  (case gatherYulFunctions (funs r) sl of
+    Inr fbad \<Rightarrow> ErrorResult (STR ''Duplicate function declaration: '' @@ fbad) (Some r)
+    | Inl F \<Rightarrow> YulResult (r \<lparr> funs := F
+                            , cont := map EnterStatement sl @ 
+                                      ExitStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } (locals r) (funs r) #
+                                      cont r \<rparr>))"
 
 | "evalYulEnterStatement _ st r =
-    (YulResult (r, [ExitStatement st (r_locals r) (r_funs r)]))"
+    (YulResult (r \<lparr> cont := ExitStatement st (locals r) (funs r) # cont r \<rparr>))"
 
 (* helper functions for switch statements *)
 fun getDefault ::
@@ -215,132 +180,127 @@ fun nextCase ::
 | "nextCase ((YulSwitchCase (Some c) body)#t) =
    (Some (YulSwitchCase (Some c) body), t)"
    
+
 (* TODO: should we always force an empty stack after a statement? *)
 fun evalYulExitStatement :: "('g, 'v, 't) YulDialect \<Rightarrow>
                              ('v, 't) YulStatement \<Rightarrow> 
                              'v locals \<Rightarrow>
                              ('g, 'v, 't) function_sig locals \<Rightarrow>
-                             ('g, 'v, 't) result' \<Rightarrow>
-                             ('g, 'v, 't) YulStepResult"
+                             ('g, 'v, 't) YulInput \<Rightarrow>
+                             ('g, 'v, 't) YulResult"
   where
   "evalYulExitStatement D YUL_STMT{ \<guillemotleft>ids\<guillemotright> := \<guillemotleft>_\<guillemotright> } _ _ r = 
-  (if length (r_vals r) \<noteq> length ids
-   then ErrorResult (STR ''Arity mismatch (exiting assignment)'') (Some (r, []))
+  (if length (vals r) \<noteq> length ids then ErrorResult (STR ''Arity mismatch (exiting assignment)'') (Some r)
    else
-    (case put_values (r_locals r) ids  (take (length ids) (r_vals r)) of
-      None \<Rightarrow> ErrorResult (STR ''Should be dead code (exiting assignment)'') (Some (r, []))
-      | Some L1 \<Rightarrow> YulResult (r \<lparr> r_locals := L1, r_vals := []\<rparr>, [])))"
+    (case put_values (locals r) ids  (take (length ids) (vals r)) of
+      None \<Rightarrow> ErrorResult (STR ''Should be dead code (exiting assignment)'') (Some r)
+      | Some L1 \<Rightarrow> YulResult (r \<lparr> locals := L1, vals := []\<rparr>)))"
 
-| "evalYulExitStatement D YUL_STMT{ let \<guillemotleft>ids\<guillemotright> } _ _ r = (if length (r_vals r) = 0 then
-        (case insert_values (r_locals r) (strip_id_types ids) 
-                            (replicate (length ids) (default_val D)) of
-          None \<Rightarrow> ErrorResult (STR ''Duplicate variable declaration'') (Some (r, []))
-          | Some L1 \<Rightarrow> YulResult (r \<lparr> r_locals := L1, r_vals := []\<rparr>, []))
-       else ErrorResult (STR ''Invalid stack (variable declaration)'') (Some (r, [])))
+| "evalYulExitStatement D YUL_STMT{ let \<guillemotleft>ids\<guillemotright> } _ _ r = (if length (vals r) = 0 then
+        (case insert_values (locals r) (strip_id_types ids) (replicate (length ids) (default_val D)) of
+          None \<Rightarrow> ErrorResult (STR ''Duplicate variable declaration'') (Some r)
+          | Some L1 \<Rightarrow> YulResult (r \<lparr> locals := L1, vals := []\<rparr>))
+       else ErrorResult (STR ''Invalid stack (variable declaration)'') (Some r))
   "
 | "evalYulExitStatement D YUL_STMT{ let \<guillemotleft>ids\<guillemotright> := \<guillemotleft>_\<guillemotright> } _ _ r =
-  (if length (r_vals r) \<noteq> length ids 
-       then ErrorResult (STR ''Arity mismatch (variable declaration + assignment)'') (Some (r, []))
+  (if length (vals r) \<noteq> length ids then ErrorResult (STR ''Arity mismatch (variable declaration + assignment)'') (Some r)
        else
-        (case insert_values (r_locals r) (strip_id_types ids) (take (length ids) (r_vals r)) of
-          None \<Rightarrow> ErrorResult (STR ''Duplicate variable declaration'') (Some (r, []))
-          | Some L1 \<Rightarrow> YulResult (r \<lparr> r_locals := L1, r_vals := []\<rparr>, [])))"
+        (case insert_values (locals r) (strip_id_types ids) (take (length ids) (vals r)) of
+          None \<Rightarrow> ErrorResult (STR ''Duplicate variable declaration'') (Some r)
+          | Some L1 \<Rightarrow> YulResult (r \<lparr> locals := L1, vals := []\<rparr>)))"
 
 | "evalYulExitStatement D YUL_STMT{ if \<guillemotleft>cond\<guillemotright> {\<guillemotleft>body\<guillemotright>} } _ _ r =
-  (case r_vals r of
+  (case vals r of
     [vh] \<Rightarrow>
     (if is_truthy D vh then 
-      YulResult (r \<lparr> r_vals := [] \<rparr>, [EnterStatement YUL_STMT{ {\<guillemotleft>body\<guillemotright>} }])
-     else YulResult (r \<lparr> r_vals := [] \<rparr>, []))
-    | _ \<Rightarrow> ErrorResult (STR ''Invalid values stack (exiting if)'') (Some (r, [])))"
+      YulResult (r \<lparr> vals := [], cont := EnterStatement YUL_STMT{ {\<guillemotleft>body\<guillemotright>} } # (cont r)\<rparr>)
+     else YulResult (r \<lparr> vals := [] \<rparr>))
+    | _ \<Rightarrow> ErrorResult (STR ''Invalid values stack (exiting if)'') (Some r))"
 
 | "evalYulExitStatement D YUL_STMT{ switch \<guillemotleft>exp\<guillemotright> \<guillemotleft>scs\<guillemotright> } _ _ r =
-  (case r_vals r of
+  (case vals r of
     [vh] \<Rightarrow>
      (case nextCase scs of
       (None, _) \<Rightarrow>
         (case getDefault scs of
           Some YUL_SWITCH_CASE{ default {\<guillemotleft>body\<guillemotright>} } \<Rightarrow>
-            YulResult (r \<lparr> r_vals := [] \<rparr>, [EnterStatement YUL_STMT{ {\<guillemotleft>body\<guillemotright>} }])
-          | _ \<Rightarrow> ErrorResult (STR ''No default switch case'') (Some (r, [])))
+            YulResult (r \<lparr> vals := []
+                         , cont := EnterStatement YUL_STMT{ {\<guillemotleft>body\<guillemotright>} } #
+                                   cont r \<rparr>)
+          | _ \<Rightarrow> ErrorResult (STR ''No default switch case'') (Some r))
       | (Some YUL_SWITCH_CASE{ case \<guillemotleft>YulLiteral vcond _\<guillemotright> {\<guillemotleft>body\<guillemotright>} }, scs') \<Rightarrow>
         (if vh = vcond then
-          YulResult (r \<lparr> r_vals := [] \<rparr>, [EnterStatement YUL_STMT{ {\<guillemotleft>body\<guillemotright>} }])
-         else YulResult (r, [ExitStatement YUL_STMT{ switch \<guillemotleft>exp\<guillemotright> \<guillemotleft>scs'\<guillemotright> } 
-                             (r_locals r) (r_funs r)]))
-      | _ \<Rightarrow> ErrorResult (STR ''Should be dead code'') (Some (r, [])))
-    | _ \<Rightarrow> ErrorResult (STR ''Invalid values stack (exiting switch statement)'') (Some (r, [])))"
+          YulResult (r \<lparr> vals := []
+                         , cont := EnterStatement YUL_STMT{ {\<guillemotleft>body\<guillemotright>} } #
+                                   cont r \<rparr>)
+         else YulResult (r \<lparr> cont := ExitStatement YUL_STMT{ switch \<guillemotleft>exp\<guillemotright> \<guillemotleft>scs'\<guillemotright> } (locals r) (funs r) #
+                                   cont r \<rparr>))
+      | _ \<Rightarrow> ErrorResult (STR ''Should be dead code'') (Some r))
+    | _ \<Rightarrow> ErrorResult (STR ''Invalid values stack (exiting switch statement)'') (Some r))"
 
-(* we have already dealt with pre at this point (see evalYulEnterStatement) *)
+(* we have already dealt with pre at this point *)
 | "evalYulExitStatement D YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } _ _ r = 
-  (case r_vals r of
+  (case vals r of
     [vh] \<Rightarrow>
     (if is_truthy D vh then
-      YulResult 
-        (r \<lparr> r_vals := [] \<rparr>, 
-         [EnterStatement YUL_STMT{ {\<guillemotleft>body\<guillemotright>} },
-          EnterStatement YUL_STMT{ {\<guillemotleft>post\<guillemotright>} },
-          Expression cond,
-          ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } (r_locals r) (r_funs r)])
+      YulResult (r \<lparr> vals := []
+                   , cont := (EnterStatement YUL_STMT{ {\<guillemotleft>body\<guillemotright>} } # EnterStatement YUL_STMT{ {\<guillemotleft>post\<guillemotright>} } #
+                              Expression cond # 
+                              ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } (locals r) (funs r) #
+                              cont r) \<rparr>)
      else
-       (YulResult (r \<lparr> r_vals := [] \<rparr>, [])))
-     | _ \<Rightarrow> ErrorResult (STR ''Invalid value stack (exiting ForLoop i.e. entering body)'')
-                        (Some (r, [])))"
+       (YulResult (r \<lparr> vals := []
+                     , cont := (cont r) \<rparr>)))
+     | _ \<Rightarrow> ErrorResult (STR ''Invalid value stack (exiting ForLoop i.e. entering body)'') (Some r))"
 
 | "evalYulExitStatement D YUL_STMT{ \<guillemotleft>_\<guillemotright>(\<guillemotleft>_\<guillemotright>) } _ _ r =
-  (case r_vals r of
-    _#_ \<Rightarrow> ErrorResult (STR ''Nonempty stack after function call statement'') (Some (r, []))
-    | [] \<Rightarrow> YulResult (r, []))"
+  (case vals r of
+    _#_ \<Rightarrow> ErrorResult (STR ''Nonempty stack after function call statement'') (Some r)
+    | [] \<Rightarrow> YulResult r)"
 
 | "evalYulExitStatement D YUL_STMT{ break } _ _ r =
-   YulResult (r \<lparr> r_vals := [], r_mode := Break \<rparr>, [])"
+   yulBreak D (cont r) (r \<lparr> vals := [] \<rparr>)"
 
 | "evalYulExitStatement D YUL_STMT{ continue } _ _ r =
-   YulResult (r \<lparr> r_vals := [], r_mode := Continue \<rparr>, [])"
+   yulContinue D (cont r) (r \<lparr> vals := [] \<rparr>)"
 
 | "evalYulExitStatement D YUL_STMT{ leave } _ _ r =
-   YulResult (r \<lparr> r_vals := [], r_mode := Leave \<rparr>, [])"
+   yulLeave D (cont r) (r \<lparr> vals := [] \<rparr>)"
 
 | "evalYulExitStatement D YUL_STMT{ {\<guillemotleft>_\<guillemotright>} } L F r =
-  (YulResult (r \<lparr> r_locals := restrict (r_locals r) L
-                , r_vals := []
-                , r_funs := F \<rparr>, []))"
+  (YulResult (r \<lparr> locals := restrict (locals r) L
+                , vals := []
+                , funs := F \<rparr>))"
 
-| "evalYulExitStatement _ _ _ _ r = (YulResult (r \<lparr> r_vals := [] \<rparr>, []))"
+| "evalYulExitStatement _ _ _ _ r = (YulResult (r \<lparr> vals := [] \<rparr>))"
 
+(* TODO: make sure we are handling parameter ordering correctly (w/r/t reversal) *)
 fun evalYulEnterFunctionCall :: "('g, 'v, 't) YulDialect \<Rightarrow>
                                  YulIdentifier \<Rightarrow>
                                 ('g, 'v, 't) function_sig \<Rightarrow>
-                                ('g, 'v, 't) result' \<Rightarrow>
-                                ('g, 'v, 't) YulStepResult" where
+                                ('g, 'v, 't) YulInput \<Rightarrow>
+                                ('g, 'v, 't) YulResult" where
   "evalYulEnterFunctionCall D name fsig r = 
   (case f_sig_body fsig of
     YulBuiltin impl \<Rightarrow>
-     (case impl (take (length (f_sig_arguments fsig)) (r_vals r)) of
-           Error err _ \<Rightarrow> 
-              ErrorResult (STR ''Error in builtin '' @@ (name @@ (STR '' : '' @@ err))) 
-                (Some (r, []))
+     (case impl (take (length (f_sig_arguments fsig)) (vals r)) of
+           Error err _ \<Rightarrow> ErrorResult (STR ''Error in builtin '' @@ (name @@ (STR '' : '' @@ err))) (Some r)
            | Result impl' \<Rightarrow>
-            (case impl' (r_global r) of
+            (case impl' (global r) of
               (vals', G') \<Rightarrow>
-                YulResult (r \<lparr> r_global := G', 
-                               r_vals := vals' @ drop (length (f_sig_arguments fsig)) (r_vals r)  \<rparr>, 
-                           [])))
+                YulResult (r \<lparr> global := G', vals := vals' @ drop (length (f_sig_arguments fsig)) (vals r)  \<rparr>)))
      | YulFunction body \<Rightarrow>
-       (case insert_values locals_empty (strip_id_types (f_sig_arguments fsig)) 
-                                        (take (length (f_sig_arguments fsig)) (r_vals r)) of
-        None \<Rightarrow> ErrorResult (STR ''Arity error when calling function '' @@ name) (Some (r, []))
+       (case insert_values locals_empty (strip_id_types (f_sig_arguments fsig)) (take (length (f_sig_arguments fsig)) (vals r)) of
+        None \<Rightarrow> ErrorResult (STR ''Arity error when calling function '' @@ name) (Some r)
         | Some L1 \<Rightarrow>
-          (case insert_values L1 (strip_id_types (f_sig_returns fsig)) 
-                                 (replicate (length (f_sig_returns fsig)) (default_val D)) of
-           None \<Rightarrow> ErrorResult (STR ''Name collision for returns in function '' @@ name)
-                               (Some (r, []))
+          (case insert_values L1 (strip_id_types (f_sig_returns fsig)) (replicate (length (f_sig_returns fsig)) (default_val D)) of
+           None \<Rightarrow> ErrorResult (STR ''Name collision for returns in function '' @@ name) (Some r)
            | Some L2 \<Rightarrow>
-             YulResult (r \<lparr> r_locals := L2
-                          , r_vals := []
-                          , r_funs := restrict (r_funs r) (map (\<lambda> n . (n, ())) 
-                                                          (f_sig_visible fsig)) \<rparr>,
-                        [EnterStatement (YulBlock body)]))))"
+             YulResult (r \<lparr> locals := L2
+                          , vals := []
+                          , funs := restrict (funs r) (map (\<lambda> n . (n, ())) (f_sig_visible fsig))
+                          , cont := EnterStatement (YulBlock body) #
+                                    cont r \<rparr>))))"
 
 fun evalYulExitFunctionCall :: "('g, 'v, 't) YulDialect \<Rightarrow>
                                  YulIdentifier \<Rightarrow> 
@@ -348,23 +308,23 @@ fun evalYulExitFunctionCall :: "('g, 'v, 't) YulDialect \<Rightarrow>
                                 'v locals \<Rightarrow> 
                                 ('g, 'v, 't) function_sig locals \<Rightarrow>
                                 ('g, 'v, 't) function_sig \<Rightarrow>
-                                ('g, 'v, 't) result' \<Rightarrow>
-                                ('g, 'v, 't) YulStepResult" 
+                                ('g, 'v, 't) YulInput \<Rightarrow>
+                                ('g, 'v, 't) YulResult" 
   where
   "evalYulExitFunctionCall D name vals_old locals_old funs_old fsig r =
   (case f_sig_body fsig of
-    YulBuiltin _ \<Rightarrow> YulResult (r, [])
+    YulBuiltin _ \<Rightarrow> YulResult r
     | YulFunction _ \<Rightarrow>
-    (case r_vals r of
-      _#_ \<Rightarrow> ErrorResult (STR ''Nonempty stack after function '' @@ name) (Some (r, []))
+    (case vals r of
+      _#_ \<Rightarrow> ErrorResult (STR ''Nonempty stack after function '' @@ name) (Some r)
       | _ \<Rightarrow>
-        (case get_values (r_locals r) (strip_id_types (f_sig_returns fsig)) of
-         None \<Rightarrow> ErrorResult (STR ''Uninintialized returns for function '' @@ name) (Some (r, []))
-         | Some vs \<Rightarrow> YulResult (r \<lparr> r_locals := locals_old
-                                   , r_vals := vs @ vals_old
-                                   , r_funs := funs_old \<rparr>, []))))"
+        (case get_values (locals r) (strip_id_types (f_sig_returns fsig)) of
+         None \<Rightarrow> ErrorResult (STR ''Uninintialized returns for function '' @@ name) (Some r)
+         | Some vs \<Rightarrow> YulResult (r \<lparr> locals := locals_old
+                                   , vals := vs @ vals_old
+                                   , funs := funs_old \<rparr>))))"
 
-(*
+
 fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) YulInput \<Rightarrow>
                     ('g, 'v, 't) YulResult" where
 "evalYulStep D r =
@@ -380,102 +340,9 @@ fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) YulInput 
        evalYulExitFunctionCall D name vals_old locals_old funs_old fsig
         (r \<lparr> cont := ct \<rparr>)
 )"
-*)
-
-definition updateResult :: "('g, 'v, 't) StackEl list \<Rightarrow>
-                     ('g, 'v, 't) YulStepResult \<Rightarrow> 
-                     ('g, 'v, 't) YulResult" where
-"updateResult ct res =
-  (case res of
-    YulResult (r', c') \<Rightarrow>
-      YulResult \<lparr> result = r', cont = c' @ ct \<rparr>
-    | ErrorResult s (Some (r', c')) \<Rightarrow>
-      ErrorResult s (Some \<lparr> result = r', cont = c' @ ct\<rparr>)
-    | ErrorResult s None \<Rightarrow>
-      ErrorResult s None)"
-
-
-(* question: do we check for empty value stack on entry
-into statement? *)
-(*
-              (case vals r of
-               [] \<Rightarrow> evalYulEnterStatement D st (result r)
-               | _ \<Rightarrow> ErrorResult (STR ''Nonempty stack on statement entry'') (Some (result r, [])))
-*)
-
-(* updating EvalYulStep *)
-fun evalYulStep :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v, 't) result \<Rightarrow>
-                    ('g, 'v, 't) YulResult" where
-"evalYulStep D r =
-  (case cont r of
-    [] \<Rightarrow> 
-      (case mode r of
-        Regular \<Rightarrow> YulResult r
-        | Break \<Rightarrow> ErrorResult (STR ''Break outside loop body'') 
-                               (Some (r \<lparr> cont := []\<rparr>))
-        | Continue \<Rightarrow> ErrorResult (STR ''Continue outside loop body'')
-                                  (Some (r \<lparr> cont := []\<rparr>))
-        | Leave \<Rightarrow> ErrorResult (STR ''Leave outside function body'')
-                               (Some (r \<lparr> cont := []\<rparr>)))
-
-    | ch#ct \<Rightarrow>
-      (case mode r of
-        Regular \<Rightarrow>
-          updateResult ct
-          (case ch of
-            (EnterStatement st) \<Rightarrow> evalYulEnterStatement D st (result r)
-            | (ExitStatement st L F) \<Rightarrow> evalYulExitStatement D st L F (result r)
-            | (Expression e) \<Rightarrow> evalYulExpression D e (result r)
-            | (EnterFunctionCall name fsig) \<Rightarrow> 
-               evalYulEnterFunctionCall D name fsig (result r)
-            | (ExitFunctionCall name vals_old locals_old funs_old fsig) \<Rightarrow> 
-               evalYulExitFunctionCall D name vals_old locals_old funs_old fsig
-                (result r))
-
-        | Break \<Rightarrow>
-          (case ch of
-            (EnterStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } ) \<Rightarrow>
-              updateResult ct (evalYulEnterStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} }  (result r))
-            | (ExitStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F) \<Rightarrow>
-              updateResult ct (evalYulExitStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F (result r))
-            | (ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } c' f') \<Rightarrow>
-              YulResult (r \<lparr> cont := ct, mode := Regular \<rparr>)
-            | (ExitFunctionCall _ _ _ _ _) \<Rightarrow>
-              ErrorResult (STR ''Break outside loop body (inside function body)'')
-                          (Some (r \<lparr> cont := ct \<rparr>))
-            | _ \<Rightarrow> YulResult (r \<lparr> cont := ct \<rparr>))
-
-        | Continue \<Rightarrow>
-          (case ch of
-            (EnterStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } ) \<Rightarrow>
-              updateResult ct (evalYulEnterStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} }  (result r))
-            | (ExitStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F) \<Rightarrow>
-              updateResult ct (evalYulExitStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F (result r))
-            | ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' \<Rightarrow>
-              YulResult (r \<lparr> cont := EnterStatement YUL_STMT{ {\<guillemotleft>post\<guillemotright>} } #
-                               Expression cond #
-                               ExitStatement YUL_STMT{ for {\<guillemotleft>pre\<guillemotright>} \<guillemotleft>cond\<guillemotright> {\<guillemotleft>post\<guillemotright>} {\<guillemotleft>body\<guillemotright>} } f' c' 
-                               # ct
-                           , mode := Regular \<rparr>)
-
-            | (ExitFunctionCall _ _ _ _ _) \<Rightarrow>
-                ErrorResult (STR ''Continue outside loop body (inside function body)'') 
-                            (Some (r \<lparr> cont := ct \<rparr>))
-            | _ \<Rightarrow> YulResult (r \<lparr> cont := ct \<rparr>))
-                
-        | Leave \<Rightarrow>
-          (case ch of
-            (EnterStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } ) \<Rightarrow>
-              updateResult ct (evalYulEnterStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} }  (result r))
-            | (ExitStatement YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F) \<Rightarrow>
-              updateResult ct (evalYulExitStatement D YUL_STMT{ {\<guillemotleft>sl\<guillemotright>} } L F (result r))
-            | (ExitFunctionCall _ _ _ _ _) \<Rightarrow> YulResult (r \<lparr> cont := ch#ct, mode := Regular \<rparr>)
-            | _ \<Rightarrow> YulResult (r \<lparr> cont := ct \<rparr>))))"
-
-
 
 fun evalYul' :: "('g, 'v, 't) YulDialect \<Rightarrow>
-                 ('g, 'v, 't) result \<Rightarrow> 
+                 ('g, 'v, 't) YulInput \<Rightarrow> 
                  nat \<Rightarrow>
                  ('g, 'v, 't) YulResult" where
 "evalYul' D r n =
@@ -486,25 +353,27 @@ fun evalYul' :: "('g, 'v, 't) YulDialect \<Rightarrow>
            (ErrorResult msg x) \<Rightarrow> ErrorResult msg x 
          | YulResult r \<Rightarrow> evalYul' D r (n - 1))))"
 
-fun yulInit :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v,'t) result'" where
-"yulInit D = \<lparr> r_global = init_state D
-             , r_locals = locals_empty
-             , r_vals = []
-             , r_funs = builtins D
-             , r_mode = Regular \<rparr>"
+fun yulInit :: "('g, 'v, 't) YulDialect \<Rightarrow> ('g, 'v,'t) result" where
+"yulInit D = \<lparr> global = init_state D
+             , locals = locals_empty
+             , vals = []
+             , funs = builtins D
+             , cont = []\<rparr>"
 
 fun evalYul :: "('g, 'v, 't) YulDialect \<Rightarrow>
                 ('v, 't) YulStatement \<Rightarrow>
                 nat \<Rightarrow>
                 ('g, 'v, 't) YulResult" where
 "evalYul D s n =
-  evalYul' D \<lparr> result = yulInit D,  cont = [EnterStatement s] \<rparr> n"
+  (let r = yulInit D in
+   evalYul' D (r \<lparr> cont := [EnterStatement s] \<rparr>) n)"
 
 fun evalYulE :: "('g, 'v, 't) YulDialect \<Rightarrow>
                  ('v, 't) YulExpression \<Rightarrow>
                  nat \<Rightarrow>
                  ('g, 'v, 't) YulResult" where
 "evalYulE D e n =
-  evalYul' D \<lparr> result = yulInit D,  cont = [Expression e] \<rparr> n"
+  (let r = yulInit D in
+  evalYul' D (r \<lparr> cont := [Expression e] \<rparr>) n)"
 
 end

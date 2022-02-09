@@ -135,12 +135,28 @@ fun yul_statement_to_deBruijn ::
         None \<Rightarrow> None
         | Some ns' \<Rightarrow> Some (YulAssignmentStatement (YulAssignment ns' e'))))"
 
+(* fix this *)
+(*
 | "yul_statement_to_deBruijn scopes
     (YulVariableDeclarationStatement (YulVariableDeclaration ns e)) =
     (case e of
       Some _ \<Rightarrow> None
       | None \<Rightarrow> Some (YulVariableDeclarationStatement
         (YulVariableDeclaration (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> YulTypedName DbB_V t) ns) None)))"
+*)
+
+| "yul_statement_to_deBruijn scopes
+    (YulVariableDeclarationStatement (YulVariableDeclaration ns eo)) =
+    (let ns' = (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> YulTypedName DbB_V t) ns) in
+      (case eo of
+          Some e \<Rightarrow> 
+            (case yul_expr_to_deBruijn scopes e of
+              None \<Rightarrow> None
+              | Some e' \<Rightarrow>
+              Some (YulVariableDeclarationStatement (YulVariableDeclaration ns' (Some e'))))
+          | None \<Rightarrow> 
+          Some (YulVariableDeclarationStatement (YulVariableDeclaration ns' None))))"
+
 
 (* NB: the function itself is already in the scope at this point.
  * so what we are handling here are the further extensions
@@ -217,6 +233,18 @@ fun yul_statement_to_deBruijn ::
       None \<Rightarrow> None
       | Some body' \<Rightarrow> Some (YulBlock body')))"
 
+(* entry point for yul_statement_to_deBruijn - 
+ * for a whole program, start with empty scope.
+ *)
+definition yul_program_to_deBruijn ::
+  "('v, 't) YulStatement \<Rightarrow>  (DbIx, 'v, 't) YulStatement' option" where
+"yul_program_to_deBruijn p = (yul_statement_to_deBruijn [] p)"
+
+(* this is probably not as useful *)
+definition yul_program_expr_to_deBruijn ::
+  "('v, 't) YulExpression \<Rightarrow> (DbIx, 'v, 't) YulExpression' option" where
+"yul_program_expr_to_deBruijn p = (yul_expr_to_deBruijn [] p)"
+
 (* tests *)
 
 term \<open>YUL{
@@ -232,10 +260,11 @@ definition rename_test1 :: "(256 word, unit) YulStatement" where
     {
     let z : uint256 
     let x : uint256
-    function print() {}
+    function print(x : uint256) -> l  { l := x}
     x := 1
     y := 2
-    print()
+    let z : uint256 := 3
+    print(z)
     }
     }})
     "
