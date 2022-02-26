@@ -135,16 +135,6 @@ fun yul_statement_to_deBruijn ::
         None \<Rightarrow> None
         | Some ns' \<Rightarrow> Some (YulAssignmentStatement (YulAssignment ns' e'))))"
 
-(* fix this *)
-(*
-| "yul_statement_to_deBruijn scopes
-    (YulVariableDeclarationStatement (YulVariableDeclaration ns e)) =
-    (case e of
-      Some _ \<Rightarrow> None
-      | None \<Rightarrow> Some (YulVariableDeclarationStatement
-        (YulVariableDeclaration (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> YulTypedName DbB_V t) ns) None)))"
-*)
-
 | "yul_statement_to_deBruijn scopes
     (YulVariableDeclarationStatement (YulVariableDeclaration ns eo)) =
     (let ns' = (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> YulTypedName DbB_V t) ns) in
@@ -157,7 +147,7 @@ fun yul_statement_to_deBruijn ::
           | None \<Rightarrow> 
           Some (YulVariableDeclarationStatement (YulVariableDeclaration ns' None))))"
 
-
+(* TODO: do we need to collect all functions visible in the context first? *)
 (* NB: the function itself is already in the scope at this point.
  * so what we are handling here are the further extensions
  * (params, rets, + function body bindings) needed *)
@@ -278,5 +268,16 @@ definition rename_test1' :: "(256 word, unit) YulStatement list" where
 value "get_var_decls rename_test1'"
 
 value "yul_statement_to_deBruijn [] rename_test1"
+
+definition rename_test2 :: "(256 word, unit) YulStatement" where
+  "rename_test2 \<equiv>
+    (YUL{
+    { let y : uint256
+      let y : uint256
+      let w : uint256 := y
+    }})
+    "
+
+value "yul_statement_to_deBruijn [] rename_test2"
 
 end
