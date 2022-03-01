@@ -182,6 +182,25 @@ definition alpha_equiv_results' ::
  * states, in order to make this work.
  *)
 
+(* we also need to be able to update substitutions. 
+ * this will happen when entering a new context,
+ * or declaring a new variable
+ * we might be able to do an approach similar to the
+ * renamer, where we gather definitions first
+ * whenever encountering a new block*)
+
+(*
+
+fun update_subst ::
+  "subst \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> ('v, 'g, 't) StackEl \<Rightarrow> subst option"
+where
+"update_subst subst _ _ 
+| "update_subst subst x y =
+  (if (x = y) then Some subst else None)"
+  
+
+*)
+
 (*
  * TODO: will scopes change during the execution of
  * a step?
