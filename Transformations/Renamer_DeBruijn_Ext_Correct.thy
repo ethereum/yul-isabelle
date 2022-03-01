@@ -262,20 +262,14 @@ split: option.splits)
         by(cases x2; auto)
 
       show ?thesis using assms C1 C2 EnterStatement1 EnterStatement2 X1 X2 V1 V2
-        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_statement'_def alpha_equiv_expr'_def)
+        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_statement'_def alpha_equiv_expr'_def Let_def)
             apply(fastforce split: option.splits)
            apply(fastforce split: option.splits)
           apply(fastforce split: option.splits)
          apply(fastforce split: option.splits)
-        apply(simp only: yul_statement_to_deBruijn.simps)
-        apply(simp del: yul_expr_to_deBruijn.simps)
         apply(cases vs1; cases vs2; auto)
-          apply(simp add: alpha_equiv_statement'_def) defer
-        apply(simp add: alpha_equiv_statement'_def)
-
-        apply(auto simp add: alpha_equiv_expr'_def )
-(* we seem to have lost the information that the starting expressions are equal? *)
-      then show ?thesis sorry
+        apply(auto simp add: alpha_equiv_expr'_def alpha_equiv_statement'_def  split: option.split_asm)
+        done
     next
       case (YulFunctionDefinitionStatement x4)
       then show ?thesis sorry
@@ -302,8 +296,88 @@ split: option.splits)
       then show ?thesis sorry
     qed
   next
-    case (ExitStatement x21 x22 x23)
+    case ExitStatement1: (ExitStatement esa1 esb1 esc1)
+    
+    obtain esa2 esb2 esc2 where ExitStatement2 :
+      "c2h = ExitStatement esa2 esb2 esc2"
+      using C1 C2 ExitStatement1 Hc1 Hinit
+      by(cases c2h; auto simp add: alpha_equiv_results'_def)
+
+    show ?thesis
+    proof(cases esa1)
+      case X1: (YulFunctionCallStatement x1)
+
+      obtain f1 args1 where F1 : "x1 = YulFunctionCall f1 args1"
+        by(cases x1; auto)
+
+      obtain x2 where X2 :
+        "esa2 = YulFunctionCallStatement x2"
+        sorry
+
+      obtain f2 args2 where F2 : "x2 = YulFunctionCall f2 args2"
+        by(cases x2; auto)
+
+      show ?thesis
+        using assms C1 C2 ExitStatement1 ExitStatement2 X1 X2 F1 F2
+        by(auto simp add: alpha_equiv_results'_def alpha_equiv_statement'_def alpha_equiv_expr'_def
+split: option.splits list.splits)
+
+    next
+      case (YulAssignmentStatement x2)
+      then show ?thesis sorry
+    next
+      case X1: (YulVariableDeclarationStatement x3)
+
+      obtain n1 vs1 where V1 : "x3 = YulVariableDeclaration n1 vs1"
+        by(cases x3; auto)
+
+      obtain x2 where X2 : "esa2 = YulVariableDeclarationStatement x2"
+        sorry
+
+      obtain n2 vs2 where V2 : "x2 = YulVariableDeclaration n2 vs2"
+        by(cases x2; auto)
+
+      show ?thesis using assms C1 C2 ExitStatement1 ExitStatement2 X1 X2 V1 V2
+        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_statement'_def alpha_equiv_expr'_def Let_def)
+            apply(auto split: option.splits)
+(*
+            apply(fastforce split: option.splits)
+           apply(fastforce split: option.splits)
+          apply(fastforce split: option.splits)
+         apply(fastforce split: option.splits)
+*)
+        apply(cases vs1; cases vs2; auto)
+        apply(auto simp add: alpha_equiv_expr'_def alpha_equiv_statement'_def  split: option.split_asm)
+        done
+
+
+      then show ?thesis sorry
+    next
+      case (YulFunctionDefinitionStatement x4)
+      then show ?thesis sorry
+    next
+      case (YulIf x51 x52)
+      then show ?thesis sorry
+    next
+      case (YulSwitch x61 x62)
+      then show ?thesis sorry
+    next
+      case (YulForLoop x71 x72 x73 x74)
+      then show ?thesis sorry
+    next
+      case YulBreak
+      then show ?thesis sorry
+    next
+    case YulContinue
+      then show ?thesis sorry
+    next
+      case YulLeave
+      then show ?thesis sorry
+    next
+      case (YulBlock x11)
     then show ?thesis sorry
+    qed
+
   next
     case (EnterFunctionCall x31 x32)
     then show ?thesis sorry
