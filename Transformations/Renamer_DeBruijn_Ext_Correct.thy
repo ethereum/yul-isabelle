@@ -1,5 +1,5 @@
 theory Renamer_DeBruijn_Ext_Correct
-  imports Renamer_DeBruijn "../Yul/YulSemanticsSingleStep"
+  imports Renamer_DeBruijn_Ext "../Yul/YulSemanticsSingleStep"
 
 begin
 
@@ -82,6 +82,7 @@ fun rename_locals :: "subst \<Rightarrow> 'v locals \<Rightarrow> 'v locals opti
  * our purposes it should be fine since the states will be exactly the same
  * even in terms of structure, apart from names.
  *)
+(*
 fun alpha_equiv_locals' ::
   "subst \<Rightarrow> 'v locals \<Rightarrow> 'v locals \<Rightarrow> bool" where
 "alpha_equiv_locals' subst [] [] = True"
@@ -90,11 +91,30 @@ fun alpha_equiv_locals' ::
     v1 = v2 \<and>
     alpha_equiv_locals' subst t1 t2)"
 | "alpha_equiv_locals' _ _ _ = False"
+*)
+
+(* Enforce that names match for names mentioned in subst.
+ * For all other locals, we ignore names and just check values.
+ * This way, we can avoid name clashes for names not mentioned in subst (e.g. variables bound
+ * further down the syntax tree)
+ *)
+fun alpha_equiv_locals' ::
+  "subst \<Rightarrow> 'v locals \<Rightarrow> 'v locals \<Rightarrow> bool" where
+"alpha_equiv_locals' subst [] [] = True"
+| "alpha_equiv_locals' subst ((n1, v1)#t1) ((n2, v2)#t2) =
+   (v1 = v2 \<and>
+   (case subst1 subst n1 of
+    Some n1' \<Rightarrow> n1' = n2
+    | None \<Rightarrow> True) \<and>
+    alpha_equiv_locals' subst t1 t2)"
+| "alpha_equiv_locals' _ _ _ = False"
 
 definition alpha_equiv_function_sig'_scheme ::
   "subst \<Rightarrow> YulIdentifier \<Rightarrow> ('g, 'v, 't, 'z) function_sig'_scheme \<Rightarrow> YulIdentifier \<Rightarrow> ('g, 'v, 't, 'z) function_sig'_scheme \<Rightarrow> bool" where
 "alpha_equiv_function_sig'_scheme subst n1 s1 n2 s2 =
-  (subst1 subst n1 = Some n2 \<and>
+  ((case subst1 subst n1 of
+    None \<Rightarrow> True
+    | Some n1' \<Rightarrow> n1' = n2) \<and>
   (case (f_sig_body s1, f_sig_body s2) of
         (YulBuiltin b1, YulBuiltin b2) \<Rightarrow>
           (let args1 = (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> n) (f_sig_arguments s1)) in
@@ -164,14 +184,14 @@ fun alpha_equiv_stackEl' ::
 
 definition alpha_equiv_results' ::
   "subst \<Rightarrow>
-   ('g, 'v, 't) YulSemanticsSingleStep.result \<Rightarrow>
-   ('g, 'v, 't) YulSemanticsSingleStep.result \<Rightarrow>
+   ('g, 'v, 't) YulInput \<Rightarrow>
+   ('g, 'v, 't) YulInput \<Rightarrow>
    bool" where
 "alpha_equiv_results' subst r1 r2 =
   (global r1 = global r2 \<and>
    vals r1 = vals r2 \<and>
    alpha_equiv_locals' subst (locals r1) (locals r2) \<and>
-   alpha_equiv_locals' subst (funs r1) (funs r2) \<and>
+   alpha_equiv_funs' subst (funs r1) (funs r2) \<and>
    (list_all2 (alpha_equiv_stackEl' subst)
               (cont r1)
               (cont r2)))"
@@ -181,6 +201,132 @@ definition alpha_equiv_results' ::
  * This also means we need to be able to account for alpha-equivalent input
  * states, in order to make this work.
  *)
+
+lemma alpha_equiv_step :
+  assumes Hc1 : "cont r1 = c1"
+  assumes Hinit : "alpha_equiv_results' subst r1 r2"
+  assumes H1 : "evalYulStep d r1 = YulResult r1'"
+  assumes H2 : "evalYulStep d r2 = YulResult r2'"
+  shows "alpha_equiv_results' subst r1' r2'"
+  using assms
+proof(cases c1)
+  case Nil
+  then show ?thesis using assms
+    by(auto simp add: alpha_equiv_results'_def)
+next
+  case C1 : (Cons c1h c1t)
+
+  obtain c2h c2t where C2 :"cont r2 = c2h # c2t"
+    using Hc1 Hinit C1
+    by(cases "cont r2"; auto simp add: alpha_equiv_results'_def)
+
+  show ?thesis
+  proof(cases c1h)
+    case EnterStatement1 : (EnterStatement st1)
+
+    obtain st2 where EnterStatement2 :
+      "c2h = EnterStatement st2"
+      using C1 C2 EnterStatement1 Hc1 Hinit
+      by(cases c2h; auto simp add: alpha_equiv_results'_def)
+
+    show ?thesis
+    proof(cases st1)
+      case X1: (YulFunctionCallStatement x1)
+
+      obtain f1 args1 where F1 : "x1 = YulFunctionCall f1 args1"
+        by(cases x1; auto)
+
+      obtain x2 where X2 :
+        "st2 = YulFunctionCallStatement x2"
+        sorry
+
+      obtain f2 args2 where F2 : "x2 = YulFunctionCall f2 args2"
+        by(cases x2; auto)
+
+      show ?thesis
+        using assms C1 C2 EnterStatement1 EnterStatement2 X1 X2 F1 F2
+        by(auto simp add: alpha_equiv_results'_def alpha_equiv_statement'_def alpha_equiv_expr'_def
+split: option.splits)
+    next
+      case (YulAssignmentStatement x2)
+      then show ?thesis sorry
+    next
+      case X1 : (YulVariableDeclarationStatement x1)
+      obtain n1 vs1 where V1 : "x1 = YulVariableDeclaration n1 vs1"
+        by(cases x1; auto)
+
+      obtain x2 where X2 : "st2 = YulVariableDeclarationStatement x2"
+        sorry
+
+      obtain n2 vs2 where V2 : "x2 = YulVariableDeclaration n2 vs2"
+        by(cases x2; auto)
+
+      show ?thesis using assms C1 C2 EnterStatement1 EnterStatement2 X1 X2 V1 V2
+        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_statement'_def alpha_equiv_expr'_def)
+            apply(fastforce split: option.splits)
+           apply(fastforce split: option.splits)
+          apply(fastforce split: option.splits)
+         apply(fastforce split: option.splits)
+        apply(simp only: yul_statement_to_deBruijn.simps)
+        apply(simp del: yul_expr_to_deBruijn.simps)
+        apply(cases vs1; cases vs2; auto)
+          apply(simp add: alpha_equiv_statement'_def) defer
+        apply(simp add: alpha_equiv_statement'_def)
+
+        apply(auto simp add: alpha_equiv_expr'_def )
+(* we seem to have lost the information that the starting expressions are equal? *)
+      then show ?thesis sorry
+    next
+      case (YulFunctionDefinitionStatement x4)
+      then show ?thesis sorry
+    next
+      case (YulIf x51 x52)
+      then show ?thesis sorry
+    next
+      case (YulSwitch x61 x62)
+      then show ?thesis sorry
+    next
+      case (YulForLoop x71 x72 x73 x74)
+      then show ?thesis sorry
+    next
+      case YulBreak
+      then show ?thesis sorry
+    next
+      case YulContinue
+      then show ?thesis sorry
+    next
+      case YulLeave
+      then show ?thesis sorry
+    next
+      case (YulBlock x11)
+      then show ?thesis sorry
+    qed
+  next
+    case (ExitStatement x21 x22 x23)
+    then show ?thesis sorry
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis sorry
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis sorry
+  next
+    case (Expression x5)
+    then show ?thesis sorry
+  qed
+    using Hinit
+    apply(simp add: alpha_equiv_results'_def)
+qed
+(*
+proof(induction c1 arbitrary: r1 r2 r1' r2')
+  case Nil
+  then show ?case
+    by(auto simp add: alpha_equiv_results'_def)
+next
+  case (Cons c1h c1t)
+  then show ?case sorry
+qed
+*)
 
 (* we also need to be able to update substitutions. 
  * this will happen when entering a new context,
