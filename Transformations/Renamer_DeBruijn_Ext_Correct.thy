@@ -6,6 +6,8 @@ begin
 type_synonym subst =
   "(YulIdentifier * YulIdentifier) list list"
 
+type_synonym subst' = "(YulIdentifier * YulIdentifier) list"
+
 definition subst_get1 :: "subst \<Rightarrow> YulIdentifier list list" where
 "subst_get1 s =
   map (map fst) s"
@@ -103,18 +105,14 @@ fun alpha_equiv_locals' ::
 "alpha_equiv_locals' subst [] [] = True"
 | "alpha_equiv_locals' subst ((n1, v1)#t1) ((n2, v2)#t2) =
    (v1 = v2 \<and>
-   (case subst1 subst n1 of
-    Some n1' \<Rightarrow> n1' = n2
-    | None \<Rightarrow> True) \<and>
+    subst1 subst n1 = Some n2 \<and>
     alpha_equiv_locals' subst t1 t2)"
 | "alpha_equiv_locals' _ _ _ = False"
 
 definition alpha_equiv_function_sig'_scheme ::
   "subst \<Rightarrow> YulIdentifier \<Rightarrow> ('g, 'v, 't, 'z) function_sig'_scheme \<Rightarrow> YulIdentifier \<Rightarrow> ('g, 'v, 't, 'z) function_sig'_scheme \<Rightarrow> bool" where
 "alpha_equiv_function_sig'_scheme subst n1 s1 n2 s2 =
-  ((case subst1 subst n1 of
-    None \<Rightarrow> True
-    | Some n1' \<Rightarrow> n1' = n2) \<and>
+  (subst1 subst n1 = Some n2 \<and>
   (case (f_sig_body s1, f_sig_body s2) of
         (YulBuiltin b1, YulBuiltin b2) \<Rightarrow>
           (let args1 = (map (\<lambda> x . case x of (YulTypedName n t) \<Rightarrow> n) (f_sig_arguments s1)) in
@@ -156,7 +154,6 @@ fun alpha_equiv_funs' ::
     alpha_equiv_funs' subst t1 t2)"
 | "alpha_equiv_funs' _ _ _ = False"
 
-(* YOU ARE HERE *)
 (* TODO: make sure we are handling equivalence of function-contexts correctly.
  * this is a bit complicated to due to possibility of recursion/mutual recursion *)
 
@@ -178,6 +175,88 @@ fun alpha_equiv_stackEl' ::
      alpha_equiv_locals' subst locals1 locals2 \<and>
      alpha_equiv_funs' subst fs1 fs2)"
 | "alpha_equiv_stackEl' subst _ _ = False"
+
+(* whenever we extend the variable context, we also need to update subst.  *)
+(* also need to update subst on function entry. *)
+(* problem: figuring out the structure of subst.
+ *)
+
+(* gather yul functions / get_fun_decls *)
+
+fun subst_update_enter ::
+  "subst \<Rightarrow>
+   ('v, 't) YulStatement \<Rightarrow>
+   ('v, 't) YulStatement \<Rightarrow>
+   subst" where
+"subst_update_enter subst (YulBlock ls1) (YulBlock ls2) =
+  (zip (get_fun_decls ls1) (get_fun_decls ls2))# subst"
+| "subst_update_enter subst _ _ = subst"
+
+fun subst_update_exit ::
+  "subst \<Rightarrow>
+   ('v, 't) YulStatement \<Rightarrow>
+   ('v, 't) YulStatement \<Rightarrow>
+   subst" where
+"subst_update_exit (sh#subst)
+  (YulVariableDeclarationStatement (YulVariableDeclaration ns1 eo1))
+  (YulVariableDeclarationStatement (YulVariableDeclaration ns2 eo2)) = 
+    (sh @ (zip (strip_id_types ns1) (strip_id_types ns2))) # subst"
+| "subst_update_exit (sh # subst)
+  (YulBlock ls1)
+  (YulBlock ls2) = 
+  subst"
+| "subst_update_exit subst _ _ = subst" (* bogus cases mixed with noop cases here. *)
+
+(* TODO: figure out if we need to change
+   yul_statement_to_deBruijn to separate the function define/return scope
+   from the scope of the function local variables (declared inside a block)
+ *)
+(*
+fun subst_update_enter_fun_call ::
+    "subst \<Rightarrow> ('v, 't) YulFunctionCall \<Rightarrow> ('v, 't) YulFunctionCall \<Rightarrow> subst"
+    where
+  "subst_update_enter_fun_call subst 
+    sig1 sig2 = 
+    (case (f_sig_body sig1, f_sig_body sig2) of
+      (YulFunction b1, YulFunction b2) \<Rightarrow>
+        
+      | (_, _) \<Rightarrow> subst)
+    "
+| "subst_update_enter_fun_call subst _ _ = subst)"
+*)
+
+(*
+  fun subst_update_exit_fun_call ::
+    "subst \<Rightarrow> ('v, 't) YulFunctionCall \<Rightarrow> ('v, 't) YulFunctionCall \<Rightarrow> subst"
+*)
+
+(* Alternate approach: use existing locals and funs to update subst.
+ *)
+
+(*
+  idea. if we see variables not in subst, add them as a prefix
+  in corresponding order.
+  if we see variables in the subst that are not in the locals,
+  remove the scope they were declared in (should be outermost)
+  Hmm... but, if we have an empty scope it will mess this up.
+*)
+
+(*
+fun subst_update_result ::
+  "subst \<Rightarrow>
+   ('x) locals \<Rightarrow>
+   ('x) locals \<Rightarrow>
+   subst option" where
+"subst_update_result [] l1 l2 =
+  Some [zip (map fst l1) (map fst l2)]"
+| "subst_update_result (sh#st) l1 l2 =
+*)
+
+(*
+  2 cases:
+    - subst has more values, remove values until we are ok
+    - subst has fewer values, construct a prefix
+*)
 
 
 (* YulSemanticsSingleStep.result *)
@@ -320,7 +399,7 @@ split: option.splits)
       show ?thesis
         using assms C1 C2 ExitStatement1 ExitStatement2 X1 X2 F1 F2
         by(auto simp add: alpha_equiv_results'_def alpha_equiv_statement'_def alpha_equiv_expr'_def
-split: option.splits list.splits)
+split: option.splits list.splits )
 
     next
       case (YulAssignmentStatement x2)
@@ -339,7 +418,7 @@ split: option.splits list.splits)
 
       show ?thesis using assms C1 C2 ExitStatement1 ExitStatement2 X1 X2 V1 V2
         apply(auto simp add: alpha_equiv_results'_def alpha_equiv_statement'_def alpha_equiv_expr'_def Let_def)
-            apply(auto split: option.splits)
+            apply(auto split: option.splits if_splits)
 (*
             apply(fastforce split: option.splits)
            apply(fastforce split: option.splits)
@@ -347,7 +426,7 @@ split: option.splits list.splits)
          apply(fastforce split: option.splits)
 *)
         apply(cases vs1; cases vs2; auto)
-        apply(auto simp add: alpha_equiv_expr'_def alpha_equiv_statement'_def  split: option.split_asm)
+        apply(auto simp add: alpha_equiv_expr'_def alpha_equiv_statement'_def split: option.split_asm)
         done
 
 
