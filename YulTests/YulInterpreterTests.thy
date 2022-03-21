@@ -59,10 +59,47 @@ value "
 
 term "0 :: nat"
 
+definition loop2_yul :: "(eint, unit) YulStatement" where
+"loop2_yul \<equiv>
+YUL{
+    mstore(1, 0)
+    if 0{mstore(1,1)}
+}"
+
+value "(case (eval loop2_yul) of
+  Inl x \<Rightarrow> edata_gets 0 72 (e_memory x))"
 (*
 export_code "loop_yul" eval in Haskell module_name ABICoder file_prefix abicoder
 *)
 (*
 *)
+
+(* the semantics doesn't deal correctly with name collisions between
+ * functions and locals.
+ * we need to deal with this somewhere, either at runtime
+ * or in a pre-pass. alpha-equivalence depends on this.
+ *)
+definition clash1 :: "(eint, unit) YulStatement" where
+"clash1 \<equiv>
+YUL{
+  function foo(x) -> y {
+    y := x
+  }
+  let foo := 1
+}"
+
+value "eval clash1"
+
+definition clash2 :: "(eint, unit) YulStatement" where
+"clash2 \<equiv>
+YUL{
+  let foo := 1
+  function foo(x) -> y {
+    y := x
+  }
+}"
+
+value "eval clash1"
+
 
 end

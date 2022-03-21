@@ -96,7 +96,6 @@ fun alpha_equiv_locals' ::
 *)
 
 (* Enforce that names match for names mentioned in subst.
- * For all other locals, we ignore names and just check values.
  * This way, we can avoid name clashes for names not mentioned in subst (e.g. variables bound
  * further down the syntax tree)
  *)
@@ -190,20 +189,30 @@ fun subst_update_enter_statement ::
   (zip (get_fun_decls ls1) (get_fun_decls ls2))# subst"
 | "subst_update_enter_statement subst _ _ = subst"
 
+(*
+fun YulStatement_same_constr ::
+  "('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> bool" where
+
+| "YulStatement_same_constr _ _ = False"
+*)
 fun subst_update_exit_statement ::
   "subst \<Rightarrow>
    ('v, 't) YulStatement \<Rightarrow>
    ('v, 't) YulStatement \<Rightarrow>
-   subst" where
-"subst_update_exit_statement (sh#subst)
+   subst option" where
+"subst_update_exit_statement subst
   (YulVariableDeclarationStatement (YulVariableDeclaration ns1 eo1))
   (YulVariableDeclarationStatement (YulVariableDeclaration ns2 eo2)) = 
-    (sh @ (zip (strip_id_types ns1) (strip_id_types ns2))) # subst"
-| "subst_update_exit_statement (sh # subst)
+  (case subst of
+    sh # subst \<Rightarrow> Some ((sh @ (zip (strip_id_types ns1) (strip_id_types ns2))) # subst)
+    | _ \<Rightarrow> None)"
+| "subst_update_exit_statement subst
   (YulBlock ls1)
   (YulBlock ls2) = 
-  subst"
-| "subst_update_exit_statement subst _ _ = subst" (* bogus cases mixed with noop cases here. *)
+  (case subst of
+    sh # subst \<Rightarrow> Some subst
+   | _ \<Rightarrow> None)"
+| "subst_update_exit_statement subst _ _ = Some subst" (* bogus cases mixed with noop cases here. *)
 
 (* TODO: figure out if we need to change
    yul_statement_to_deBruijn to separate the function define/return scope
@@ -228,23 +237,23 @@ fun subst_update_enter_fun_call ::
     "
 
 fun subst_update_exit_fun_call ::
-  "subst \<Rightarrow> subst"
+  "subst \<Rightarrow> subst option"
   where
-"subst_update_exit_fun_call (sh#subst) = subst"
-| "subst_update_exit_fun_call subst = subst"
+"subst_update_exit_fun_call (sh#subst) = Some subst"
+| "subst_update_exit_fun_call subst = None"
 
 (* TODO: return an option? *)
 fun subst_update ::
-  "subst \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> subst" where
+  "subst \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> subst option" where
 "subst_update subst (EnterStatement s1) (EnterStatement s2) =
-  subst_update_enter_statement subst s1 s2"
+  Some (subst_update_enter_statement subst s1 s2)"
 | "subst_update subst (ExitStatement s1 _ _) (ExitStatement s2 _ _) =
   subst_update_exit_statement subst s1 s2"
 | "subst_update subst (EnterFunctionCall f1 s1) (EnterFunctionCall f2 s2) =
-  subst_update_enter_fun_call subst s1 s2"
+  Some (subst_update_enter_fun_call subst s1 s2)"
 | "subst_update subst (ExitFunctionCall _ _ _ _ _) (ExitFunctionCall _ _ _ _ _) = 
   subst_update_exit_fun_call subst"
-| "subst_update subst _ _ = subst"
+| "subst_update subst _ _ = Some subst"
 
 
 (* Alternate approach: use existing locals and funs to update subst.
@@ -304,7 +313,8 @@ lemma alpha_equiv_step :
   assumes Hinit : "alpha_equiv_results' subst r1 r2"
   assumes H1 : "evalYulStep d r1 = YulResult r1'"
   assumes H2 : "evalYulStep d r2 = YulResult r2'"
-  shows "alpha_equiv_results' (subst_update subst c1h c2h) r1' r2'"
+  assumes Hupd : "subst_update subst c1h c2h = Some subst'"
+  shows "alpha_equiv_results' subst' r1' r2'"
   using assms
 proof(cases c1h)
   case EnterStatement1 : (EnterStatement st1)
@@ -323,6 +333,7 @@ proof(cases c1h)
 
     obtain x2 where X2 :
       "st2 = YulFunctionCallStatement x2"
+      (* yul_statement_to_deBruijn fact *)
       sorry
 
     obtain f2 args2 where F2 : "x2 = YulFunctionCall f2 args2"
@@ -331,7 +342,7 @@ proof(cases c1h)
     show ?thesis
       using assms Hc1 Hc2 EnterStatement1 EnterStatement2 X1 X2 F1 F2
       by(auto simp add: alpha_equiv_results'_def alpha_equiv_statement'_def alpha_equiv_expr'_def
-split: option.splits)
+          split: option.splits)
     next
       case (YulAssignmentStatement x2)
       then show ?thesis sorry
@@ -425,6 +436,8 @@ split: option.splits)
 (* empty subst should be ruled out. probably return an option instead *)
         show ?thesis using assms Hc1 Hc2 ExitStatement1 ExitStatement2 Hinit X1 X2 V1 V2 None None'
           apply(cases subst; auto simp add: alpha_equiv_expr'_def alpha_equiv_statement'_def alpha_equiv_results'_def  split: option.split_asm if_splits)
+(* lemma about insert_values and alpha_equiv_locals
+ * adding (non-conflicting) variable names to a scope won't change alpha equivalence*)
 (* first two cases: need to show that length of args lists is the same
    (for Some, need to show values are the same - shouldn't be too hard *)
 
@@ -438,28 +451,22 @@ split: option.splits)
 
         show ?thesis using assms Hc1 Hc2 Hinit ExitStatement1 ExitStatement2 X1 X2 V1 V2 Some Some'
           apply(cases subst; auto simp add: alpha_equiv_expr'_def alpha_equiv_statement'_def alpha_equiv_results'_def  split: option.split_asm if_splits)
-
+          sorry
+(*
         then show ?thesis sorry
-      qed
-  
-      show ?thesis using assms Hc1 Hc2 ExitStatement1 ExitStatement2 X1 X2 V1 V2
-        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_statement'_def alpha_equiv_expr'_def Let_def)
-            apply(auto split: option.splits)
+*)
   (*
             apply(fastforce split: option.splits)
            apply(fastforce split: option.splits)
           apply(fastforce split: option.splits)
          apply(fastforce split: option.splits)
   *)
-        apply(cases vs1; cases vs2; auto)
-        apply(auto simp add: alpha_equiv_expr'_def alpha_equiv_statement'_def split: option.split_asm)
-        done
-  
-  
-      then show ?thesis sorry
+      qed
     next
       case (YulFunctionDefinitionStatement x4)
-      then show ?thesis sorry
+      then show ?thesis
+        
+        sorry
     next
       case (YulIf x51 x52)
       then show ?thesis sorry
@@ -484,7 +491,17 @@ split: option.splits)
     qed
   
   next
-    case (EnterFunctionCall x31 x32)
+    case EnterFunctionCall1: (EnterFunctionCall n1 sig1)
+
+    obtain n2 sig2 where EnterFunctionCall2 :
+      "c2h = EnterFunctionCall n2 sig2"
+      using Hc1 Hc2 EnterFunctionCall1 Hc1 Hinit
+      by(cases c2h; auto simp add: alpha_equiv_results'_def)
+  
+    show ?thesis using assms Hc1 Hc2 Hinit EnterFunctionCall1 EnterFunctionCall2
+      apply(auto simp add: alpha_equiv_expr'_def alpha_equiv_statement'_def alpha_equiv_results'_def  split: option.split_asm if_splits YulFunctionBody.splits Result.splits)
+
+
     then show ?thesis sorry
   next
     case (ExitFunctionCall x41 x42 x43 x44 x45)
