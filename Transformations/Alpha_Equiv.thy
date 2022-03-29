@@ -600,6 +600,14 @@ qed
  * - prepend list onto funs
  * - prepend *)
 
+(*
+lemma alpha_equiv_statement_v_insert1_unmentioned :
+  assumes "alpha_equiv_statement' (vsubsth # vsubst) fsubst st1 st2"
+  assumes "map_of l1 n1 = None"
+  assumes "map_of l2 n2 = None" 
+  shows "alpha_equiv_statement' (((n1, n2) # vsubsth) # vsubst) fsubst st1 st2"
+*)
+
 lemma alpha_equiv_funs_f_insert1_unmentioned :
   assumes "alpha_equiv_funs' vsubst (fsubsth # fsubstt) l1 l2"
   assumes "map_of l1 n1 = None"
@@ -690,6 +698,7 @@ next
       unfolding alpha_equiv_funs'_def alpha_equiv_fun_def
       apply(auto simp add:  alpha_equiv_function_sig'_scheme_def
             alpha_equiv_name'_def)
+      apply(auto split: if_splits)
 
     then show ?thesis sorry
   qed
@@ -889,6 +898,127 @@ next
 qed
 *)
 
+lemma alpha_equiv_gather_funs'_combine :
+  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
+  assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
+  assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
+     sts1 sts2"
+  assumes Gather1 :
+    "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1) sts1 =
+      Inl fs1"
+  assumes Gather2 :
+     "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2) sts2 =
+       Inl fs2"
+  shows "alpha_equiv_funs' vsubst' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
+     (combine_keep (funs1)
+       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>))
+         fs1))
+     (combine_keep (funs2)
+       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>))
+         fs2))"
+  using assms
+proof(induction funs1 arbitrary: sts1 sts2 locs' funcs'  fs1 funs2 fs2 vsubst' fsubst)
+  case Nil1 : Nil
+
+  have Nil2 : "funs2 = []"
+    using Nil1
+    by(cases funs2; auto simp add: alpha_equiv_funs'_def)
+
+  then show ?case using Nil1 alpha_equiv_funs_trunc[OF Nil1(2)]
+    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
+get_fun_decls_def get_var_decls_def Let_def)
+  case (Cons a funs1)
+  then show ?case sorry
+qed
+
+
+lemma alpha_equiv_gather_funs'_combine :
+  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
+  assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
+  assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
+     sts1 sts2"
+  assumes Gather1 :
+    "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1) sts1 =
+      Inl fs1"
+  assumes Gather2 :
+     "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2) sts2 =
+       Inl fs2"
+  shows "alpha_equiv_funs' vsubst' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
+     (combine_keep (funs1)
+       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>))
+         fs1))
+     (combine_keep (funs2)
+       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>))
+         fs2))"
+  using assms
+proof(induction sts1 arbitrary: sts2 locs' funcs' funs1 fs1 funs2 fs2 vsubst' fsubst)
+  case Nil1 : Nil
+
+  have Nil2 : "sts2 = []"
+    using Nil1
+    by(cases sts2; auto)
+
+  then show ?case using Nil1 alpha_equiv_funs_trunc[OF Nil1(2)]
+    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
+get_fun_decls_def get_var_decls_def)
+next
+  case Cons1 : (Cons h1 t1)
+
+  then obtain h2 t2 where Cons2 : "sts2 = h2#t2"
+    by(cases sts2; auto)
+
+
+  obtain locs0 funcs0 locs1 funcs1 where
+    Split : "alpha_equiv_check_decls t1 t2 = Some (locs1, funcs1)"
+       "locs' = locs0 @ locs1" "funcs' = funcs0 @ funcs1"
+    using
+      alpha_equiv_check_decls_tail[OF Cons1.prems(3)[unfolded Cons2] Cons1.prems(1)[unfolded Cons2]]
+    by auto
+
+  show ?case using Cons1.IH[OF Split(1) Cons1.prems(2)] Cons1.prems(3)
+    
+    then show ?case using Cons1 alpha_equiv_funs_trunc
+      apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
+       get_fun_decls_def get_var_decls_def Let_def split:if_splits)
+
+      apply(clarsimp)
+lemma alpha_equiv_gather_funs :
+
+  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
+  assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
+     sts1 sts2"
+  assumes Gather1 :
+    "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1) sts1 =
+      Inl fs1"
+  assumes Gather2 :
+     "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2) sts2 =
+       Inl fs2"
+  assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
+
+  shows "alpha_equiv_funs' vsubst' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
+     (combine_keep funs1
+       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>)) fs1))
+     (combine_keep funs2
+       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>)) fs2))"
+  using assms
+proof(induction sts1 arbitrary: sts2 locs' funcs' funs1 fs1 funs2 fs2 vsubst' fsubst)
+  case Nil1 : Nil
+
+  have Nil2 : "sts2 = []"
+    using Nil1
+    by(cases sts2; auto simp add: alpha_equiv_check_decls_def alpha_equiv_funs'_def Let_def split:if_split_asm)
+
+  then show ?case using Nil1
+    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
+get_fun_decls_def get_var_decls_def)
+    apply(cases funs1; auto)
+    apply(cases funs2; auto)
+next
+  case (Cons a sts1)
+  then show ?case sorry
+qed
+
+
 lemma alpha_equiv_gather_funs' :
   assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
   assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
@@ -926,7 +1056,7 @@ next
       alpha_equiv_check_decls_tail[OF Cons1.prems(3)[unfolded Cons2] Cons1.prems(1)[unfolded Cons2]]
     by auto
 
-  show ?case using Cons1.IH[OF Split(1) ] Cons1.prems(2) Cons1.prems(3)
+  show ?case using Cons1.IH[OF Split(1) Cons1.prems(2)] Cons1.prems(3)
     
     then show ?case using Cons1 alpha_equiv_funs_trunc
       apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
@@ -1164,7 +1294,11 @@ proof(cases c1h)
         alpha_equiv_locals_f_change[of vsubst' fsubst "locals r1" "locals r2" 
           "(zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)"]
       apply(auto simp add: alpha_equiv_results'_def)
-
+(* 2 things needed here.
+1. alpha_equiv_fun' of inputs implies alpha_equiv_funs' when updating the
+inputs using combine_keep and updating fsubst using the decls 
+2. equivalence of stack elements
+*)
     then show ?thesis sorry
   qed
 
