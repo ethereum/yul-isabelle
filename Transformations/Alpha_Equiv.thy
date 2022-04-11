@@ -33,6 +33,7 @@ fun subst_lookup :: "subst \<Rightarrow> YulIdentifier \<Rightarrow> YulIdentifi
     Some y \<Rightarrow> Some y
     | None \<Rightarrow> subst_lookup t x)"
 
+(*
 fun get_var_decls' ::
   "('v, 't) YulStatement list \<Rightarrow> nat \<Rightarrow>
    (YulIdentifier list * nat)" where
@@ -48,7 +49,17 @@ definition get_var_decls ::
 "get_var_decls l =
   (case get_var_decls' l 0 of
     (l', _) \<Rightarrow> l')"
+*)
 
+fun get_var_decls ::
+  "('v, 't) YulStatement list \<Rightarrow>
+   (YulIdentifier list)" where
+"get_var_decls [] = []"
+| "get_var_decls ((YulVariableDeclarationStatement (YulVariableDeclaration decls v))#t) =
+   (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls) @ (get_var_decls t)"
+| "get_var_decls (h#t) = get_var_decls t"
+
+(*
 fun get_fun_decls' ::
 "('v, 't) YulStatement list \<Rightarrow> nat \<Rightarrow>
  (YulIdentifier list * nat)" where
@@ -67,6 +78,17 @@ definition get_fun_decls ::
 "get_fun_decls l =
   (case get_fun_decls' l 0 of
     (l', _) \<Rightarrow> l')"
+*)
+
+
+fun get_fun_decls ::
+"('v, 't) YulStatement list \<Rightarrow>
+ (YulIdentifier list)" where
+"get_fun_decls [] = []"
+| "get_fun_decls ((YulFunctionDefinitionStatement (YulFunctionDefinition name args rets body))#t) =
+   name # get_fun_decls t"
+| "get_fun_decls (h#t) = 
+    get_fun_decls t"
 
 (* we split into function and variable namespaces
  * since that is how the interpreter works *)
@@ -99,6 +121,7 @@ definition alpha_equiv_typed_name' ::
       None \<Rightarrow> False
       | Some n2 \<Rightarrow> tn2 = YulTypedName n2 t1))"
 
+(*
 definition alpha_equiv_check_decls ::
   "('v, 't) YulStatement list \<Rightarrow> ('v, 't) YulStatement list \<Rightarrow>
     ((YulIdentifier * YulIdentifier) list * (YulIdentifier * YulIdentifier) list) option"
@@ -111,7 +134,87 @@ definition alpha_equiv_check_decls ::
   (if (length vdecls1 = length vdecls2 \<and> length fdecls1 = length fdecls2)
    then Some (zip vdecls1 vdecls2, zip fdecls1 fdecls2)
    else None)))))"
+*)
+
+fun yul_statement_same_constructor ::
+  "('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> bool" where
+"yul_statement_same_constructor
+  (YulFunctionCallStatement _) y =
+  (case y of (YulFunctionCallStatement _) \<Rightarrow> True
+   | _ \<Rightarrow> False)"
+| "yul_statement_same_constructor
+  (YulAssignmentStatement _) y = 
+  (case y of (YulAssignmentStatement _) \<Rightarrow> True
+   | _ \<Rightarrow> False)"
+| "yul_statement_same_constructor
+  (YulVariableDeclarationStatement _) y =
+  (case y of (YulVariableDeclarationStatement _) \<Rightarrow> True
+   | _ \<Rightarrow> False)"
+| "yul_statement_same_constructor
+  (YulFunctionDefinitionStatement _) y =
+  (case y of (YulFunctionDefinitionStatement _) \<Rightarrow> True
+   | _ \<Rightarrow> False)"
+| "yul_statement_same_constructor
+  (YulIf _ _) y =
+  (case y of (YulIf _ _) \<Rightarrow> True
+   | _ \<Rightarrow> False)"
+| "yul_statement_same_constructor
+  (YulSwitch _ _)  y =
+  (case y of (YulSwitch _ _) \<Rightarrow> True
+   | _ \<Rightarrow> False)"
+| "yul_statement_same_constructor
+  (YulForLoop _ _ _ _) y =
+  (case y of (YulForLoop _ _ _ _) \<Rightarrow> True
+   | _ \<Rightarrow> False)"
+| "yul_statement_same_constructor
+  YulBreak y =
+  (case y of YulBreak \<Rightarrow> True
+   | _ \<Rightarrow> False)"
+| "yul_statement_same_constructor
+  YulContinue y =
+  (case y of YulContinue \<Rightarrow> True
+   | _ \<Rightarrow> False)"
+| "yul_statement_same_constructor
+  YulLeave y = 
+  (case y of YulLeave \<Rightarrow> True
+   | _ \<Rightarrow> False)"
+| "yul_statement_same_constructor
+  (YulBlock _) y = 
+  (case y of (YulBlock _) \<Rightarrow> True
+   | _ \<Rightarrow> False)"
   
+
+(* stronger version of check_decls
+ * should we also check the other statements are the same? probably better to do a different one
+ * *)
+fun alpha_equiv_check_decls ::
+  "('v, 't) YulStatement list \<Rightarrow> ('v, 't) YulStatement list \<Rightarrow>
+    ((YulIdentifier * YulIdentifier) list * (YulIdentifier * YulIdentifier) list) option"
+  where
+"alpha_equiv_check_decls
+  ((YulVariableDeclarationStatement (YulVariableDeclaration decls1 v1))#t1)
+  ((YulVariableDeclarationStatement (YulVariableDeclaration decls2 v2))#t2) =
+  (case alpha_equiv_check_decls t1 t2 of
+     None \<Rightarrow> None
+     | Some (vds, fds) \<Rightarrow>
+     (if length decls1 = length decls2
+      then Some 
+           ((zip (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls1)
+                 (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls2)) @ vds
+           , fds)
+      else None))"
+| "alpha_equiv_check_decls
+  ((YulFunctionDefinitionStatement (YulFunctionDefinition name1 args1 rets1 body1))#t1)
+  ((YulFunctionDefinitionStatement (YulFunctionDefinition name2 args2 rets2 body2))#t2) = 
+  (case alpha_equiv_check_decls t1 t2 of
+     None \<Rightarrow> None
+     | Some (vds, fds) \<Rightarrow>
+     Some (vds, (name1, name2)#fds))"
+| "alpha_equiv_check_decls (h1#t1) (h2#t2) = 
+    (if yul_statement_same_constructor h1 h2
+     then alpha_equiv_check_decls t1 t2
+     else None)"
+| "alpha_equiv_check_decls _ _ = None"
 
 fun alpha_equiv_statement' ::
   "subst \<Rightarrow> subst \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> bool" where
@@ -288,14 +391,10 @@ definition alpha_equiv_function_sig'_scheme ::
               (YulFunctionDefinitionStatement (YulFunctionDefinition n2 (f_sig_arguments s2) (f_sig_returns s2) sts2))
         | (_, _) \<Rightarrow> False)"
 
-(* alpha_equiv_function_sig. TODO: do we need to compare visible ids, or can we get away
- * with not doing so? *)
-(*
-definition alpha_equiv_function_sig' ::
-  "subst \<Rightarrow> subst \<Rightarrow> YulIdentifier \<Rightarrow> ('g, 'v, 't) function_sig \<Rightarrow> YulIdentifier \<Rightarrow> ('g, 'v, 't) function_sig \<Rightarrow> bool" where
-"alpha_equiv_function_sig' vsubst fsubst n1 s1 n2 s2 =
-  (those (map (subst_lookup fsubst) (f_sig_visible s1)) = Some (f_sig_visible s2) \<and>
-   alpha_equiv_function_sig'_scheme vsubst fsubst n1 s1 n2 s2)"
+(* add to function_sig'_scheme? :
+  list_all2 (alpha_equiv_name vsubst fsubst) visible1 visible2
+and/or
+  do restriction on functions context?
 *)
 
 (* fun alpha_equiv_function_bodies' ::
@@ -310,19 +409,6 @@ definition alpha_equiv_fun ::
   (case fun1 of (n1, s1) \<Rightarrow>
   (case fun2 of (n2, s2) \<Rightarrow>
   (alpha_equiv_function_sig'_scheme vsubst fsubst n1 s1 n2 s2)))"
-
-(* TODO: we aren't checking that types are compatible here. Perhaps this can be done
- * in a different pass *)
-(*
-fun alpha_equiv_funs' ::
-  "subst \<Rightarrow> subst \<Rightarrow> ('g, 'v, 't) function_sig locals \<Rightarrow> ('g, 'v, 't) function_sig locals \<Rightarrow> bool"
-  where
-"alpha_equiv_funs' vsubst fsubst [] [] = True"
-| "alpha_equiv_funs' vsubst fsubst ((n1, s1)#t1) ((n2, s2)#t2) =
-   (alpha_equiv_function_sig'_scheme vsubst fsubst n1 s1 n2 s2 \<and>
-    alpha_equiv_funs' vsubst fsubst t1 t2)"
-| "alpha_equiv_funs' _ _ _ _ = False"
-*)
 
 definition alpha_equiv_funs' ::
   "subst \<Rightarrow> subst \<Rightarrow> ('g, 'v, 't, 'z) function_sig'_scheme locals \<Rightarrow> ('g, 'v, 't, 'z) function_sig'_scheme locals \<Rightarrow> bool"
@@ -561,227 +647,6 @@ lemma alpha_equiv_locals_f_change :
   unfolding alpha_equiv_locals'_def alpha_equiv_local_def
   by(auto)
 
-(* TODO: do we need an additional assumption that locals and funs
- * don't have name collisions?
- *)
-(*
-lemma alpha_equiv_function_sig'_insert1_unmentioned :
-  assumes "alpha_equiv_function_sig' (substh # substt) l1 l2"
-  assumes "map_of l1 n1 = None"
-  assumes "map_of l2 n2 = None" 
-  shows "alpha_equiv_function_sig' (((n1, n2) # substh) # substt) l1 l2"
-  using assms
-proof(induction l1 arbitrary: substh substt l2 n1 n2)
-  case Nil
-  then show ?case
-    by(cases l2; auto)
-next
-  case (Cons l1h l1t)
-
-  obtain l2h l2t where Cons2 :
-    "l2 = l2h # l2t"
-    using Cons.prems
-    by(cases l2; auto)
-
-  show ?case 
-    using Cons.prems Cons.IH[of substh substt l2t n1 n2] Cons2
-    apply(cases l1h; cases l2h; auto split: if_splits)
-    apply( simp add: alpha_equiv_function_sig'_def split: option.splits if_splits)
-qed
-*)
-
-(* make sure builtins are mentioned in subst? *)
-(* problem: need to recurse into functions in order to see if
- * there is a name collision... *)
-
-(* generalized:
- * - vars = h#t, funs = h#t
- * - prepend list onto vars
- * - prepend list onto funs
- * - prepend *)
-
-(*
-lemma alpha_equiv_statement_v_insert1_unmentioned :
-  assumes "alpha_equiv_statement' (vsubsth # vsubst) fsubst st1 st2"
-  assumes "map_of l1 n1 = None"
-  assumes "map_of l2 n2 = None" 
-  shows "alpha_equiv_statement' (((n1, n2) # vsubsth) # vsubst) fsubst st1 st2"
-*)
-
-lemma alpha_equiv_funs_f_insert1_unmentioned :
-  assumes "alpha_equiv_funs' vsubst (fsubsth # fsubstt) l1 l2"
-  assumes "map_of l1 n1 = None"
-  assumes "map_of l2 n2 = None" 
-  shows "alpha_equiv_funs' vsubst (((n1, n2) # fsubsth) # fsubstt) l1 l2"
-  using assms
-proof(induction l1 arbitrary: vsubst fsubsth fsubstt l2 n1 n2)
-  case Nil
-  then show ?case
-    by(cases l2; auto simp add: alpha_equiv_funs'_def)
-next
-  case (Cons l1h l1t)
-
-  obtain l2h l2t where Cons2 :
-    "l2 = l2h # l2t"
-    using Cons.prems
-    by(cases l2; auto simp add: alpha_equiv_funs'_def)
-
-  show ?case 
-    using Cons.prems Cons.IH[of vsubst fsubsth fsubstt l2t n1 n2] Cons2
-    unfolding alpha_equiv_funs'_def alpha_equiv_fun_def
-    apply(cases l1h; cases l2h; auto split: if_splits)
-    apply(auto simp add:  alpha_equiv_function_sig'_scheme_def
-          alpha_equiv_name'_def split: option.splits if_splits YulFunctionBody.splits)
-qed
-
-
-
-lemma alpha_equiv_funs_v_insert1_unmentioned :
-  assumes "map_of l1 n1 = None"
-  assumes "map_of l2 n2 = None" 
-  assumes "alpha_equiv_funs' (vsubsth # vsubstt) fsubst l1 l2"
-  shows "alpha_equiv_funs' (((n1, n2)#vsubsth) # vsubstt) fsubst l1 l2"
-  using assms
-proof(induction l1 arbitrary: vsubsth vsubstt l2 n1 n2)
-  case Nil
-  then show ?case
-    by(cases l2; auto simp add: alpha_equiv_funs'_def)
-next
-  case (Cons l1h l1t)
-
-  obtain l2h l2t where Cons2 :
-    "l2 = l2h # l2t"
-    using Cons.prems
-    by(cases l2; auto simp add: alpha_equiv_funs'_def)
-
-  obtain l1hn l1hv where L1h : "l1h = (l1hn, l1hv)"
-    by(cases l1h; auto)
-
-  have Notin1 : "map_of l1t n1 = None"
-    using Cons.prems Cons2 L1h
-    by(auto split: if_splits)
-
-  obtain l2hn l2hv where L2h : "l2h = (l2hn, l2hv)"
-    by(cases l2h; auto)
-
-  have Notin2 : "map_of l2t n2 = None"
-    using Cons.prems Cons2 L1h
-    by(auto split: if_splits)
-
-  show ?case
-  proof(cases "f_sig_body l1hv")
-    case (YulBuiltin fb1)
-    then show ?thesis 
-      using Cons.prems Cons2 L1h L2h Notin1 Notin2 Cons.IH
-      unfolding alpha_equiv_funs'_def alpha_equiv_fun_def
-      by(auto simp add:  alpha_equiv_function_sig'_scheme_def
-            alpha_equiv_name'_def split: option.splits if_splits YulFunctionBody.splits)
-  next
-    case Ff1 : (YulFunction ff1)
-
-    then obtain ff2 where Ff2 : "f_sig_body l2hv = YulFunction ff2"
-      using Cons.prems Cons2 L1h L2h Notin1 Notin2 Cons.IH
-      unfolding alpha_equiv_funs'_def alpha_equiv_fun_def
-      by(auto simp add:  alpha_equiv_function_sig'_scheme_def
-          alpha_equiv_name'_def split: option.splits if_splits YulFunctionBody.splits)
-
-    obtain vsubst' fsubst' where Subst' :
-      "alpha_equiv_check_decls ff1 ff2 = Some (vsubst', fsubst')"
-    using Cons.prems Cons.IH Cons2 L1h L2h Notin1 Notin2 Ff1 Ff2
-      unfolding alpha_equiv_funs'_def alpha_equiv_fun_def
-      by(auto simp add:  alpha_equiv_function_sig'_scheme_def
-            alpha_equiv_name'_def split: option.split_asm)
-
-    show ?thesis
-      using Cons.prems Cons2 L1h L2h Notin1 Notin2 Ff1 Ff2 Subst'
-      using Cons.IH[OF Notin1 Notin2, of vsubsth vsubstt]
-      unfolding alpha_equiv_funs'_def alpha_equiv_fun_def
-      apply(auto simp add:  alpha_equiv_function_sig'_scheme_def
-            alpha_equiv_name'_def)
-      apply(auto split: if_splits)
-
-    then show ?thesis sorry
-  qed
-(*
-f_sig_body l1hv = YulFunction x2b \<Longrightarrow>
-       f_sig_body l2hv = YulFunction x2a 
-*)
-
-  show ?case 
-    using Cons.prems Cons.IH[of n1 l2t n2 vsubsth vsubstt] Cons2 L1h L2h Notin1 Notin2
-    unfolding alpha_equiv_funs'_def alpha_equiv_fun_def
-    apply(auto simp add:  alpha_equiv_function_sig'_scheme_def
-          alpha_equiv_name'_def split: option.splits if_splits YulFunctionBody.splits)
-qed
-
-
-lemma alpha_equiv_funs_v_insert1 :
-  assumes H1 : "insert_value l1 n1 v = Some l1'"
-  assumes H2 : "insert_value l2 n2 v = Some l2'"
-  assumes "alpha_equiv_funs' (substh # substt) fsubst l1 l2"
-  shows "alpha_equiv_funs' (((n1, n2)#substh) # substt) fsubst l1' l2'"
-  using assms
-proof(induction substt arbitrary: substh n1 n2 v l1 l2 l1' l2')
-  case Nil
-  then show ?case using alpha_equiv_locals_insert1_unmentioned[of substh "[]" l1 l2]
-    by(auto split: option.splits)
-next
-  case (Cons substh' substt')
-  show ?case using Cons.prems
-    alpha_equiv_locals_insert1_unmentioned[of substh "substh' # substt'" l1 l2 n1 n2]
-    using Cons.prems
-    by(auto split: option.splits)
-qed
-
-
-
-lemma alpha_equiv_funs_v_insert :
-  assumes H1 : "insert_values l1 ns1 vs = Some l1'"
-  assumes H2 : "insert_values l2 ns2 vs = Some l2'"
-  assumes "alpha_equiv_funs' (substh # substt) fsubst l1 l2"
-  shows "alpha_equiv_funs' ((zip ns1 ns2 @ substh) # substt) fsubst l1' l2'"
-  using assms
-proof(induction vs arbitrary: substh substt ns1 ns2 l1 l2 l1' l2')
-  case Nil
-
-  have Nil1 : "ns1 = []"
-    using Nil
-    by(cases ns1; auto)
-
-  have Nil2 : "ns2 = []"
-    using Nil
-    by(cases ns2; auto)
-
-  show ?case using Nil Nil1 Nil2
-    by(auto)
-next
-  case (Cons vh vt)
-
-  obtain n1h n1t where Cons1 : "ns1 = n1h#n1t"
-    using Cons
-    by(cases ns1; auto)
-
-  obtain n2h n2t where Cons2 : "ns2 = n2h#n2t"
-    using Cons
-    by(cases ns2; auto)
-
-  obtain l1't where L1't : "insert_values l1 n1t vt = Some l1't" "insert_value l1't n1h vh = Some l1'"
-    using Cons1 Cons.prems
-    by(auto split: option.split_asm)
-
-  obtain l2't where L2't : "insert_values l2 n2t vt = Some l2't" "insert_value l2't n2h vh = Some l2'"
-    using Cons2 Cons.prems
-    by(auto split: option.split_asm)
-
-  have Conc' : "alpha_equiv_funs' ((zip n1t n2t @ substh) # substt) fsubst l1't l2't"
-    using Cons1 Cons2 Cons.IH[OF L1't(1) L2't(1) Cons.prems(3)]
-    by(auto)
-
-  show ?case
-    using Conc'
-    apply(auto)
-  qed
-
 lemma alpha_equiv_fun_trunc :
   assumes H: "alpha_equiv_fun vsubst fsubst fun1 fun2"
   shows "alpha_equiv_fun vsubst fsubst
@@ -877,251 +742,957 @@ lemma alpha_equiv_funs_trunc :
       "(\<lambda>(n, fs). (n, function_sig'.truncate fs))"]
   by(blast)
 
-lemma alpha_equiv_check_decls_tail :
-  assumes Hequiv : "list_all2 (alpha_equiv_statement' vsubst fsubst) (h1 # t1) (h2 # t2)"
-  assumes H: "alpha_equiv_check_decls (h1 # t1) (h2#t2) = Some (locs, funcs)"
-  shows "\<exists> locs0 funcs0 locs' funcs' .
-    alpha_equiv_check_decls t1 t2 = Some (locs', funcs') \<and>
-    locs = locs0 @ locs' \<and>
-    funcs = funcs0 @ funcs'"
-  sorry
-(*
+lemma alpha_equiv_check_decls_cases :
+  assumes H: "alpha_equiv_check_decls l1 l2 = Some x"
+  shows
+    "(l1 = [] \<and> l2 = [] \<and> x = ([], [])) \<or>
+     (\<exists> l1h l1t l2h l2t fs vs . x = (vs, fs) \<and>
+      l1 = l1h # l1t \<and> l2 = l2h # l2t \<and> yul_statement_same_constructor l1h l2h \<and> 
+      (\<exists> decls1 v1 decls2 v2 vs' .
+        l1h = (YulVariableDeclarationStatement (YulVariableDeclaration decls1 v1)) \<and>
+        l2h = (YulVariableDeclarationStatement (YulVariableDeclaration decls2 v2)) \<and>
+        alpha_equiv_check_decls l1t l2t = Some (vs', fs) \<and>
+        vs = ((zip (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls1)
+                   (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls2)) @ vs')) \<or>
+      (\<exists> name1 args1 rets1 body1 name2 args2 rets2 body2 fs' .
+        l1h = (YulFunctionDefinitionStatement (YulFunctionDefinition name1 args1 rets1 body1)) \<and>
+        l2h = (YulFunctionDefinitionStatement (YulFunctionDefinition name2 args2 rets2 body2)) \<and>
+        alpha_equiv_check_decls l1t l2t = Some (vs, fs') \<and>
+        fs = (name1, name2)#fs') \<or>
+      ((case l1h of
+        YulVariableDeclarationStatement _ \<Rightarrow> False
+        | YulFunctionDefinitionStatement _ \<Rightarrow> False
+        | _ \<Rightarrow> True) \<and>
+       (case l2h of
+        YulVariableDeclarationStatement _ \<Rightarrow> False
+        | YulFunctionDefinitionStatement _ \<Rightarrow> False
+        | _ \<Rightarrow> True) \<and> alpha_equiv_check_decls l1t l2t = Some x))"
+
+proof(cases l1)
+  case Nil
+  then show ?thesis using H
+    by(cases l2; auto)
+next
+  case C1: (Cons l1h l1t)
+
+  then obtain l2h l2t where C2 :
+    "l2 = l2h # l2t"
+    using H
+    by(cases l2; auto)
+
+  obtain x1 x2 where X: "x = (x1, x2)"
+    by(cases x; auto)
+
+  show ?thesis
+  proof(cases l1h)
+    case (YulFunctionCallStatement x1)
+
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case (YulAssignmentStatement x2)
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case L1h : (YulVariableDeclarationStatement vds)
+
+    then obtain vds' where L2h : "l2h = YulVariableDeclarationStatement vds'"
+      using H C1 C2 X
+      by(cases l2h; auto)
+
+    then have Conc' : "(\<exists> l1h l1t l2h l2t fs vs . x = (vs, fs) \<and>
+      l1 = l1h # l1t \<and> l2 = l2h # l2t \<and> yul_statement_same_constructor l1h l2h \<and> 
+      (\<exists> decls1 v1 decls2 v2 vs' .
+        l1h = (YulVariableDeclarationStatement (YulVariableDeclaration decls1 v1)) \<and>
+        l2h = (YulVariableDeclarationStatement (YulVariableDeclaration decls2 v2)) \<and>
+        alpha_equiv_check_decls l1t l2t = Some (vs', fs) \<and>
+        vs = ((zip (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls1)
+                   (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls2)) @ vs')))"
+      using H C1 C2 X L1h
+      by(cases vds; cases vds'; auto split: option.splits if_splits)
+
+    then show ?thesis by metis
+      
+  next
+    case L1h : (YulFunctionDefinitionStatement fds)
+
+    then obtain fds' where L2h : "l2h = YulFunctionDefinitionStatement fds'"
+      using H C1 C2 X
+      by(cases l2h; auto)
+
+    then have Conc' : "(\<exists> l1h l1t l2h l2t fs vs . x = (vs, fs) \<and>
+      l1 = l1h # l1t \<and> l2 = l2h # l2t \<and> yul_statement_same_constructor l1h l2h \<and> 
+      (\<exists> name1 args1 rets1 body1 name2 args2 rets2 body2 fs' .
+        l1h = (YulFunctionDefinitionStatement (YulFunctionDefinition name1 args1 rets1 body1)) \<and>
+        l2h = (YulFunctionDefinitionStatement (YulFunctionDefinition name2 args2 rets2 body2)) \<and>
+        alpha_equiv_check_decls l1t l2t = Some (vs, fs') \<and>
+        fs = (name1, name2)#fs'))"
+      using H C1 C2 X L1h
+      by(cases fds; cases fds'; auto split: option.splits if_splits)
+
+    then show ?thesis by metis
+  next
+    case (YulIf x51 x52)
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case (YulSwitch x61 x62)
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case (YulForLoop x71 x72 x73 x74)
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case YulBreak
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+  case YulContinue
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case YulLeave
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case (YulBlock x11)
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  qed
+qed
+
+lemma alpha_equiv_check_decls_cases_alt :
+  assumes H: "alpha_equiv_check_decls l1 l2 = Some x"
+  shows
+    "(l1 = [] \<and> l2 = [] \<and> x = ([], [])) \<or>
+     (\<exists> l1h l1t l2h l2t fs vs decls1 v1 decls2 v2 vs' . x = (vs, fs) \<and>
+      l1 = l1h # l1t \<and> l2 = l2h # l2t \<and> yul_statement_same_constructor l1h l2h \<and> 
+        l1h = (YulVariableDeclarationStatement (YulVariableDeclaration decls1 v1)) \<and>
+        l2h = (YulVariableDeclarationStatement (YulVariableDeclaration decls2 v2)) \<and>
+        alpha_equiv_check_decls l1t l2t = Some (vs', fs) \<and>
+        vs = ((zip (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls1)
+                   (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls2)) @ vs')) \<or>
+      (\<exists> l1h l1t l2h l2t fs vs name1 args1 rets1 body1 name2 args2 rets2 body2 fs' . x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and> l2 = l2h # l2t \<and> yul_statement_same_constructor l1h l2h \<and> 
+        l1h = (YulFunctionDefinitionStatement (YulFunctionDefinition name1 args1 rets1 body1)) \<and>
+        l2h = (YulFunctionDefinitionStatement (YulFunctionDefinition name2 args2 rets2 body2)) \<and>
+        alpha_equiv_check_decls l1t l2t = Some (vs, fs') \<and>
+        fs = (name1, name2)#fs') \<or>
+      (\<exists> l1h l1t l2h l2t fs vs . x = (vs, fs) \<and>
+      l1 = l1h # l1t \<and> l2 = l2h # l2t \<and> yul_statement_same_constructor l1h l2h \<and>
+      (case l1h of
+        YulVariableDeclarationStatement _ \<Rightarrow> False
+        | YulFunctionDefinitionStatement _ \<Rightarrow> False
+        | _ \<Rightarrow> True) \<and>
+       (case l2h of
+        YulVariableDeclarationStatement _ \<Rightarrow> False
+        | YulFunctionDefinitionStatement _ \<Rightarrow> False
+        | _ \<Rightarrow> True) \<and> alpha_equiv_check_decls l1t l2t = Some x)"
+proof(cases l1)
+  case Nil
+  then show ?thesis using H
+    by(cases l2; auto)
+next
+  case C1: (Cons l1h l1t)
+
+  then obtain l2h l2t where C2 :
+    "l2 = l2h # l2t"
+    using H
+    by(cases l2; auto)
+
+  obtain x1 x2 where X: "x = (x1, x2)"
+    by(cases x; auto)
+
+  show ?thesis
+  proof(cases l1h)
+    case (YulFunctionCallStatement x1)
+
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case (YulAssignmentStatement x2)
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case L1h : (YulVariableDeclarationStatement vds)
+
+    then obtain vds' where L2h : "l2h = YulVariableDeclarationStatement vds'"
+      using H C1 C2 X
+      by(cases l2h; auto)
+
+    then have Conc' : "(\<exists> l1h l1t l2h l2t fs vs . x = (vs, fs) \<and>
+      l1 = l1h # l1t \<and> l2 = l2h # l2t \<and> yul_statement_same_constructor l1h l2h \<and> 
+      (\<exists> decls1 v1 decls2 v2 vs' .
+        l1h = (YulVariableDeclarationStatement (YulVariableDeclaration decls1 v1)) \<and>
+        l2h = (YulVariableDeclarationStatement (YulVariableDeclaration decls2 v2)) \<and>
+        alpha_equiv_check_decls l1t l2t = Some (vs', fs) \<and>
+        vs = ((zip (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls1)
+                   (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls2)) @ vs')))"
+      using H C1 C2 X L1h
+      by(cases vds; cases vds'; auto split: option.splits if_splits)
+
+    then show ?thesis by metis
+      
+  next
+    case L1h : (YulFunctionDefinitionStatement fds)
+
+    then obtain fds' where L2h : "l2h = YulFunctionDefinitionStatement fds'"
+      using H C1 C2 X
+      by(cases l2h; auto)
+
+    then have Conc' : "(\<exists> l1h l1t l2h l2t fs vs . x = (vs, fs) \<and>
+      l1 = l1h # l1t \<and> l2 = l2h # l2t \<and> yul_statement_same_constructor l1h l2h \<and> 
+      (\<exists> name1 args1 rets1 body1 name2 args2 rets2 body2 fs' .
+        l1h = (YulFunctionDefinitionStatement (YulFunctionDefinition name1 args1 rets1 body1)) \<and>
+        l2h = (YulFunctionDefinitionStatement (YulFunctionDefinition name2 args2 rets2 body2)) \<and>
+        alpha_equiv_check_decls l1t l2t = Some (vs, fs') \<and>
+        fs = (name1, name2)#fs'))"
+      using H C1 C2 X L1h
+      by(cases fds; cases fds'; auto split: option.splits if_splits)
+
+    then show ?thesis by metis
+  next
+    case (YulIf x51 x52)
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case (YulSwitch x61 x62)
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case (YulForLoop x71 x72 x73 x74)
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case YulBreak
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+  case YulContinue
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case YulLeave
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  next
+    case (YulBlock x11)
+    then have "(\<exists>l1h l1t l2h l2t fs vs.
+        x = (vs, fs) \<and>
+        l1 = l1h # l1t \<and>
+        l2 = l2h # l2t \<and>
+        yul_statement_same_constructor l1h l2h \<and>
+        (case l1h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        (case l2h of YulVariableDeclarationStatement x \<Rightarrow> False
+         | YulFunctionDefinitionStatement x \<Rightarrow> False
+         | _ \<Rightarrow> True) \<and>
+        alpha_equiv_check_decls l1t l2t = Some x)" using H C1 C2 X
+      by(cases l2h; auto)
+
+    then show ?thesis by blast
+  qed
+qed
+
+lemma alpha_equiv_check_decls_result :
+  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
+  shows "\<exists> vs1 fs1 vs2 fs2 . 
+    length sts1 = length sts2 \<and>
+    get_var_decls sts1 = (map fst locs') \<and>
+    get_var_decls sts2 = (map snd locs') \<and>
+    get_fun_decls sts1 = (map fst funcs') \<and>
+    get_fun_decls sts2 = (map snd funcs')"
   using assms
-proof(induction t1 arbitrary: h1 h1 t2 locs funcs)
+proof(induction sts1 arbitrary: sts2 locs' funcs')
   case Nil
   then show ?case 
-    apply(auto simp add: alpha_equiv_check_decls_def get_var_decls_def get_fun_decls_def Let_def
-split: if_splits)
-next
-  case (Cons a t1)
-  then show ?case sorry
-qed
-*)
-
-lemma alpha_equiv_gather_funs'_combine :
-  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
-  assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
-  assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
-     sts1 sts2"
-  assumes Gather1 :
-    "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1) sts1 =
-      Inl fs1"
-  assumes Gather2 :
-     "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2) sts2 =
-       Inl fs2"
-  shows "alpha_equiv_funs' vsubst' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
-     (combine_keep (funs1)
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>))
-         fs1))
-     (combine_keep (funs2)
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>))
-         fs2))"
-  using assms
-proof(induction funs1 arbitrary: sts1 sts2 locs' funcs'  fs1 funs2 fs2 vsubst' fsubst)
-  case Nil1 : Nil
-
-  have Nil2 : "funs2 = []"
-    using Nil1
-    by(cases funs2; auto simp add: alpha_equiv_funs'_def)
-
-  then show ?case using Nil1 alpha_equiv_funs_trunc[OF Nil1(2)]
-    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
-get_fun_decls_def get_var_decls_def Let_def)
-  case (Cons a funs1)
-  then show ?case sorry
-qed
-
-
-lemma alpha_equiv_gather_funs'_combine :
-  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
-  assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
-  assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
-     sts1 sts2"
-  assumes Gather1 :
-    "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1) sts1 =
-      Inl fs1"
-  assumes Gather2 :
-     "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2) sts2 =
-       Inl fs2"
-  shows "alpha_equiv_funs' vsubst' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
-     (combine_keep (funs1)
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>))
-         fs1))
-     (combine_keep (funs2)
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>))
-         fs2))"
-  using assms
-proof(induction sts1 arbitrary: sts2 locs' funcs' funs1 fs1 funs2 fs2 vsubst' fsubst)
-  case Nil1 : Nil
-
-  have Nil2 : "sts2 = []"
-    using Nil1
     by(cases sts2; auto)
-
-  then show ?case using Nil1 alpha_equiv_funs_trunc[OF Nil1(2)]
-    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
-get_fun_decls_def get_var_decls_def)
-next
-  case Cons1 : (Cons h1 t1)
-
-  then obtain h2 t2 where Cons2 : "sts2 = h2#t2"
-    by(cases sts2; auto)
-
-
-  obtain locs0 funcs0 locs1 funcs1 where
-    Split : "alpha_equiv_check_decls t1 t2 = Some (locs1, funcs1)"
-       "locs' = locs0 @ locs1" "funcs' = funcs0 @ funcs1"
-    using
-      alpha_equiv_check_decls_tail[OF Cons1.prems(3)[unfolded Cons2] Cons1.prems(1)[unfolded Cons2]]
-    by auto
-
-  show ?case using Cons1.IH[OF Split(1) Cons1.prems(2)] Cons1.prems(3)
-    
-    then show ?case using Cons1 alpha_equiv_funs_trunc
-      apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
-       get_fun_decls_def get_var_decls_def Let_def split:if_splits)
-      apply(clarsimp)
-
-lemma combine_keep_nil1 :
-  shows "combine_keep [] l1 = l1"
-proof(induction l1)
-  case Nil
-  then show ?case by(auto)
-next
-  case (Cons a l1)
-  then show ?case 
-    by(cases a; auto)
-qed
-
-
-lemma alpha_equiv_gather_funs0 :
-    "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs') \<Longrightarrow>
-    list_all2 (alpha_equiv_statement' ((locs0 @ locs') # vsubst') ((funcs0 @ funcs') # fsubst)) sts1
-     sts2 \<Longrightarrow>
-    gatherYulFunctions' [] sts1 = Inl fs1 \<Longrightarrow>
-    gatherYulFunctions' [] sts2 = Inl fs2 \<Longrightarrow>
-    alpha_equiv_funs' vsubst'
-     (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
-     (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>))
-       fs1)
-     (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>))
-       fs2)"
-proof(induction sts1 arbitrary:
-sts2 locs' funcs' vsubst' fsubst fs1 fs2 locs0 funcs0)
-  case Nil
-  then show ?case
-    by(auto simp add: get_fun_decls_def alpha_equiv_check_decls_def
-alpha_equiv_funs'_def)
 next
   case Cons1 : (Cons sts1h sts1t)
 
-  obtain sts2h sts2t where Cons2 :
+  then obtain sts2h sts2t where Cons2 :
     "sts2 = sts2h # sts2t"
     using Cons1.prems
     by(cases sts2; auto)
 
-  obtain locs'0 funcs'0 locs'1 funcs'1 where Check :
-    "alpha_equiv_check_decls sts1t sts2t = Some (locs'1, funcs'1)"
-    "locs' = locs'0 @ locs'1"
-    "funcs' = funcs'0 @ funcs'1"
-    using alpha_equiv_check_decls_tail[OF Cons1.prems(2)[unfolded Cons2] Cons1.prems(1)[unfolded Cons2]]
+  consider 
+    (1) "(sts1h#sts1t = [] \<and> sts2 = [] \<and> (locs', funcs') = ([], []))" |
+    (2) l1h l1t l2h l2t fs vs decls1 v1 decls2 v2 vs' where 
+      "(locs', funcs') = (vs, fs)"
+      "sts1h#sts1t  = l1h # l1t"
+      "sts2 = l2h # l2t"
+      "yul_statement_same_constructor l1h l2h"
+      "l1h = (YulVariableDeclarationStatement (YulVariableDeclaration decls1 v1))"
+      "l2h = (YulVariableDeclarationStatement (YulVariableDeclaration decls2 v2))"
+      "alpha_equiv_check_decls l1t l2t = Some (vs', fs)"
+      "vs = ((zip (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls1)
+                  (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls2)) @ vs')" |
+    (3) l1h l1t l2h l2t fs vs name1 args1 rets1 body1 name2 args2 rets2 body2 fs' where
+      "(locs', funcs') = (vs, fs)"
+      "sts1h#sts1t  = l1h # l1t"
+      "sts2 = l2h # l2t"
+      "yul_statement_same_constructor l1h l2h"
+      "l1h = (YulFunctionDefinitionStatement (YulFunctionDefinition name1 args1 rets1 body1))"
+      "l2h = (YulFunctionDefinitionStatement (YulFunctionDefinition name2 args2 rets2 body2))"
+      "alpha_equiv_check_decls l1t l2t = Some (vs, fs')"
+      "fs = (name1, name2)#fs'" |
+    (4) l1h l1t l2h l2t fs vs where
+    "(locs', funcs') = (vs, fs)"
+     "sts1h#sts1t  = l1h # l1t"
+     "sts2 = l2h # l2t"
+     "yul_statement_same_constructor l1h l2h"
+    "(case l1h of
+        YulVariableDeclarationStatement _ \<Rightarrow> False
+        | YulFunctionDefinitionStatement _ \<Rightarrow> False
+        | _ \<Rightarrow> True)"
+    "(case l2h of
+        YulVariableDeclarationStatement _ \<Rightarrow> False
+        | YulFunctionDefinitionStatement _ \<Rightarrow> False
+        | _ \<Rightarrow> True)"
+    "alpha_equiv_check_decls l1t l2t = Some (locs', funcs')"
+    using alpha_equiv_check_decls_cases_alt[OF Cons1.prems(1)] unfolding Cons2
+    by(clarsimp; metis)
+
+  then show ?case
+  proof cases
+    case 1
+    then show ?thesis by auto
+  next
+    case 2
+
+    have Arg : "alpha_equiv_check_decls sts1t l2t = Some (vs', fs)"
+      using Cons1.prems 2
+      by(auto)
+
+    show ?thesis using Cons1.prems Cons1.IH[OF Arg] Cons2 2
+      by(auto simp add: split: if_split_asm prod.splits)
+  next
+    case 3
+
+    have Arg : "alpha_equiv_check_decls sts1t l2t = Some (vs, fs')"
+      using Cons1.prems 3
+      by(auto)
+
+    show ?thesis using Cons1.prems Cons1.IH[OF Arg] Cons2 3
+      by(auto simp add: split: if_split_asm prod.splits)
+  next
+    case 4
+
+    have Arg : "alpha_equiv_check_decls sts1t l2t = Some (vs, fs)"
+      using Cons1.prems 4
+      by(auto)
+
+    show ?thesis using Cons1.prems Cons1.IH[OF Arg] Cons2 4
+      apply(cases l1h)
+                apply(cases l2h; auto)
+               apply(cases l2h; auto)
+              apply(cases l2h; auto)
+             apply(cases l2h; auto)
+            apply(cases l2h; auto)
+           apply(cases l2h; auto)
+          apply(cases l2h; auto)
+         apply(cases l2h; auto)
+      apply(cases l2h; auto)
+      apply(cases l2h; auto)
+      apply(cases l2h; auto)
+      done
+  qed
+qed
+  
+
+(* NB we are using combine_keep to avoid making
+changes to names field of existing functions.
+we actually know that there are no conflicts.
+
+induction on number of function decls in sts.
+*) 
+declare [[show_types]]
+
+lemma alpha_equiv_expr_fun_empty :
+  fixes x1 :: "(String.literal, 'a, 'b) YulFunctionCall'"
+  fixes st1 :: "(String.literal, 'a, 'b) YulExpression'"
+  shows "(\<forall> vsubst fsubst x2 f1 es1 f2 es2 . 
+          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<longrightarrow>
+          x1 = (YulFunctionCall f1 es1) \<longrightarrow>
+          x2 = (YulFunctionCall f2 es2) \<longrightarrow> 
+      alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2)
+    \<and> (\<forall> vsubst fsubst st2 . alpha_equiv_expr' vsubst fsubst st1 st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) st1 st2)"
+proof(induction rule: YulFunctionCall'_YulExpression'.induct)
+
+  case H : (YulFunctionCall x1 x2)
+(*
+  assume H: "(\<And>x2a::(String.literal, 'a, 'b) YulExpression'.
+           x2a \<in> set x2 \<Longrightarrow>
+           \<forall>(vsubst::(String.literal \<times> String.literal) list list) (fsubst::(String.literal \<times> String.literal) list list)
+              st2::(String.literal, 'a, 'b) YulExpression'. alpha_equiv_expr' vsubst fsubst x2a st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x2a st2)"
+*)
+  hence H' : "(\<And>x2a::(String.literal, 'a, 'b) YulExpression'.
+           x2a \<in> set x2 \<Longrightarrow>
+           (\<And>(vsubst::(String.literal \<times> String.literal) list list) (fsubst::(String.literal \<times> String.literal) list list)
+              st2::(String.literal, 'a, 'b) YulExpression'. alpha_equiv_expr' vsubst fsubst x2a st2 \<Longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x2a st2))"
+    by blast
+
+  have Conc' : 
+"\<And> (vsubst::(String.literal \<times> String.literal) list list) (fsubst::(String.literal \<times> String.literal) list list)
+          (x2a::(String.literal, 'a, 'b) YulFunctionCall') (f1::String.literal) (es1::(String.literal, 'a, 'b) YulExpression' list) (f2::String.literal)
+          es2::(String.literal, 'a, 'b) YulExpression' list.
+          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression (YulFunctionCall x1 x2)) (YulFunctionCallExpression x2a) \<Longrightarrow>
+          YulFunctionCall x1 x2 = YulFunctionCall f1 es1 \<Longrightarrow>
+          x2a = YulFunctionCall f2 es2 \<Longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+  proof-
+    fix vsubst fsubst x2a f1 es1 f2 es2
+
+    assume Hi1 : "alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression (YulFunctionCall x1 x2)) (YulFunctionCallExpression x2a)"
+    assume Hi2 : "YulFunctionCall x1 x2 = YulFunctionCall f1 es1"
+    assume Hi3 : "x2a = YulFunctionCall f2 es2" 
+    show "alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+      using H'
+  qed
+  then show " \<forall>(vsubst::(String.literal \<times> String.literal) list list) (fsubst::(String.literal \<times> String.literal) list list)
+          (x2a::(String.literal, 'a, 'b) YulFunctionCall') (f1::String.literal) (es1::(String.literal, 'a, 'b) YulExpression' list) (f2::String.literal)
+          es2::(String.literal, 'a, 'b) YulExpression' list.
+          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression (YulFunctionCall x1 x2)) (YulFunctionCallExpression x2a) \<longrightarrow>
+          YulFunctionCall x1 x2 = YulFunctionCall f1 es1 \<longrightarrow>
+          x2a = YulFunctionCall f2 es2 \<longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+    by blast
+next
+  
+  
+  fix vsubst fsubst x2a f1 es1 f2 es2
+
+    assume "alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression (YulFunctionCall x1 x2)) (YulFunctionCallExpression x2a)"
+
+  case H: (YulFunctionCall x1x x2x)
+
+  have Conc' : "\<And> (x1::(String.literal, 'a, 'b) YulFunctionCall') (vsubst::(String.literal \<times> String.literal) list list)
+       (fsubst::(String.literal \<times> String.literal) list list) (x2::(String.literal, 'a, 'b) YulFunctionCall') (f1::String.literal)
+       (es1::(String.literal, 'a, 'b) YulExpression' list) (f2::String.literal) es2::(String.literal, 'a, 'b) YulExpression' list.
+       alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<Longrightarrow>
+       x1 = YulFunctionCall f1 es1 \<Longrightarrow>
+       x2 = YulFunctionCall f2 es2 \<Longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+  proof-
+    fix x1 :: "(String.literal, 'a, 'b) YulFunctionCall'"
+    fix vsubst fsubst x2 f1 es1 f2 es2
+
+    assume Hi1: "alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2)"
+    assume Hi2 : "x1 = YulFunctionCall f1 es1"
+    assume Hi3 : "x2 = YulFunctionCall f2 es2"
+
+    show "alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+      using Hi1 Hi2 Hi3 H
+      apply(auto simp add: alpha_equiv_name'_def)
+      sorry
+  qed
+
+  then show ?case by blast
+next
+  case H: (YulFunctionCallExpression x)
+
+  have H' : "\<And> (x1 :: (String.literal, 'a, 'b) YulFunctionCall') vsubst fsubst x2 f1 es1 f2 es2.
+     alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<Longrightarrow>
+     x1 = YulFunctionCall f1 es1 \<Longrightarrow>
+     x2 = YulFunctionCall f2 es2 \<Longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+  proof-
+    fix x1 :: "((String.literal, 'a, 'b) YulFunctionCall')"
+    fix vsubst fsubst x2 f1 es1 f2 es2
+    assume Hi1 : "alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2)"
+    assume Hi2 : "x1 = YulFunctionCall f1 es1"
+    assume Hi3 : "x2 = YulFunctionCall f2 es2" 
+    show "alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+      using H Hi1 Hi2 Hi3
+      by(blast)
+  qed
+  have Conc' : "\<And>vsubst fsubst (st2 :: (String.literal, 'a, 'b) YulExpression').
+       alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x) st2 \<Longrightarrow>
+       alpha_equiv_expr' vsubst ([] # fsubst) (YulFunctionCallExpression x) st2"
+  proof-
+    fix vsubst fsubst st2
+    assume Hi : "alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x) st2"
+
+    obtain x2 where X2 : "st2 = YulFunctionCallExpression x2"
+      using Hi by (cases st2; auto)
+
+    obtain f1 es1 where Xc : "x = YulFunctionCall f1 es1"
+      by(cases x; auto)
+
+    obtain f2 es2 where Xc2 : "x2 = YulFunctionCall f2 es2"
+      by(cases x2; auto)
+
+    show "alpha_equiv_expr' vsubst ([] # fsubst) (YulFunctionCallExpression x) st2"
+      using H'[OF Hi[unfolded X2] Xc Xc2] X2 Xc Xc2
+      by(auto simp add: alpha_equiv_name'_def)
+  qed
+
+  then show ?case
+    by blast
+next
+  case H : (YulIdentifier x)
+
+  then show ?case
+    sorry
+next
+  case H : (YulLiteralExpression x)
+  then show ?case
+    sorry
+qed
+
+    show "\<And>(x1 :: String.literal) x2.
+       (\<And>(x2a :: (String.literal, 'a, 'b) YulExpression') . x2a \<in> set x2 \<Longrightarrow> \<forall>vsubst fsubst st2. alpha_equiv_expr' vsubst fsubst x2a st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x2a st2) \<Longrightarrow>
+       \<forall>x1 vsubst fsubst x2 f1 es1 f2 es2.
+          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<longrightarrow>
+          x1 = YulFunctionCall f1 es1 \<longrightarrow>
+          x2 = YulFunctionCall f2 es2 \<longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+    proof-
+      fix x1 :: "String.literal"
+      fix x2 :: "((String.literal, 'a, 'b) YulExpression') list"
+
+      assume Hset : "(\<And>x2a. x2a \<in> set x2 \<Longrightarrow> \<forall>vsubst fsubst st2. alpha_equiv_expr' vsubst fsubst x2a st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x2a st2)"
+
+      show "\<forall>x1 vsubst fsubst x2 f1 es1 f2 es2.
+          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<longrightarrow>
+          x1 = YulFunctionCall f1 es1 \<longrightarrow>
+          x2 = YulFunctionCall f2 es2 \<longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+      proof-
+        fix x1 :: "(String.literal, 'e, 'f) YulFunctionCall'" 
+        fix vsubst :: "((String.literal \<times> String.literal) list list)"
+        fix fsubst x2 f1 es1 f2 es2
+
+        assume H' : "
+           alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<Longrightarrow>
+           x1 = YulFunctionCall f1 es1 \<Longrightarrow>
+           x2 = YulFunctionCall f2 es2"
+
+        show "alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+      sorry
+  next
+    show "\<And>x. \<forall>vsubst fsubst st2. alpha_equiv_expr' vsubst fsubst (YulIdentifier x) st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) (YulIdentifier x) st2"
+      sorry
+  next
+    show "\<And>x. \<forall>vsubst fsubst st2.
+            alpha_equiv_expr' vsubst fsubst (YulLiteralExpression x) st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) (YulLiteralExpression x) st2"
+      sorry
+  qed
+
+    case H: (YulFunctionCallExpression x1)
+    (*fix x2 :: "(String.literal, 'a, 'b) YulExpression' list"*)
+    have H' : "\<And> (x1 :: (String.literal, 'a, 'b) YulFunctionCall') vsubst fsubst x2 f1 es1 f2 es2.
+     alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<Longrightarrow>
+     x1 = YulFunctionCall f1 es1 \<Longrightarrow>
+     x2 = YulFunctionCall f2 es2 \<Longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+      using H
+      by blast
+
+   (* assume Hset : "(\<And>x2a. x2a \<in> set x2 \<Longrightarrow> \<forall>vsubst fsubst st2. alpha_equiv_expr' vsubst fsubst x2a st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x2a st2)"*)
+
+    have Conc' : "\<And> x1 vsubst fsubst x2 f1 es1 f2 es2.
+          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<Longrightarrow>
+          x1 = YulFunctionCall f1 es1 \<Longrightarrow>
+          x2 = YulFunctionCall f2 es2 \<Longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+      sorry
+
+    show " \<forall>x1 vsubst fsubst x2 f1 es1 f2 es2.
+          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<longrightarrow>
+          x1 = YulFunctionCall f1 es1 \<longrightarrow>
+          x2 = YulFunctionCall f2 es2 \<longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+
+      then show ?thesis
+    apply(cases x1; cases st2; auto)
+    apply(case_tac x1aa; auto)
+  next
+  case (YulIdentifier x2)
+  then show ?thesis sorry
+next
+  case (YulLiteralExpression x3)
+  then show ?thesis sorry
+qed
+
+
+lemma alpha_equiv_statement_fun_empty :
+  assumes H : "alpha_equiv_statement' vsubst fsubst st1 st2"
+  shows "alpha_equiv_statement' vsubst ([] # fsubst) st1 st2"
+proof(cases st1)
+  case (YulFunctionCallStatement x1)
+  then show ?thesis using H
+    apply(cases x1; cases st2; auto)
+    apply(case_tac x1aa; auto)
+next
+  case (YulAssignmentStatement x2)
+  then show ?thesis sorry
+next
+  case (YulVariableDeclarationStatement x3)
+  then show ?thesis sorry
+next
+  case (YulFunctionDefinitionStatement x4)
+  then show ?thesis sorry
+next
+  case (YulIf x51 x52)
+  then show ?thesis sorry
+next
+  case (YulSwitch x61 x62)
+  then show ?thesis sorry
+next
+  case (YulForLoop x71 x72 x73 x74)
+  then show ?thesis sorry
+next
+  case YulBreak
+  then show ?thesis sorry
+next
+  case YulContinue
+  then show ?thesis sorry
+next
+  case YulLeave
+  then show ?thesis sorry
+next
+  case (YulBlock x11)
+  then show ?thesis sorry
+qed
+
+  sorry
+
+(* need a version of this for statements. *)
+lemma alpha_equiv_fun_empty :
+  assumes H: "alpha_equiv_fun vsubst fsubst f1 f2"
+  shows "alpha_equiv_fun vsubst ([]#fsubst) f1 f2"
+  using H
+proof(induction fsubst arbitrary: vsubst)
+  case Nil
+
+  obtain n1 s1 where F1 : "f1 = (n1, s1)"
+    by(cases f1; auto)
+
+  obtain n2 s2 where F2 : "f2 = (n2, s2)"
+    by(cases f2; auto)
+
+  show ?case
+  proof(cases "f_sig_body s1")
+    case (YulBuiltin x1)
+    then show ?thesis using Nil F1 F2
+    by(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def)
+  next
+    case X1 : (YulFunction x1)
+
+    obtain x2 where X2 : "f_sig_body s2 = YulFunction x2"
+      using Nil X1 F1 F2
+      by(cases "f_sig_body s2"; auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def)
+
+(* alpha_equiv_statement'_nil - adding nil on the end has no effect *)
+    then show ?thesis using Nil F1 F2 X1 X2 list_all2_map
+      apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def
+split: option.splits) 
+      sorry
+  qed
+next
+  case (Cons fh ft)
+
+  obtain n1 s1 where F1 : "f1 = (n1, s1)"
+    by(cases f1; auto)
+
+  obtain n2 s2 where F2 : "f2 = (n2, s2)"
+    by(cases f2; auto)
+
+  show ?case
+  proof(cases "f_sig_body s1")
+    case (YulBuiltin x1)
+    then show ?thesis using Cons.prems F1 F2
+    by(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def)
+  next
+    case X1 : (YulFunction x1)
+
+    obtain x2 where X2 : "f_sig_body s2 = YulFunction x2"
+      using Cons.prems X1 F1 F2
+      by(cases "f_sig_body s2"; auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def)
+
+(* alpha_equiv_statement'_nil - adding nil on the end has no effect *)
+    then show ?thesis using Cons F1 F2 X1 X2
+      apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def
+split: option.splits) 
+      sorry
+  qed
+
+  then show ?case
+    apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def)
+qed
+
+  apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def)
+  apply(case_tac "f_sig_body s1"; auto)
+  apply(case_tac "f_sig_body s2"; auto)
+  apply(case_tac "alpha_equiv_check_decls x2 x2a"; auto)
+
+
+lemma alpha_equiv_gather_funs'_combine :
+  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
+  assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
+  assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
+     sts1 sts2"
+  assumes Gather1 :
+    "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1) sts1 =
+      Inl fs1"
+  assumes Gather2 :
+     "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2) sts2 =
+       Inl fs2"
+  shows "alpha_equiv_funs' vsubst' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
+     (combine_keep (funs1)
+       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>))
+         fs1))
+     (combine_keep (funs2)
+       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>))
+         fs2))"
+  using assms
+proof(induction funcs' arbitrary: sts1 sts2 locs' funs1 fs1 funs1 funs2 fs2 vsubst' fsubst)
+  case Nil1 : Nil
+
+  have Nil1' : "get_fun_decls sts1 = []" "get_fun_decls sts2 = []"
+    using alpha_equiv_check_decls_result[OF Nil1.prems(1)]
     by auto
 
-  then show ?case using Cons1.prems Cons1.IH[OF Check(1), of "locs0 @ locs'0" vsubst' "funcs0 @ funcs'0"
-    fsubst] 
-    apply(auto simp add: alpha_equiv_check_decls_def
-Let_def split:if_split_asm)
-qed
+  have X1 : "fs1 = (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1)"
+    sorry
 
+  have X2 : "fs2 = (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2)"
+    sorry
 
-(* idea:
- * if we have 2 alpha-equivalent statement lists
- * and we 
-*)
+  show ?case using Nil1 Nil1' X1 X2
+    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def)
 
-lemma alpha_equiv_gather_funs :
-
-  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
-  assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
-     sts1 sts2"
-  assumes Gather1 :
-    "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1) sts1 =
-      Inl fs1"
-  assumes Gather2 :
-     "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2) sts2 =
-       Inl fs2"
-  assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
-
-  shows "alpha_equiv_funs' vsubst' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
-     (combine_keep funs1
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>)) fs1))
-     (combine_keep funs2
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>)) fs2))"
-  using assms
-proof(induction funs1 arbitrary: sts1 sts2 locs' funcs' fs1 funs2 fs2 vsubst' fsubst)
-  case Nil1 : Nil
-
-  then have Nil2 : "funs2 = []"
-    by(cases funs2; auto simp add: alpha_equiv_funs'_def)
-
-  then show ?case using Nil1 alpha_equiv_funs_trunc[OF Nil1(5)]
-    apply(auto simp add: combine_keep_nil1)
-  next
-  case (Cons a funs1)
-  then show ?case sorry
-qed
-
-lemma alpha_equiv_gather_funs :
-
-  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
-  assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
-     sts1 sts2"
-  assumes Gather1 :
-    "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1) sts1 =
-      Inl fs1"
-  assumes Gather2 :
-     "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2) sts2 =
-       Inl fs2"
-  assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
-
-  shows "alpha_equiv_funs' vsubst' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
-     (combine_keep funs1
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>)) fs1))
-     (combine_keep funs2
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>)) fs2))"
-  using assms
-proof(induction sts1 arbitrary: sts2 locs' funcs' funs1 fs1 funs2 fs2 vsubst' fsubst)
-  case Nil1 : Nil
+  then show ?case
+    apply(auto)
+    sorry
+next
+  case Cons1 : (Cons fs1h fs1t)
 
   have Nil2 : "sts2 = []"
     using Nil1
-    by(cases sts2; auto simp add: alpha_equiv_check_decls_def alpha_equiv_funs'_def Let_def split:if_split_asm)
+    by(cases sts2; auto)
 
-  then show ?case using Nil1
-    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
+  then show ?case using Nil1 alpha_equiv_funs_trunc[OF Nil1(2)]
+    by(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def
 get_fun_decls_def get_var_decls_def)
-    apply(cases funs1; auto)
-    apply(cases funs2; auto)
 next
-  case (Cons a sts1)
-  then show ?case sorry
-qed
+  case Cons1 : (Cons h1 t1)
 
-
-(* sts1 = sts1pre @ sts1post *)
-
-lemma alpha_equiv_gather_funs' :
-  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
-  assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
-  assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
-     sts1 sts2"
-  assumes Gather1 :
-    "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1) sts1 =
-      Inl fs1"
-  assumes Gather2 :
-     "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2) sts2 =
-       Inl fs2"
-  shows "alpha_equiv_funs' vsubst' fsubst fs1 fs2"
   using assms
 proof(induction sts1 arbitrary: sts2 locs' funcs' funs1 fs1 funs2 fs2 vsubst' fsubst)
   case Nil1 : Nil
@@ -1130,8 +1701,8 @@ proof(induction sts1 arbitrary: sts2 locs' funcs' funs1 fs1 funs2 fs2 vsubst' fs
     using Nil1
     by(cases sts2; auto)
 
-  then show ?case using Nil1 alpha_equiv_funs_trunc
-    by(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
+  then show ?case using Nil1 alpha_equiv_funs_trunc[OF Nil1(2)]
+    by(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def
 get_fun_decls_def get_var_decls_def)
 next
   case Cons1 : (Cons h1 t1)
@@ -1139,65 +1710,112 @@ next
   then obtain h2 t2 where Cons2 : "sts2 = h2#t2"
     by(cases sts2; auto)
 
+  consider 
+    (1) "(h1#t1 = [] \<and> sts2 = [] \<and> (locs', funcs') = ([], []))" |
+    (2) l1h l1t l2h l2t fs vs decls1 v1 decls2 v2 vs' where 
+      "(locs', funcs') = (vs, fs)"
+      "h1#t1 = l1h # l1t"
+      "sts2 = l2h # l2t"
+      "yul_statement_same_constructor l1h l2h"
+      "l1h = (YulVariableDeclarationStatement (YulVariableDeclaration decls1 v1))"
+      "l2h = (YulVariableDeclarationStatement (YulVariableDeclaration decls2 v2))"
+      "alpha_equiv_check_decls l1t l2t = Some (vs', fs)"
+      "vs = ((zip (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls1)
+                  (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls2)) @ vs')" |
+    (3) l1h l1t l2h l2t fs vs name1 args1 rets1 body1 name2 args2 rets2 body2 fs' where
+      "(locs', funcs') = (vs, fs)"
+      "h1#t1 = l1h # l1t"
+      "sts2 = l2h # l2t"
+      "yul_statement_same_constructor l1h l2h"
+      "l1h = (YulFunctionDefinitionStatement (YulFunctionDefinition name1 args1 rets1 body1))"
+      "l2h = (YulFunctionDefinitionStatement (YulFunctionDefinition name2 args2 rets2 body2))"
+      "alpha_equiv_check_decls l1t l2t = Some (vs, fs')"
+      "fs = (name1, name2)#fs'" |
+    (4) l1h l1t l2h l2t fs vs where
+    "(locs', funcs') = (vs, fs)"
+     "h1#t1 = l1h # l1t"
+     "sts2 = l2h # l2t"
+     "yul_statement_same_constructor l1h l2h"
+    "(case l1h of
+        YulVariableDeclarationStatement _ \<Rightarrow> False
+        | YulFunctionDefinitionStatement _ \<Rightarrow> False
+        | _ \<Rightarrow> True)"
+    "(case l2h of
+        YulVariableDeclarationStatement _ \<Rightarrow> False
+        | YulFunctionDefinitionStatement _ \<Rightarrow> False
+        | _ \<Rightarrow> True)"
+    "alpha_equiv_check_decls l1t l2t = Some (locs', funcs')"
+    using alpha_equiv_check_decls_cases_alt[OF Cons1.prems(1)] unfolding Cons2
+    by(clarsimp; metis)
 
+  then show ?case
+  proof cases
+    case 1
+    then show ?thesis using Cons1 by auto
+  next
+    case 2
+
+    have Eq0 : "locs' = vs" "funcs' = fs"
+      using 2 by auto
+
+    have Eq1 : "h1 = l1h" "t1 = l1t"
+      using 2 by auto
+
+    have Eq2 : "h2 = l2h" "t2 = l2t"
+      using 2 Cons2 by auto
+
+    have All_tl : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst)) (l1t) l2t"
+      using Cons1.prems Cons2 Eq0 Eq1 Eq2
+      by auto
+
+    show ?thesis 
+      using Cons1.IH[unfolded Cons2, unfolded Eq0, unfolded Eq1, unfolded Eq2
+                    , OF "2"(7) Cons1.prems(2)] Cons1.prems
+      using All_tl[unfolded Eq0]
+      using "2"(8)
+(* something related to extending locals environment...
+   relate decls to insert values? *)
+  next
+    case 3
+    then show ?thesis sorry
+  next
+    case 4
+    then show ?thesis sorry
+  qed
+
+(*
+"(l1 = [] \<and> l2 = [] \<and> x = ([], [])) \<or>
+     (\<exists> l1h l1t l2h l2t fs vs . x = (vs, fs) \<and>
+      l1 = l1h # l1t \<and> l2 = l2h # l2t \<and> yul_statement_same_constructor l1h l2h \<and> 
+      (\<exists> decls1 v1 decls2 v2 vs' .
+        l1h = (YulVariableDeclarationStatement (YulVariableDeclaration decls1 v1)) \<and>
+        l2h = (YulVariableDeclarationStatement (YulVariableDeclaration decls2 v2)) \<and>
+        alpha_equiv_check_decls l1t l2t = Some (vs', fs) \<and>
+        vs = ((zip (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls1)
+                   (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls2)) @ vs')) \<or>
+      (\<exists> name1 args1 rets1 body1 name2 args2 rets2 body2 fs' .
+        l1h = (YulFunctionDefinitionStatement (YulFunctionDefinition name1 args1 rets1 body1)) \<and>
+        l2h = (YulFunctionDefinitionStatement (YulFunctionDefinition name2 args2 rets2 body2)) \<and>
+        alpha_equiv_check_decls l1t l2t = Some (vs, fs') \<and>
+        fs = (name1, name2)#fs') \<or>
+      ((case l1h of
+        YulVariableDeclarationStatement _ \<Rightarrow> False
+        | YulFunctionDefinitionStatement _ \<Rightarrow> False
+        | _ \<Rightarrow> True) \<and>
+       (case l2h of
+        YulVariableDeclarationStatement _ \<Rightarrow> False
+        | YulFunctionDefinitionStatement _ \<Rightarrow> False
+        | _ \<Rightarrow> True) \<and> alpha_equiv_check_decls l1t l2t = Some x))"
+*)
   obtain locs0 funcs0 locs1 funcs1 where
     Split : "alpha_equiv_check_decls t1 t2 = Some (locs1, funcs1)"
        "locs' = locs0 @ locs1" "funcs' = funcs0 @ funcs1"
-    using
-      alpha_equiv_check_decls_tail[OF Cons1.prems(3)[unfolded Cons2] Cons1.prems(1)[unfolded Cons2]]
-    by auto
-
-  show ?case using Cons1.IH[OF Split(1) Cons1.prems(2)] Cons1.prems(3)
-    unfolding Cons2
-    
-    then show ?case using Cons1 alpha_equiv_funs_trunc
-      apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
+    sorry
+  show ?case using Cons1.IH[OF Split(1) Cons1.prems(2)] Cons1.prems(3) 
+    using Cons1.prems alpha_equiv_funs_trunc
+      apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def 
        get_fun_decls_def get_var_decls_def Let_def split:if_splits)
-
       apply(clarsimp)
-lemma alpha_equiv_gather_funs :
-
-  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
-  assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
-     sts1 sts2"
-  assumes Gather1 :
-    "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1) sts1 =
-      Inl fs1"
-  assumes Gather2 :
-     "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2) sts2 =
-       Inl fs2"
-  assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
-
-  shows "alpha_equiv_funs' vsubst' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
-     (combine_keep funs1
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>)) fs1))
-     (combine_keep funs2
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>)) fs2))"
-  using assms
-proof(induction sts1 arbitrary: sts2 locs' funcs' funs1 fs1 funs2 fs2 vsubst' fsubst)
-  case Nil1 : Nil
-
-  have Nil2 : "sts2 = []"
-    using Nil1
-    by(cases sts2; auto simp add: alpha_equiv_check_decls_def alpha_equiv_funs'_def Let_def split:if_split_asm)
-
-  then show ?case using Nil1
-    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def alpha_equiv_check_decls_def
-get_fun_decls_def get_var_decls_def)
-    apply(cases funs1; auto)
-    apply(cases funs2; auto)
-next
-  case (Cons a sts1)
-  then show ?case sorry
-qed
-
-(* need a lemma about alpha_equiv_stackEl'
- * and consing onto the front of the vars/funs lists.
- *)
-
-(* need a lemma relating gatherYulFunctions and get_fun_decls *)
-
-(*  *)
 
 lemma alpha_equiv_step :
   assumes Hc1 : "cont r1 = (c1h#c1t)"
@@ -1385,6 +2003,7 @@ proof(cases c1h)
       using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls
         alpha_equiv_locals_f_change[of vsubst' fsubst "locals r1" "locals r2" 
           "(zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)"]
+
       apply(auto simp add: alpha_equiv_results'_def)
 (* 2 things needed here.
 1. alpha_equiv_fun' of inputs implies alpha_equiv_funs' when updating the
