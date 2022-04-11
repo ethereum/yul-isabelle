@@ -1331,7 +1331,7 @@ induction on number of function decls in sts.
 *) 
 (*declare [[show_types]]*)
 
-lemma alpha_equiv_expr_fun_empty :
+lemma alpha_equiv_expr_fun_empty_2clause :
   fixes x1 :: "(String.literal, 'a, 'b) YulFunctionCall'"
   fixes st1 :: "(String.literal, 'a, 'b) YulExpression'"
   shows "(\<forall> vsubst fsubst x2 f1 es1 f2 es2 . 
@@ -1343,12 +1343,6 @@ lemma alpha_equiv_expr_fun_empty :
 proof(induction rule: YulFunctionCall'_YulExpression'.induct)
 
   case H : (YulFunctionCall x1 x2)
-(*
-  assume H: "(\<And>x2a::(String.literal, 'a, 'b) YulExpression'.
-           x2a \<in> set x2 \<Longrightarrow>
-           \<forall>(vsubst::(String.literal \<times> String.literal) list list) (fsubst::(String.literal \<times> String.literal) list list)
-              st2::(String.literal, 'a, 'b) YulExpression'. alpha_equiv_expr' vsubst fsubst x2a st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x2a st2)"
-*)
   hence H' : "(\<And>x2a::(String.literal, 'a, 'b) YulExpression'.
            x2a \<in> set x2 \<Longrightarrow>
            (\<And>(vsubst::(String.literal \<times> String.literal) list list) (fsubst::(String.literal \<times> String.literal) list list)
@@ -1368,8 +1362,48 @@ proof(induction rule: YulFunctionCall'_YulExpression'.induct)
     assume Hi1 : "alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression (YulFunctionCall x1 x2)) (YulFunctionCallExpression x2a)"
     assume Hi2 : "YulFunctionCall x1 x2 = YulFunctionCall f1 es1"
     assume Hi3 : "x2a = YulFunctionCall f2 es2" 
+
+    have Subexps : "list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+    proof(rule list_all2I)
+      show "\<forall>x\<in>set (zip es1 es2).
+       case x of (x, xa) \<Rightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x xa"
+      proof
+        fix y
+        assume Y: "y \<in> set (zip es1 es2)"
+        
+        obtain y1 y2 where Y' : "y = (y1, y2)"
+          by(cases y; auto)
+
+        have Y1 : "y1 \<in> set es1" using set_zip_leftD[OF Y[unfolded Y']] 
+          by auto
+
+        have Y2 : "y2 \<in> set es2" using set_zip_rightD[OF Y[unfolded Y']] 
+          by auto
+
+        have X2eq : "es1 = x2" using Hi2 by auto
+
+        have Subs : "list_all2 (alpha_equiv_expr' vsubst fsubst) es1 es2"
+          using Hi1 Hi2 Hi3 Y'
+          by(auto simp add: )
+
+        then have Y_equiv : "(alpha_equiv_expr' vsubst (fsubst)) y1 y2"
+          using Y' Y
+          unfolding list_all2_iff
+          by(auto simp add: )
+
+        show "case y of (x, xa) \<Rightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x xa"
+          using H'[OF Y1[unfolded X2eq] Y_equiv] Y'
+          by auto
+      qed
+    next
+      show "length es1 = length es2"
+        using Hi1 Hi2 Hi3 List.list_all2_lengthD
+        by(auto)
+    qed
+
     show "alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
-      using H'
+      using H' Hi1 Hi2 Hi3 Subexps
+      by(auto simp add: alpha_equiv_name'_def)
   qed
   then show " \<forall>(vsubst::(String.literal \<times> String.literal) list list) (fsubst::(String.literal \<times> String.literal) list list)
           (x2a::(String.literal, 'a, 'b) YulFunctionCall') (f1::String.literal) (es1::(String.literal, 'a, 'b) YulExpression' list) (f2::String.literal)
@@ -1379,47 +1413,17 @@ proof(induction rule: YulFunctionCall'_YulExpression'.induct)
           x2a = YulFunctionCall f2 es2 \<longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
     by blast
 next
-  
-  
-  fix vsubst fsubst x2a f1 es1 f2 es2
-
-    assume "alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression (YulFunctionCall x1 x2)) (YulFunctionCallExpression x2a)"
-
-  case H: (YulFunctionCall x1x x2x)
-
-  have Conc' : "\<And> (x1::(String.literal, 'a, 'b) YulFunctionCall') (vsubst::(String.literal \<times> String.literal) list list)
-       (fsubst::(String.literal \<times> String.literal) list list) (x2::(String.literal, 'a, 'b) YulFunctionCall') (f1::String.literal)
-       (es1::(String.literal, 'a, 'b) YulExpression' list) (f2::String.literal) es2::(String.literal, 'a, 'b) YulExpression' list.
-       alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<Longrightarrow>
-       x1 = YulFunctionCall f1 es1 \<Longrightarrow>
-       x2 = YulFunctionCall f2 es2 \<Longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
-  proof-
-    fix x1 :: "(String.literal, 'a, 'b) YulFunctionCall'"
-    fix vsubst fsubst x2 f1 es1 f2 es2
-
-    assume Hi1: "alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2)"
-    assume Hi2 : "x1 = YulFunctionCall f1 es1"
-    assume Hi3 : "x2 = YulFunctionCall f2 es2"
-
-    show "alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
-      using Hi1 Hi2 Hi3 H
-      apply(auto simp add: alpha_equiv_name'_def)
-      sorry
-  qed
-
-  then show ?case by blast
-next
   case H: (YulFunctionCallExpression x)
 
-  have H' : "\<And> (x1 :: (String.literal, 'a, 'b) YulFunctionCall') vsubst fsubst x2 f1 es1 f2 es2.
-     alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<Longrightarrow>
-     x1 = YulFunctionCall f1 es1 \<Longrightarrow>
+  have H' : "\<And> vsubst fsubst (x2 :: (String.literal, 'a, 'b) YulFunctionCall') f1 es1 f2 es2.
+     alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x) (YulFunctionCallExpression x2) \<Longrightarrow>
+     x = YulFunctionCall f1 es1 \<Longrightarrow>
      x2 = YulFunctionCall f2 es2 \<Longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
   proof-
-    fix x1 :: "((String.literal, 'a, 'b) YulFunctionCall')"
-    fix vsubst fsubst x2 f1 es1 f2 es2
-    assume Hi1 : "alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2)"
-    assume Hi2 : "x1 = YulFunctionCall f1 es1"
+    fix x2 :: "((String.literal, 'a, 'b) YulFunctionCall')"
+    fix vsubst fsubst f1 es1 f2 es2
+    assume Hi1 : "alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x) (YulFunctionCallExpression x2)"
+    assume Hi2 : "x = YulFunctionCall f1 es1"
     assume Hi3 : "x2 = YulFunctionCall f2 es2" 
     show "alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
       using H Hi1 Hi2 Hi3
@@ -1451,102 +1455,296 @@ next
 next
   case H : (YulIdentifier x)
 
-  then show ?case
-    sorry
+  have Conc' : "\<And> vsubst fsubst (st2 :: (String.literal, 'a, 'b) YulExpression').
+            alpha_equiv_expr' vsubst fsubst (YulIdentifier x) st2 \<Longrightarrow>
+            alpha_equiv_expr' vsubst ([] # fsubst) (YulIdentifier x) st2"
+  proof-
+    fix st2 :: "(String.literal, 'a, 'b) YulExpression'"
+    fix vsubst fsubst
+    assume "alpha_equiv_expr' vsubst fsubst (YulIdentifier x) st2"
+    then show "alpha_equiv_expr' vsubst ([] # fsubst) (YulIdentifier x) st2"
+      by(cases st2; auto )
+  qed
+  then show ?case by blast
 next
   case H : (YulLiteralExpression x)
-  then show ?case
-    sorry
+  have Conc' : "\<And> vsubst fsubst (st2 :: (String.literal, 'a, 'b) YulExpression').
+            alpha_equiv_expr' vsubst fsubst (YulLiteralExpression x) st2 \<Longrightarrow>
+            alpha_equiv_expr' vsubst ([] # fsubst) (YulLiteralExpression x) st2"
+  proof-
+    fix st2 :: "(String.literal, 'a, 'b) YulExpression'"
+    fix vsubst fsubst
+    assume "alpha_equiv_expr' vsubst fsubst (YulLiteralExpression x) st2"
+    then show "alpha_equiv_expr' vsubst ([] # fsubst) (YulLiteralExpression x) st2"
+      by(cases st2; auto )
+  qed
+  then show ?case by blast
 qed
 
-    show "\<And>(x1 :: String.literal) x2.
-       (\<And>(x2a :: (String.literal, 'a, 'b) YulExpression') . x2a \<in> set x2 \<Longrightarrow> \<forall>vsubst fsubst st2. alpha_equiv_expr' vsubst fsubst x2a st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x2a st2) \<Longrightarrow>
-       \<forall>x1 vsubst fsubst x2 f1 es1 f2 es2.
-          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<longrightarrow>
-          x1 = YulFunctionCall f1 es1 \<longrightarrow>
-          x2 = YulFunctionCall f2 es2 \<longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
-    proof-
-      fix x1 :: "String.literal"
-      fix x2 :: "((String.literal, 'a, 'b) YulExpression') list"
+(* YOU ARE HERE.
+ * either need alpha equiv for switch cases,
+ * or otherwise rewrite the second clause *)
+lemma alpha_equiv_expr_fun_empty :
+  assumes "alpha_equiv_expr' vsubst fsubst st1 st2"
+  shows "alpha_equiv_expr' vsubst ([] # fsubst) st1 st2"
+  using assms alpha_equiv_expr_fun_empty_2clause
+  by blast
+term "YulFunctionDefinition"
+lemma alpha_equiv_statement_fun_empty' :
+  fixes st1 :: "(String.literal, 'a, 'b) YulStatement'"
+  fixes sc :: "(String.literal, 'a, 'b) YulSwitchCase'"
+  fixes fd :: "(String.literal, 'a, 'b) YulFunctionDefinition'"
+  shows "(\<forall> vsubst fsubst st2 . alpha_equiv_statement' vsubst fsubst st1 st2 \<longrightarrow> alpha_equiv_statement' vsubst ([] # fsubst) st1 st2) \<and>
+         (\<forall> vsubst fsubst lit sts sts2 sc2 e1 e2 . sc = YulSwitchCase lit sts \<longrightarrow> list_all2 (alpha_equiv_statement' vsubst fsubst) sts sts2 \<longrightarrow>
+            list_all2 (alpha_equiv_statement' vsubst fsubst) sts sts2) \<and>
+         (\<forall> vsubst fsubst st2 . alpha_equiv_statement' vsubst fsubst (YulFunctionDefinitionStatement fd) st2 \<longrightarrow> alpha_equiv_statement' vsubst ([] # fsubst) (YulFunctionDefinitionStatement fd) st2)"
+proof(induction  rule: YulStatement'_YulSwitchCase'_YulFunctionDefinition'.induct)
+  case C: (YulFunctionCallStatement x)
 
-      assume Hset : "(\<And>x2a. x2a \<in> set x2 \<Longrightarrow> \<forall>vsubst fsubst st2. alpha_equiv_expr' vsubst fsubst x2a st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x2a st2)"
+  obtain a b where AB: "x =  YulFunctionCall a b"
+    by(cases x; auto)
 
-      show "\<forall>x1 vsubst fsubst x2 f1 es1 f2 es2.
-          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<longrightarrow>
-          x1 = YulFunctionCall f1 es1 \<longrightarrow>
-          x2 = YulFunctionCall f2 es2 \<longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
-      proof-
-        fix x1 :: "(String.literal, 'e, 'f) YulFunctionCall'" 
-        fix vsubst :: "((String.literal \<times> String.literal) list list)"
-        fix fsubst x2 f1 es1 f2 es2
+  have Conc' : "\<And> vsubst fsubst st2.
+            alpha_equiv_statement' vsubst fsubst (YulFunctionCallStatement x)
+             st2 \<Longrightarrow>
+            alpha_equiv_statement' vsubst ([] # fsubst)
+             (YulFunctionCallStatement x) st2"
+  proof-
+    fix vsubst fsubst
+    fix st2 :: "(String.literal, 'a, 'b) YulStatement'"
 
-        assume H' : "
-           alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<Longrightarrow>
-           x1 = YulFunctionCall f1 es1 \<Longrightarrow>
-           x2 = YulFunctionCall f2 es2"
+    assume H: "alpha_equiv_statement' vsubst fsubst (YulFunctionCallStatement x) st2"
 
-        show "alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
-      sorry
-  next
-    show "\<And>x. \<forall>vsubst fsubst st2. alpha_equiv_expr' vsubst fsubst (YulIdentifier x) st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) (YulIdentifier x) st2"
-      sorry
-  next
-    show "\<And>x. \<forall>vsubst fsubst st2.
-            alpha_equiv_expr' vsubst fsubst (YulLiteralExpression x) st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) (YulLiteralExpression x) st2"
-      sorry
+    obtain x2 where X2: "st2 = YulFunctionCallStatement x2"
+      using H AB
+      by(cases st2; auto)
+
+    then obtain f g where FG : "x2 = YulFunctionCall f g"
+      by(cases x2; auto)
+
+    have Final : "list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) b g"
+    proof(rule list_all2I)
+      show "\<forall>x\<in>set (zip b g).
+       case x of (x, xa) \<Rightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x xa"
+      proof
+        fix w
+        assume W: "w \<in> set (zip b g)"
+
+        obtain w1 w2 where W' : "w = (w1, w2)"
+          by(cases w; auto)
+
+        have W1 : "w1 \<in> set b" using set_zip_leftD[OF W[unfolded W']] 
+          by auto
+
+        have W2 : "w2 \<in> set g" using set_zip_rightD[OF W[unfolded W']] 
+          by auto
+
+        have Subs : "list_all2 (alpha_equiv_expr' vsubst fsubst) b g"
+          using AB H X2 FG W'
+          by(auto simp add: )
+
+        then have W_equiv : "(alpha_equiv_expr' vsubst (fsubst)) w1 w2"
+          using W' W
+          unfolding list_all2_iff
+          by(auto simp add: )
+
+        show "case w of (x, xa) \<Rightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x xa"
+          using alpha_equiv_expr_fun_empty[OF W_equiv] W'
+          by auto
+      qed
+    next
+      show "length b = length g"
+        using AB H X2 FG List.list_all2_lengthD
+        by(auto)
+    qed
+
+    then show "alpha_equiv_statement' vsubst ([] # fsubst) (YulFunctionCallStatement x)
+        st2" using AB X2 H FG
+      by(auto)
   qed
 
-    case H: (YulFunctionCallExpression x1)
-    (*fix x2 :: "(String.literal, 'a, 'b) YulExpression' list"*)
-    have H' : "\<And> (x1 :: (String.literal, 'a, 'b) YulFunctionCall') vsubst fsubst x2 f1 es1 f2 es2.
-     alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<Longrightarrow>
-     x1 = YulFunctionCall f1 es1 \<Longrightarrow>
-     x2 = YulFunctionCall f2 es2 \<Longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
-      using H
-      by blast
+  then show ?case by blast
+next
+  case C: (YulAssignmentStatement x)
 
-   (* assume Hset : "(\<And>x2a. x2a \<in> set x2 \<Longrightarrow> \<forall>vsubst fsubst st2. alpha_equiv_expr' vsubst fsubst x2a st2 \<longrightarrow> alpha_equiv_expr' vsubst ([] # fsubst) x2a st2)"*)
+  obtain a b where AB: "x =  YulAssignment a b"
+    by(cases x; auto)
 
-    have Conc' : "\<And> x1 vsubst fsubst x2 f1 es1 f2 es2.
-          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<Longrightarrow>
-          x1 = YulFunctionCall f1 es1 \<Longrightarrow>
-          x2 = YulFunctionCall f2 es2 \<Longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
-      sorry
+  have Conc' : "\<And> vsubst fsubst st2.
+            alpha_equiv_statement' vsubst fsubst (YulAssignmentStatement x)
+             st2 \<Longrightarrow>
+            alpha_equiv_statement' vsubst ([] # fsubst)
+             (YulAssignmentStatement x) st2"
+  proof-
+    fix vsubst fsubst
+    fix st2 :: "(String.literal, 'a, 'b) YulStatement'"
 
-    show " \<forall>x1 vsubst fsubst x2 f1 es1 f2 es2.
-          alpha_equiv_expr' vsubst fsubst (YulFunctionCallExpression x1) (YulFunctionCallExpression x2) \<longrightarrow>
-          x1 = YulFunctionCall f1 es1 \<longrightarrow>
-          x2 = YulFunctionCall f2 es2 \<longrightarrow> alpha_equiv_name' ([] # fsubst) f1 f2 \<and> list_all2 (alpha_equiv_expr' vsubst ([] # fsubst)) es1 es2"
+    assume H: "alpha_equiv_statement' vsubst fsubst (YulAssignmentStatement x) st2"
+
+    obtain x2 where X2: "st2 = YulAssignmentStatement x2"
+      using H AB
+      by(cases st2; auto)
+
+    then obtain f g where FG : "x2 = YulAssignment f g"
+      by(cases x2; auto)
+
+    have Subs : " (alpha_equiv_expr' vsubst fsubst) b g"
+      using AB H X2 FG
+      by(auto simp add: )
+
+    then have Final : "(alpha_equiv_expr' vsubst ([] # fsubst)) b g"
+      using alpha_equiv_expr_fun_empty[OF Subs]
+      by auto
+
+    then show "alpha_equiv_statement' vsubst ([] # fsubst) (YulAssignmentStatement x)
+        st2" using AB X2 H FG
+      by(auto)
+  qed
+
+  then show ?case by blast
+next
+  case C: (YulVariableDeclarationStatement x)
+
+  obtain a b where AB: "x =  YulVariableDeclaration a b"
+    by(cases x; auto)
+
+  have Conc' : "\<And> vsubst fsubst st2.
+            alpha_equiv_statement' vsubst fsubst (YulVariableDeclarationStatement x)
+             st2 \<Longrightarrow>
+            alpha_equiv_statement' vsubst ([] # fsubst)
+             (YulVariableDeclarationStatement x) st2"
+  proof-
+    fix vsubst fsubst
+    fix st2 :: "(String.literal, 'a, 'b) YulStatement'"
+
+    assume H: "alpha_equiv_statement' vsubst fsubst (YulVariableDeclarationStatement x) st2"
+
+    obtain x2 where X2: "st2 = YulVariableDeclarationStatement x2"
+      using H AB
+      by(cases st2; auto)
+
+    then obtain f g where FG : "x2 = YulVariableDeclaration f g"
+      by(cases x2; auto)
+
+    show "alpha_equiv_statement' vsubst ([] # fsubst) (YulVariableDeclarationStatement x) st2"
+    proof(cases b)
+      case None
+      then show ?thesis using AB X2 H FG
+      by(auto)
+    next
+      case (Some b')
+
+      then obtain g' where Some' : "g = Some g'"
+        using H X2 FG AB
+        by(cases g; auto)
 
       then show ?thesis
-    apply(cases x1; cases st2; auto)
-    apply(case_tac x1aa; auto)
-  next
-  case (YulIdentifier x2)
-  then show ?thesis sorry
+        using H X2 FG AB Some alpha_equiv_expr_fun_empty
+        by(auto)
+    qed
+  qed
+  then show ?case by blast
 next
-  case (YulLiteralExpression x3)
-  then show ?thesis sorry
+
+  case C: (YulFunctionDefinitionStatement x)
+
+  obtain a b c d where AB: "x =  YulFunctionDefinition a b c d"
+    by(cases x; auto)
+
+  have Hyp' : "\<And> vsubst fsubst st2.
+            alpha_equiv_statement' vsubst fsubst
+             (YulFunctionDefinitionStatement x) st2 \<Longrightarrow>
+            alpha_equiv_statement' vsubst ([] # fsubst)
+             (YulFunctionDefinitionStatement x) st2 "
+    using C by blast
+
+  have Conc' : "\<And> vsubst fsubst st2.
+            alpha_equiv_statement' vsubst fsubst (YulFunctionDefinitionStatement x)
+             st2 \<Longrightarrow>
+            alpha_equiv_statement' vsubst ([] # fsubst)
+             (YulFunctionDefinitionStatement x) st2"
+  proof-
+    fix vsubst fsubst
+    fix st2 :: "(String.literal, 'a, 'b) YulStatement'"
+
+    assume H: "alpha_equiv_statement' vsubst fsubst (YulFunctionDefinitionStatement x) st2"
+
+    obtain x2 where X2: "st2 = YulFunctionDefinitionStatement x2"
+      using H AB
+      by(cases st2; auto)
+
+    then obtain f g h i where FG : "x2 = YulFunctionDefinition f g h i"
+      by(cases x2; auto)
+
+    show "alpha_equiv_statement' vsubst ([] # fsubst) (YulFunctionDefinitionStatement x) st2"
+      using Hyp'[OF H]
+      by auto
+  qed
+  then show ?case by blast
+next
+  case C: (YulIf x1 x2)
+
+  have Hyp' : "\<And> s . s \<in> set x2 \<Longrightarrow>
+    (\<And> vsubst fsubst st2.
+     alpha_equiv_statement' vsubst fsubst s st2 \<longrightarrow>
+     alpha_equiv_statement' vsubst ([] # fsubst) s st2)"
+    using C by blast
+
+  have Conc' : "\<And> vsubst fsubst st2.
+          alpha_equiv_statement' vsubst fsubst (YulIf x1 x2) st2 \<Longrightarrow>
+          alpha_equiv_statement' vsubst ([] # fsubst) (YulIf x1 x2) st2"
+  proof-
+    fix vsubst fsubst
+    fix vsubst fsubst
+    fix st2 :: "(String.literal, 'a, 'b) YulStatement'"
+
+    assume H: "alpha_equiv_statement' vsubst fsubst (YulIf x1 x2) st2"
+
+    obtain y1 y2 where Y: "st2 = YulIf y1 y2"
+      using H
+      by(cases st2; auto)
+
+    have E : "alpha_equiv_expr' vsubst ([] # fsubst) x1 y1" 
+      using H Y alpha_equiv_expr_fun_empty
+      by(auto)
+
+    obtain locs funcs where Decls : "alpha_equiv_check_decls x2 y2 = Some (locs, funcs)"
+      using H Y
+      by(auto split: option.split_asm)
+
+    show "alpha_equiv_statement' vsubst ([] # fsubst) (YulIf x1 x2) st2"
+      using Hyp' Y E Decls
+      apply auto    
+    sorry
+
+  then show ?case by blast
+next
+  case (YulSwitch x1 x2)
+  then show ?case sorry
+next
+  case (YulForLoop x1 x2 x3 x4)
+then show ?case sorry
+next
+  case YulBreak
+then show ?case sorry
+next
+  case YulContinue
+  then show ?case sorry
+next
+  case YulLeave
+  then show ?case sorry
+next
+case (YulBlock x)
+  then show ?case sorry
+next
+case (YulSwitchCase x1 x2)
+  then show ?case sorry
+next
+case (YulFunctionDefinition x1 x2 x3 x4)
+  then show ?case sorry
 qed
 
-
-lemma alpha_equiv_statement_fun_empty :
-  assumes H : "alpha_equiv_statement' vsubst fsubst st1 st2"
-  shows "alpha_equiv_statement' vsubst ([] # fsubst) st1 st2" using assms
-proof(induction st1)
-  case (YulFunctionCallStatement x1)
-  then show ?case
-    apply(cases x1; cases st2; auto)
-    apply(case_tac x1aa; auto)
-    sorry
-next
-  case (YulAssignmentStatement x2)
-  then show ?thesis sorry
-next
-  case (YulVariableDeclarationStatement x3)
-  then show ?thesis sorry
-next
-  case (YulFunctionDefinitionStatement x4)
+  case (YulFunctionDefinitionStatement x)
   then show ?thesis sorry
 next
   case (YulIf x51 x52)
@@ -1637,14 +1835,8 @@ split: option.splits)
     apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def)
 qed
 
-  apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def)
-  apply(case_tac "f_sig_body s1"; auto)
-  apply(case_tac "f_sig_body s2"; auto)
-  apply(case_tac "alpha_equiv_check_decls x2 x2a"; auto)
-
-(* this induction doesn't seem to work either... *)
 lemma alpha_equiv_gather_funs'_combine :
-  assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
+  assumes Decls : "alpha_equiv_check_decls (pre1 @ sts1) (pre2 @ sts2) = Some (locs', funcs')"
   assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
   assumes Sts : "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst))
      sts1 sts2"
@@ -1662,39 +1854,7 @@ lemma alpha_equiv_gather_funs'_combine :
        (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>))
          fs2))"
   using assms
-proof(induction funcs' arbitrary: sts1 sts2 locs' funs1 fs1 funs1 funs2 fs2 vsubst' fsubst)
-  case Nil1 : Nil
-
-  have Nil1' : "get_fun_decls sts1 = []" "get_fun_decls sts2 = []"
-    using alpha_equiv_check_decls_result[OF Nil1.prems(1)]
-    by auto
-
-  have X1 : "fs1 = (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs1)"
-    sorry
-
-  have X2 : "fs2 = (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) funs2)"
-    sorry
-
-  show ?case using Nil1 Nil1' X1 X2
-    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def)
-
-  then show ?case
-    apply(auto)
-    sorry
-next
-  case Cons1 : (Cons fs1h fs1t)
-
-(* YOU ARE HERE *)
-(*  *)
-  show ?case
-  proof(rule Cons1.IH[OF ])
-
-    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def)
-next
-  case Cons1 : (Cons h1 t1)
-
-  using assms
-proof(induction sts1 arbitrary: sts2 locs' funcs' funs1 fs1 funs2 fs2 vsubst' fsubst)
+proof(induction sts1 arbitrary: pre1 pre2 sts2 locs' funcs' funs1 fs1 funs2 fs2 vsubst' fsubst)
   case Nil1 : Nil
 
   have Nil2 : "sts2 = []"
@@ -1702,20 +1862,35 @@ proof(induction sts1 arbitrary: sts2 locs' funcs' funs1 fs1 funs2 fs2 vsubst' fs
     by(cases sts2; auto)
 
   then show ?case using Nil1 alpha_equiv_funs_trunc[OF Nil1(2)]
-    by(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def
-get_fun_decls_def get_var_decls_def)
+    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def)
+    sorry
 next
   case Cons1 : (Cons h1 t1)
 
   then obtain h2 t2 where Cons2 : "sts2 = h2#t2"
     by(cases sts2; auto)
 
+  have Reassoc :
+    "alpha_equiv_check_decls ((pre1 @ [h1]) @ t1) ((pre2 @ [h2]) @ t2) = Some (locs', funcs')"
+    using Cons1.prems Cons2
+    by auto
+
+  have Eqv_tl :
+    "list_all2 (alpha_equiv_statement' (locs' # vsubst') (funcs' # fsubst)) t1 t2"
+    using Cons1.prems
+    unfolding Cons2
+    by(auto)
+
+  show ?case
+    using Cons1.IH[OF Reassoc Cons1.prems(2) Eqv_tl] Cons1.prems
+
+
   consider 
-    (1) "(h1#t1 = [] \<and> sts2 = [] \<and> (locs', funcs') = ([], []))" |
+    (1) "(pre1 @ h1#t1 = [] \<and> pre2 @ sts2 = [] \<and> (locs', funcs') = ([], []))" |
     (2) l1h l1t l2h l2t fs vs decls1 v1 decls2 v2 vs' where 
       "(locs', funcs') = (vs, fs)"
-      "h1#t1 = l1h # l1t"
-      "sts2 = l2h # l2t"
+      "pre1 @ h1#t1 = l1h # l1t"
+      "pre2 @ sts2 = l2h # l2t"
       "yul_statement_same_constructor l1h l2h"
       "l1h = (YulVariableDeclarationStatement (YulVariableDeclaration decls1 v1))"
       "l2h = (YulVariableDeclarationStatement (YulVariableDeclaration decls2 v2))"
@@ -1724,8 +1899,8 @@ next
                   (map (\<lambda> x . case x of (YulTypedName n _) \<Rightarrow> n) decls2)) @ vs')" |
     (3) l1h l1t l2h l2t fs vs name1 args1 rets1 body1 name2 args2 rets2 body2 fs' where
       "(locs', funcs') = (vs, fs)"
-      "h1#t1 = l1h # l1t"
-      "sts2 = l2h # l2t"
+      "pre1 @ h1#t1 = l1h # l1t"
+      "pre2 @ sts2 = l2h # l2t"
       "yul_statement_same_constructor l1h l2h"
       "l1h = (YulFunctionDefinitionStatement (YulFunctionDefinition name1 args1 rets1 body1))"
       "l2h = (YulFunctionDefinitionStatement (YulFunctionDefinition name2 args2 rets2 body2))"
@@ -1733,8 +1908,8 @@ next
       "fs = (name1, name2)#fs'" |
     (4) l1h l1t l2h l2t fs vs where
     "(locs', funcs') = (vs, fs)"
-     "h1#t1 = l1h # l1t"
-     "sts2 = l2h # l2t"
+     "pre1 @ h1#t1 = l1h # l1t"
+     "pre2 @ sts2 = l2h # l2t"
      "yul_statement_same_constructor l1h l2h"
     "(case l1h of
         YulVariableDeclarationStatement _ \<Rightarrow> False
@@ -1746,7 +1921,7 @@ next
         | _ \<Rightarrow> True)"
     "alpha_equiv_check_decls l1t l2t = Some (locs', funcs')"
     using alpha_equiv_check_decls_cases_alt[OF Cons1.prems(1)] unfolding Cons2
-    by(clarsimp; metis)
+    by(auto)
 
   then show ?case
   proof cases
@@ -1816,7 +1991,7 @@ next
       apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def 
        get_fun_decls_def get_var_decls_def Let_def split:if_splits)
       apply(clarsimp)
-
+*)
 lemma alpha_equiv_step :
   assumes Hc1 : "cont r1 = (c1h#c1t)"
   assumes Hc2 : "cont r2 = (c2h#c2t)"
