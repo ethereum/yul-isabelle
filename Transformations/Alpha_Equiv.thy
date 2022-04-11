@@ -1329,7 +1329,7 @@ we actually know that there are no conflicts.
 
 induction on number of function decls in sts.
 *) 
-declare [[show_types]]
+(*declare [[show_types]]*)
 
 lemma alpha_equiv_expr_fun_empty :
   fixes x1 :: "(String.literal, 'a, 'b) YulFunctionCall'"
@@ -1532,12 +1532,13 @@ qed
 
 lemma alpha_equiv_statement_fun_empty :
   assumes H : "alpha_equiv_statement' vsubst fsubst st1 st2"
-  shows "alpha_equiv_statement' vsubst ([] # fsubst) st1 st2"
-proof(cases st1)
+  shows "alpha_equiv_statement' vsubst ([] # fsubst) st1 st2" using assms
+proof(induction st1)
   case (YulFunctionCallStatement x1)
-  then show ?thesis using H
+  then show ?case
     apply(cases x1; cases st2; auto)
     apply(case_tac x1aa; auto)
+    sorry
 next
   case (YulAssignmentStatement x2)
   then show ?thesis sorry
@@ -1641,7 +1642,7 @@ qed
   apply(case_tac "f_sig_body s2"; auto)
   apply(case_tac "alpha_equiv_check_decls x2 x2a"; auto)
 
-
+(* this induction doesn't seem to work either... *)
 lemma alpha_equiv_gather_funs'_combine :
   assumes Decls : "alpha_equiv_check_decls sts1 sts2 = Some (locs', funcs')"
   assumes Equiv : "alpha_equiv_funs' vsubst' fsubst funs1 funs2"
@@ -1683,13 +1684,12 @@ proof(induction funcs' arbitrary: sts1 sts2 locs' funs1 fs1 funs1 funs2 fs2 vsub
 next
   case Cons1 : (Cons fs1h fs1t)
 
-  have Nil2 : "sts2 = []"
-    using Nil1
-    by(cases sts2; auto)
+(* YOU ARE HERE *)
+(*  *)
+  show ?case
+  proof(rule Cons1.IH[OF ])
 
-  then show ?case using Nil1 alpha_equiv_funs_trunc[OF Nil1(2)]
-    by(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def
-get_fun_decls_def get_var_decls_def)
+    apply(auto simp add: alpha_equiv_funs'_def alpha_equiv_fun_def)
 next
   case Cons1 : (Cons h1 t1)
 
