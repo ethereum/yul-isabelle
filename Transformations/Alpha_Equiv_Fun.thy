@@ -386,15 +386,16 @@ and/or
 *)
 
 definition alpha_equiv_fun ::
-  "subst \<Rightarrow> (YulIdentifier * ('g, 'v, 't, 'z) function_sig'_scheme) \<Rightarrow> (YulIdentifier * ('g, 'v, 't, 'z) function_sig'_scheme) \<Rightarrow> bool"
+  "subst \<Rightarrow> (YulIdentifier * ('g, 'v, 't, 'z) function_sig_scheme) \<Rightarrow> (YulIdentifier * ('g, 'v, 't, 'z) function_sig_scheme) \<Rightarrow> bool"
   where
 "alpha_equiv_fun fsubst fun1 fun2 =
   (case fun1 of (n1, s1) \<Rightarrow>
   (case fun2 of (n2, s2) \<Rightarrow>
-  (alpha_equiv_function_sig'_scheme fsubst n1 s1 n2 s2)))"
+  (list_all2 (alpha_equiv_name' fsubst) (f_sig_visible s1) (f_sig_visible s2) \<and>
+   alpha_equiv_function_sig'_scheme fsubst n1 s1 n2 s2)))"
 
 definition alpha_equiv_funs' ::
-  "subst \<Rightarrow> ('g, 'v, 't, 'z) function_sig'_scheme locals \<Rightarrow> ('g, 'v, 't, 'z) function_sig'_scheme locals \<Rightarrow> bool"
+  "subst \<Rightarrow> ('g, 'v, 't, 'z) function_sig_scheme locals \<Rightarrow> ('g, 'v, 't, 'z) function_sig_scheme locals \<Rightarrow> bool"
   where
 "alpha_equiv_funs' fsubst funs1 funs2 =
   list_all2 (alpha_equiv_fun fsubst) funs1 funs2"
@@ -521,7 +522,7 @@ next
       by(cases l1h; cases l2h; auto simp add: alpha_equiv_locals'_def)
   qed
 qed
-
+(*
 lemma alpha_equiv_fun_trunc :
   assumes H: "alpha_equiv_fun fsubst fun1 fun2"
   shows "alpha_equiv_fun fsubst
@@ -579,7 +580,7 @@ proof-
     qed
   qed
 qed
-
+*)
 lemma list_all2_map :
   assumes All2 : "list_all2 P l1 l2"
   assumes F : "\<And> x y . P x y \<Longrightarrow> P' (f x) (g y)"
@@ -603,7 +604,7 @@ next
   show ?case using Cons1.prems Cons1.IH[OF Tl] Cons2
     by(auto)
 qed
-
+(*
 lemma alpha_equiv_funs_trunc :
   assumes H: "alpha_equiv_funs' fsubst funs1 funs2"
   shows "alpha_equiv_funs' fsubst
@@ -616,7 +617,7 @@ lemma alpha_equiv_funs_trunc :
       "(\<lambda>(n, fs). (n, function_sig'.truncate fs))"
       "(\<lambda>(n, fs). (n, function_sig'.truncate fs))"]
   by(blast)
-
+*)
 (*
 lemma alpha_equiv_check_decls_cases :
   assumes H: "alpha_equiv_check_decls l1 l2 = Some x"
@@ -2048,21 +2049,24 @@ next
 qed
 
 
-(* presence/absence of name in funs r1/funs r2 *)
+(* presence/absence of name in funs r1/funs r2
+   need another case for function bodies (?)
+
+ *)
 lemma alpha_equiv_gather_functions :
 assumes Hg1 : "gatherYulFunctions'
   (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1)) sts1 = Inl fs1"
 assumes Hg2 : "gatherYulFunctions'
    (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r2)) sts2 = Inl fs2"
-assumes Heqv :  "list_all2 (alpha_equiv_statement' ((fsubst_pre @ funcs') # fsubst)) sts1 sts2"
+assumes Heqv :  "list_all2 (alpha_equiv_statement' ((pre @ funcs') # fsubst)) sts1 sts2"
 assumes Hcheck : "alpha_equiv_check_decls sts1 sts2 = Some (funcs')"
-shows "list_all2 (alpha_equiv_fun (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+shows "list_all2 (alpha_equiv_fun ((pre @ zip (get_fun_decls sts1) (get_fun_decls sts2)) # fsubst))
      (combine_keep (funs r1)
        (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>)) fs1))
      (combine_keep (funs r2)
        (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>)) fs2))"
   using assms
-proof(induction sts1 arbitrary: sts2 r1 fs1 r2 fs2 funcs' fsubst fsubst_pre )
+proof(induction sts1 arbitrary: sts2 r1 fs1 r2 fs2 funcs' fsubst pre)
   case Nil
   then show ?case
     by(auto)
@@ -2129,10 +2133,6 @@ next
               (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r2))
               stt2"; auto)
 
-    have Eqv_tl : "list_all2 (alpha_equiv_statement' ((fsubst_pre @ funcs') # fsubst)) stt1 stt2"
-      using Cons1.prems Cons2
-      by auto
-
     have Gather1_None :
       "map_of gather1 n1 = None"
       using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2
@@ -2153,11 +2153,35 @@ next
 
     have Func_eq : "funcs' = (n1, n2)#funs_t"
       using check_decls_fun_decls[OF Funs_t] Cons1.prems Cons2 X4 Y4 F1 F2 
-Funs_t Funs_body Gather1 Gather2
-Gather1_None Gather2_None Funs1_None Funs2_None
+        Funs_t Funs_body Gather1 Gather2
+        Gather1_None Gather2_None Funs1_None Funs2_None
       by(auto)
 
-    have Eqv_tl' : "list_all2 (alpha_equiv_statement' (((fsubst_pre @ [(n1, n2)]) @ funs_t) # fsubst)) stt1 stt2"
+    have Eqv' : "list_all2 (alpha_equiv_statement' (((pre @ [(n1, n2)]) @ funs_t) # fsubst)) stt1 stt2"
+      using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
+        Gather1_None Gather2_None Funs1_None Funs2_None
+      by(auto)
+
+(* YOU ARE HERE.
+ * just need to show that visible doesn't matter when
+ * looking at alpha-equivalent states.
+ * But should it matter? *)
+    then show ?thesis
+      using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
+        Gather1_None Gather2_None Funs1_None Funs2_None
+      using Cons1.IH[OF Gather1 Gather2 Eqv' Funs_t]
+      using check_decls_fun_decls[OF Funs_t] 
+        apply(auto)
+        apply(simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def function_sig'.defs
+          split: YulFunctionBody.splits)
+        apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def function_sig'.defs)
+
+    next
+      case (Cons a list)
+      then show ?thesis sorry
+    qed
+
+    have Eqv_tl' : "list_all2 (alpha_equiv_statement' (((n1, n2) # funs_t) # fsubst)) stt1 stt2"
       using Eqv_tl unfolding Func_eq
       by auto
 
