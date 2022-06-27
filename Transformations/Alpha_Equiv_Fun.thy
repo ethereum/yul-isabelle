@@ -183,7 +183,6 @@ fun yul_statement_same_constructor ::
 
 (* stronger version of check_decls
  * should we also check the other statements are the same? probably better to do a different one
- * TODO: make this enforce no-shadowing
  * *)
 fun alpha_equiv_check_decls ::
   "('v, 't) YulStatement list \<Rightarrow> ('v, 't) YulStatement list \<Rightarrow>
@@ -195,7 +194,9 @@ fun alpha_equiv_check_decls ::
   (case alpha_equiv_check_decls t1 t2 of
      None \<Rightarrow> None
      | Some fds \<Rightarrow>
-     Some ((name1, name2)#fds))"
+       (case map_of fds name1 of
+        Some _ \<Rightarrow> None
+        | None \<Rightarrow> Some ((name1, name2)#fds)))"
 | "alpha_equiv_check_decls (h1#t1) (h2#t2) = 
     (if yul_statement_same_constructor h1 h2
      then alpha_equiv_check_decls t1 t2
@@ -2016,7 +2017,7 @@ next
       by(cases f2; auto)
 
     then show ?thesis using Cons1 Cons2 FD1 FD2 F1 F2
-      by(cases "alpha_equiv_check_decls st1t st2t"; auto)
+      by(cases "alpha_equiv_check_decls st1t st2t"; auto split:option.split_asm)
   next
     case (YulIf x51 x52)
     then show ?thesis using Cons1 Cons2
@@ -2049,9 +2050,9 @@ next
 qed
 
 
-(* presence/absence of name in funs r1/funs r2
-   need another case for function bodies (?)
-
+(*need a condition on pre (no repeats?)
+ * this feels like it's getting very complicated.
+ * maybe baking in more invariants into the types would help.
  *)
 lemma alpha_equiv_gather_functions :
 assumes Hg1 : "gatherYulFunctions'
@@ -2060,11 +2061,13 @@ assumes Hg2 : "gatherYulFunctions'
    (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r2)) sts2 = Inl fs2"
 assumes Heqv :  "list_all2 (alpha_equiv_statement' ((pre @ funcs') # fsubst)) sts1 sts2"
 assumes Hcheck : "alpha_equiv_check_decls sts1 sts2 = Some (funcs')"
+assumes Hpre1 : "distinct (map fst (pre @ funcs'))"
+assumes Hpre2 : "distinct (map snd (pre @ funcs'))"
 shows "list_all2 (alpha_equiv_fun ((pre @ zip (get_fun_decls sts1) (get_fun_decls sts2)) # fsubst))
      (combine_keep (funs r1)
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>)) fs1))
+       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst pre @ map fst fs1\<rparr>)) fs1))
      (combine_keep (funs r2)
-       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>)) fs2))"
+       (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map snd pre @ map fst fs2\<rparr>)) fs2))"
   using assms
 proof(induction sts1 arbitrary: sts2 r1 fs1 r2 fs2 funcs' fsubst pre)
   case Nil
@@ -2151,30 +2154,61 @@ next
       using gatherYulFunctions'_notin[OF Gather2 Gather2_None]
       by auto
 
-    have Func_eq : "funcs' = (n1, n2)#funs_t"
+    have Noshadow : "map_of (zip (get_fun_decls stt1) (get_fun_decls stt2)) n1 = None"
       using check_decls_fun_decls[OF Funs_t] Cons1.prems Cons2 X4 Y4 F1 F2 
         Funs_t Funs_body Gather1 Gather2
         Gather1_None Gather2_None Funs1_None Funs2_None
+      by(cases "map_of (zip (get_fun_decls stt1) (get_fun_decls stt2)) n1"; auto)
+
+    have Func_eq : "funcs' = (n1, n2)#funs_t"
+      using check_decls_fun_decls[OF Funs_t] Cons1.prems Cons2 X4 Y4 F1 F2 
+        Funs_t Funs_body Gather1 Gather2
+        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
       by(auto)
+
+    have Noshadow' : "map_of funs_t n1 = None"
+      using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
+        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
+      by(cases "map_of funs_t n1"; auto)
 
     have Eqv' : "list_all2 (alpha_equiv_statement' (((pre @ [(n1, n2)]) @ funs_t) # fsubst)) stt1 stt2"
       using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
-        Gather1_None Gather2_None Funs1_None Funs2_None
+        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow'
+      by(auto)
+
+    have Distinct1 : "distinct (map fst ((pre @ [(n1, n2)]) @ funs_t))"
+      using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
+        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
+        Func_eq
+      by(auto)
+
+    have Distinct2 : "distinct (map snd ((pre @ [(n1, n2)]) @ funs_t))"
+      using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
+        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
+        Func_eq
       by(auto)
 
 (* YOU ARE HERE.
- * just need to show that visible doesn't matter when
- * looking at alpha-equivalent states.
- * But should it matter? *)
+ * i think we can get information about names matching up
+ * from the all2 (equiv_fun) hypothesis
+ * *)
+
+    have "list_all2 (alpha_equiv_name' ((pre @ (n1, n2) # zip (get_fun_decls stt1) (get_fun_decls stt2)) # fsubst)) (map fst gather1)
+     (map fst gather2)"
+    proof(rule list_all2I)
+
     then show ?thesis
       using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
-        Gather1_None Gather2_None Funs1_None Funs2_None
-      using Cons1.IH[OF Gather1 Gather2 Eqv' Funs_t]
+        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
+      using Cons1.IH[OF Gather1 Gather2 Eqv' Funs_t Distinct1 Distinct2]
       using check_decls_fun_decls[OF Funs_t] 
         apply(auto)
-        apply(simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def function_sig'.defs
+        apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def function_sig'.defs
           split: YulFunctionBody.splits)
-        apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def function_sig'.defs)
+      apply(unfold alpha_equiv_fun_def)
+      apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def function_sig'.defs)
+
+(* conflicts between pre and gather1/gather2? *)
 
     next
       case (Cons a list)
