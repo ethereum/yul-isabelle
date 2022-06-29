@@ -33,6 +33,10 @@ fun subst_lookup :: "subst \<Rightarrow> YulIdentifier \<Rightarrow> YulIdentifi
     Some y \<Rightarrow> Some y
     | None \<Rightarrow> subst_lookup t x)"
 
+definition subst_ok :: "subst \<Rightarrow> bool" where
+"subst_ok x =
+  True"
+
 (*
 fun get_var_decls' ::
   "('v, 't) YulStatement list \<Rightarrow> nat \<Rightarrow>
@@ -203,7 +207,10 @@ fun alpha_equiv_check_decls ::
      | Some fds \<Rightarrow>
        (case map_of fds name1 of
         Some _ \<Rightarrow> None
-        | None \<Rightarrow> Some ((name1, name2)#fds)))"
+        | None \<Rightarrow> 
+          (case map_of (subst'_flip fds) name2 of
+           Some _ \<Rightarrow> None
+           | None \<Rightarrow> Some ((name1, name2)#fds))))"
 | "alpha_equiv_check_decls (h1#t1) (h2#t2) = 
     (if yul_statement_same_constructor h1 h2
      then alpha_equiv_check_decls t1 t2
@@ -331,8 +338,6 @@ fun alpha_equiv_statement' ::
         | Some (fsubst') \<Rightarrow>
           list_all2 (alpha_equiv_statement' (fsubst' # fsubst)) body1 body2)
     | _ \<Rightarrow> False)"
-
-term "undefined :: 'v locals"
 
 definition alpha_equiv_local ::
   "subst \<Rightarrow> (YulIdentifier * 'v) \<Rightarrow> (YulIdentifier * 'v) \<Rightarrow> bool" where
@@ -2170,16 +2175,21 @@ next
       using check_decls_fun_decls[OF Funs_t] Cons1.prems Cons2 X4 Y4 F1 F2 
         Funs_t Funs_body Gather1 Gather2
         Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
-      by(auto)
+      by(auto split: option.split_asm)
 
     have Noshadow' : "map_of funs_t n1 = None"
       using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
         Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
       by(cases "map_of funs_t n1"; auto)
 
+    have Noshadow_flip2 : "map_of (subst'_flip funs_t) n2 = None"
+      using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
+        Gather1_None Gather2_None Funs1_None Noshadow'
+      by (cases "map_of (subst'_flip funs_t) n1"; auto)
+
     have Eqv' : "list_all2 (alpha_equiv_statement' (((pre @ [(n1, n2)]) @ funs_t) # fsubst)) stt1 stt2"
       using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
-        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow'
+        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow' Noshadow_flip2
       by(auto)
 
     have Distinct1 : "distinct (map fst ((pre @ [(n1, n2)]) @ funs_t))"
@@ -2231,7 +2241,73 @@ next
   qed
 qed
 
-lemma alpha_equiv_name_drop1 :
+lemma subst_flip_flip :
+  shows "subst_flip (subst_flip s) = s"
+proof(induction s)
+  case Nil
+  then show ?case 
+    by(auto simp add: subst_flip_def)
+next
+  case (Cons a s)
+
+  have Is_id :
+    "(\<lambda>(x, y). (y, x)) \<circ> (\<lambda>(x, y). (y, x)) = id"
+    by(auto)
+
+  show ?case using Cons
+    by(auto simp add: subst_flip_def Is_id)
+qed
+
+(*
+lemma subst_lookup_flip0 :
+  assumes "subst_lookup (sh#st) x = Some y"
+  shows "subst_lookup (subst_flip (sh#st)) y = Some x"
+  using assms
+proof(induction sh)
+*)
+(*
+lemma subst_lookup_flip :
+  assumes "distinct (map fst s)"
+  assumes "distinct (map snd s)"
+  assumes "subst_lookup s x = Some y"
+  shows "subst_lookup (subst_flip s) y = Some x"
+  using assms
+proof(induction s arbitrary: x y)
+  case Nil
+  then show ?case
+    by(auto)
+next
+  case (Cons a s)
+  then show ?case 
+    apply(auto split: option.splits)
+qed
+*)
+(*
+lemma alpha_equiv_name_drop :
+  assumes "alpha_equiv_name' ((pre1) # post2) x y"
+  assumes "distinct (map fst (pre0 @ pre1))"
+  assumes "distinct (map snd (pre0 @ pre1))"
+  assumes "x \<notin> set (map fst pre0)"
+  assumes "y \<notin> set (map snd pre0)"
+  shows "(alpha_equiv_name' ((pre0 @ pre1) # post2)) x y"
+  using assms
+proof(induction pre1 arbitrary: x y )
+  case Nil
+  then show ?case
+    apply(auto simp add: alpha_equiv_name'_def subst_flip_def)
+next
+  case (Cons p1h p1t)
+(*
+  have Conc1 : "alpha_equiv_name' ((pre0 @ p1h # p1t @ post1) # post2) (fst p1h)
+     (snd p1h)"
+    using Cons.prems
+    apply(auto simp add: alpha_equiv_name'_def subst_flip_def)
+*)
+  then show ?case 
+    apply(auto)
+qed
+*)
+(*
   assumes "list_all2 (alpha_equiv_name' ((pre @ post1) # post2))
      (map fst pre) (map snd pre)"
   assumes "ph1 \<notin> set (map fst pre)"
@@ -2258,6 +2334,38 @@ next
   show ?case using Cons
     apply(auto)
 qed
+*)
+
+lemma alpha_equiv_name_after :
+  fixes pre :: "(String.literal * String.literal) list"
+  assumes Valid1 : "distinct (map fst (pre @ [xy]))"
+  assumes Valid2 : "distinct (map snd (pre @ [xy]))"
+  shows "alpha_equiv_name'
+        ((pre @ xy # post1) # post2) (fst xy) (snd xy)"
+  using assms
+proof(induction pre arbitrary: post1 post2 xy)
+  case Nil
+  then show ?case 
+    by(cases xy; auto simp add: alpha_equiv_name'_def subst_flip_def)
+next
+  case (Cons ph pt)
+
+  obtain ph1 ph2 where PH : "ph = (ph1, ph2)"
+    by(cases ph; auto)
+
+  obtain x y where XY : "xy = (x, y)"
+    by(cases xy; auto)
+
+  have Distinct1 : "distinct (map fst (pt @ [xy]))"
+    using Cons.prems by auto
+
+  have Distinct2 : "distinct (map snd (pt @ [xy]))"
+    using Cons.prems by auto
+
+  show ?case using Cons.prems XY PH
+      Cons.IH[OF Distinct1 Distinct2, of post1 post2]
+    by(auto simp add: alpha_equiv_name'_def subst_flip_def)
+qed
 
 lemma alpha_equiv_name_prefix :
   assumes Valid1 : "distinct (map fst pre)"
@@ -2273,14 +2381,73 @@ proof(induction pre arbitrary: post1 post2)
 next
   case (Cons ph pt)
 
+  obtain ph1 ph2 where Ph : "ph = (ph1, ph2)"
+    by(cases ph; auto)
+
   have Conc1 : "alpha_equiv_name' ((ph # pt @ post1) # post2) (fst ph) (snd ph)"
-    by(cases ph; auto simp add: alpha_equiv_name'_def subst_flip_def)
+    using Ph
+    by(auto simp add: alpha_equiv_name'_def subst_flip_def)
 
   have Conc2 : "list_all2 (alpha_equiv_name' ((ph # pt @ post1) # post2))
      (map fst pt) (map snd pt)"
+  proof(rule list_all2_all_nthI)
+    show "length (map fst pt) = length (map snd pt)"
+      by auto
+  next
+    fix n
+    assume N: "n < length (map fst pt)"
 
-  show ?case using Cons
-    apply(auto )
+    then have N' : "n < length (map snd pt)"
+      by auto
+
+    have Noteq1 : "map fst pt ! n \<noteq> ph1"
+    proof
+      assume Contra : "map fst pt ! n = ph1"
+
+      then have Contra' : "ph1 \<in> set (map fst pt)"
+        using nth_mem[OF N]
+        by auto
+
+      then show False
+        using Ph Cons.prems
+        by(auto)
+    qed
+
+    have Noteq2 : "map snd pt ! n \<noteq> ph2"
+    proof
+      assume Contra : "map snd pt ! n = ph2"
+
+      then have Contra' : "ph2 \<in> set (map snd pt)"
+        using nth_mem[OF N']
+        by auto
+
+      then show False
+        using Ph Cons.prems
+        by(auto)
+    qed
+
+
+    have Ind : "list_all2
+     (alpha_equiv_name' ((pt @ post1) # post2))
+     (map fst pt) (map snd pt)"
+      using Cons.IH Cons.prems
+      by auto
+
+    have Ind_n :
+      "alpha_equiv_name' ((pt @ post1) # post2)
+         (map fst pt ! n) (map snd pt ! n)"
+      using list_all2_nthD[OF Ind N]
+      by auto
+
+    show "alpha_equiv_name' ((ph # pt @ post1) # post2)
+          (map fst pt ! n) (map snd pt ! n)"
+      using Ph Cons.prems Noteq1 Noteq2 Ind_n
+      by(simp add: alpha_equiv_name'_def subst_flip_def)
+  qed
+
+  show ?case
+    using Conc1 Conc2
+    by auto
 qed
 
 (* list_all2 alpha_equiv_funs
@@ -2394,20 +2561,25 @@ next
         Gather1_None Gather2_None Funs1_None Funs2_None
       by(cases "map_of (zip (get_fun_decls stt1) (get_fun_decls stt2)) n1"; auto)
 
-    have Func_eq : "funcs' = (n1, n2)#funs_t"
-      using check_decls_fun_decls[OF Funs_t] Cons1.prems Cons2 X4 Y4 F1 F2 
-        Funs_t Funs_body Gather1 Gather2
-        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
-      by(auto)
-
     have Noshadow' : "map_of funs_t n1 = None"
       using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
         Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
       by(cases "map_of funs_t n1"; auto)
 
+    have Noshadow_flip2 : "map_of (subst'_flip funs_t) n2 = None"
+      using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
+        Gather1_None Gather2_None Funs1_None Noshadow'
+      by(auto)
+
+    have Func_eq : "funcs' = (n1, n2)#funs_t"
+      using check_decls_fun_decls[OF Funs_t] Cons1.prems Cons2 X4 Y4 F1 F2 
+        Funs_t Funs_body Gather1 Gather2
+        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow Noshadow_flip2
+      by(auto)
+
     have Eqv' : "list_all2 (alpha_equiv_statement' (((pre @ [(n1, n2)]) @ funs_t) # fsubst)) stt1 stt2"
       using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
-        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow'
+        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow' Noshadow_flip2
       by(auto)
 
     have Distinct1 : "distinct (map fst ((pre @ [(n1, n2)]) @ funs_t))"
@@ -2421,6 +2593,22 @@ next
         Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
         Func_eq
       by(auto)
+
+    have Distinct1_pre :
+      "distinct (map fst pre)"
+      using Distinct1 by auto
+
+    have Distinct2_pre :
+      "distinct (map snd pre)"
+      using Distinct2 by auto
+
+    have Distinct1_pre_n :
+      "distinct (map fst (pre @ [(n1, n2)]))"
+      using Distinct1 by auto
+
+    have Distinct2_pre_n :
+      "distinct (map snd (pre @ [(n1, n2)]))"
+      using Distinct2 by auto
 
     have Conc_names :
       "list_all2
@@ -2437,9 +2625,9 @@ next
              (n1, n2) # zip (get_fun_decls stt1) (get_fun_decls stt2)) #
             fsubst))
          (map fst pre) (map snd pre)"
-        sorry
+        using alpha_equiv_name_prefix[OF Distinct1_pre Distinct2_pre]
+        by auto
     next
-
       have "list_all2
        (alpha_equiv_name'
          ((pre @
@@ -2453,7 +2641,8 @@ next
              (n1, n2) # zip (get_fun_decls stt1) (get_fun_decls stt2)) #
             fsubst))
              [n1] [n2]"
-          sorry
+          using alpha_equiv_name_after[OF Distinct1_pre_n Distinct2_pre_n]
+          by auto
       next
 
         show "list_all2
@@ -2480,45 +2669,10 @@ next
 
     then show ?thesis
       using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
-        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow
+        Gather1_None Gather2_None Funs1_None Funs2_None Noshadow Noshadow_flip2
       using Cons1.IH[OF Gather1 Gather2 Eqv' Funs_t Distinct1 Distinct2]
       using check_decls_fun_decls[OF Funs_t] 
         by(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def function_sig'.defs)
-
-
-(* conflicts between pre and gather1/gather2? *)
-
-    next
-      case (Cons a list)
-      then show ?thesis sorry
-    qed
-
-    have Eqv_tl' : "list_all2 (alpha_equiv_statement' (((n1, n2) # funs_t) # fsubst)) stt1 stt2"
-      using Eqv_tl unfolding Func_eq
-      by auto
-
-(* now we need to case split on funcs' in order to rewrite this in the induction hypothesis. *)
-(* this isn't quite right... *)
-    show ?thesis using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
-        Gather1_None Gather2_None Funs1_None Funs2_None
-      using Cons1.IH[OF Gather1 Gather2 Eqv_tl'(*Eqv_tl' *)]
-      using check_decls_fun_decls[OF Funs_t]
-      apply(auto)
-       apply(simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def function_sig'.defs
-split: YulFunctionBody.splits)
-      apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def function_sig'.defs)
-(* need another lemma about updating the visible field with new name *)
-
-(* 
-
-list_all2 (alpha_equiv_fun (zip (get_fun_decls stt1) (get_fun_decls stt2) # fsubst))
-     (combine_keep (funs r1) (map (\<lambda>a. case a of (n, fs) \<Rightarrow> (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst gather1\<rparr>)) gather1))
-     (combine_keep (funs r2) (map (\<lambda>a. case a of (n, fs) \<Rightarrow> (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst gather2\<rparr>)) gather2)) \<Longrightarrow>
-list_all2 (alpha_equiv_fun (((n1, n2) # zip (get_fun_decls stt1) (get_fun_decls stt2)) # fsubst))
-     (combine_keep (funs r1) (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = n1 # map fst gather1\<rparr>)) gather1))
-     (combine_keep (funs r2) (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = n2 # map fst gather2\<rparr>)) gather2))
-*)
-
   next
     case (YulIf x51 x52)
     then show ?thesis using Cons1 Cons2
@@ -2550,6 +2704,261 @@ list_all2 (alpha_equiv_fun (((n1, n2) # zip (get_fun_decls stt1) (get_fun_decls 
   qed
 qed
 
+lemma check_decls_distinct :
+  assumes "alpha_equiv_check_decls sts1 sts2 = Some funcs'"
+  shows "distinct (map fst funcs') \<and> distinct (map snd funcs')"
+  using assms
+proof(induction sts1 arbitrary: funcs' sts2)
+  case Nil
+  then show ?case
+    by(auto)
+next
+  case Cons1 : (Cons sth1 stt1)
+
+  obtain sth2 stt2 where Cons2 : "sts2 = sth2 # stt2"
+    using Cons1.prems
+    by(cases sts2; auto)
+
+  then show ?case
+  proof(cases sth1)
+    case (YulFunctionCallStatement x1)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  next
+    case (YulAssignmentStatement x2)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  next
+    case (YulVariableDeclarationStatement x3)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  next
+    case X4: (YulFunctionDefinitionStatement x4)
+
+    then obtain y4 where Y4 : "sth2 = YulFunctionDefinitionStatement y4"
+      using Cons1.prems Cons2
+      by(cases sth2; auto)
+
+    obtain n1 args1 rets1 body1 where F1 :
+      "x4 = YulFunctionDefinition n1 args1 rets1 body1"
+      by(cases x4; auto)
+
+    obtain n2 args2 rets2 body2 where F2 :
+      "y4 = YulFunctionDefinition n2 args2 rets2 body2"
+      by(cases y4; auto)
+
+    obtain funs_t where Funs_t :
+      "alpha_equiv_check_decls stt1 stt2 = Some funs_t"
+      using Cons1 Cons2 X4 Y4 F1 F2
+      by (cases "alpha_equiv_check_decls stt1 stt2"; auto)
+
+    have Notin1 : "map_of funs_t n1 = None"
+      using Cons1 Cons2 X4 Y4 F1 F2 Funs_t
+      by(cases "map_of funs_t n1"; auto)
+
+    have Notin2 : "map_of (subst'_flip funs_t) n2 = None"
+      using Cons1 Cons2 X4 Y4 F1 F2 Funs_t Notin1
+      by(cases "map_of (subst'_flip funs_t) n2"; auto)
+
+    have Notin2' : "n2 \<notin> set (map snd funs_t)"
+    proof
+      assume Contra : "n2 \<in> set (map snd funs_t)"
+
+      then obtain bad where Bad : "(bad, n2) \<in> set funs_t"
+        by auto
+
+      have Bad' : "(n2, bad) \<in> set (subst'_flip funs_t)"
+        using Bad
+        unfolding subst'_flip_def
+        by(auto)
+
+      have Bad'' : "n2 \<in> fst ` set (subst'_flip funs_t)"
+        using imageI[OF Bad', of fst]
+        by auto
+
+      have Notin2_alt : "n2 \<notin> fst ` set (subst'_flip funs_t)"
+        using Notin2
+        unfolding map_of_eq_None_iff
+        by auto
+
+      show False using Notin2_alt Bad''
+        by(auto)
+    qed
+
+    show ?thesis using Cons1 Cons2 X4 Y4 F1 F2 Funs_t Notin1 Notin2 Notin2'
+      by(auto)
+  next
+    case (YulIf x51 x52)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  next
+    case (YulSwitch x61 x62)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  next
+    case (YulForLoop x71 x72 x73 x74)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)  
+  next
+    case YulBreak
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)  
+  next
+    case YulContinue
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)  
+  next
+    case YulLeave
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)  
+  next
+    case (YulBlock x11)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  qed
+qed
+
+lemma check_decls_distinct1 :
+  assumes "alpha_equiv_check_decls sts1 sts2 = Some funcs'"
+  shows "distinct (map fst funcs')"
+  using assms check_decls_distinct
+  by auto
+
+lemma check_decls_distinct2 :
+  assumes "alpha_equiv_check_decls sts1 sts2 = Some funcs'"
+  shows "distinct (map snd funcs')"
+  using assms check_decls_distinct
+  by auto
+
+(*
+lemma alpha_equiv_enter_function_stackEls :
+  assumes Heqv : "alpha_equiv_check_decls sts1 sts2 = Some funcs'"
+  assumes Hsts : "list_all2 (alpha_equiv_statement' (funcs' # fsubst)) sts1 sts2"
+  assumes Hfuns : "list_all2 (alpha_equiv_fun fsubst) (fs1) (fs2)"
+  assumes Htail : "list_all2 (alpha_equiv_stackEl' fsubst) c1t c2t"
+  shows
+    "list_all2
+      (alpha_equiv_stackEl'
+        (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+      (map EnterStatement sts1 @
+       ExitStatement (YulBlock sts1) (l) (fs1) # c1t)
+      (map EnterStatement sts2 @
+       ExitStatement (YulBlock sts2) (l) (fs2) # c2t)"
+  using assms
+proof(induction sts1 arbitrary: sts2 funcs' fsubst fs1 fs2)
+  case Nil
+  then show ?case 
+    by(auto)
+next
+  case Cons1 : (Cons sth1 stt1)
+
+  obtain sth2 stt2 where Cons2 : "sts2 = sth2 # stt2"
+    using Cons1.prems
+    by(cases sts2; auto)
+
+  then show ?case
+  proof(cases sth1)
+    case (YulFunctionCallStatement x1)
+    then show ?thesis using Cons1 Cons2
+      check_decls_fun_decls
+      apply(cases sth2; auto)
+  next
+    case (YulAssignmentStatement x2)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  next
+    case (YulVariableDeclarationStatement x3)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  next
+    case X4: (YulFunctionDefinitionStatement x4)
+
+    then obtain y4 where Y4 : "sth2 = YulFunctionDefinitionStatement y4"
+      using Cons1.prems Cons2
+      by(cases sth2; auto)
+
+    obtain n1 args1 rets1 body1 where F1 :
+      "x4 = YulFunctionDefinition n1 args1 rets1 body1"
+      by(cases x4; auto)
+
+    obtain n2 args2 rets2 body2 where F2 :
+      "y4 = YulFunctionDefinition n2 args2 rets2 body2"
+      by(cases y4; auto)
+
+    obtain funs_t where Funs_t :
+      "alpha_equiv_check_decls stt1 stt2 = Some funs_t"
+      using Cons1 Cons2 X4 Y4 F1 F2
+      by (cases "alpha_equiv_check_decls stt1 stt2"; auto)
+
+    have Notin1 : "map_of funs_t n1 = None"
+      using Cons1 Cons2 X4 Y4 F1 F2 Funs_t
+      by(cases "map_of funs_t n1"; auto)
+
+    have Notin2 : "map_of (subst'_flip funs_t) n2 = None"
+      using Cons1 Cons2 X4 Y4 F1 F2 Funs_t Notin1
+      by(cases "map_of (subst'_flip funs_t) n2"; auto)
+
+    have Notin2' : "n2 \<notin> set (map snd funs_t)"
+    proof
+      assume Contra : "n2 \<in> set (map snd funs_t)"
+
+      then obtain bad where Bad : "(bad, n2) \<in> set funs_t"
+        by auto
+
+      have Bad' : "(n2, bad) \<in> set (subst'_flip funs_t)"
+        using Bad
+        unfolding subst'_flip_def
+        by(auto)
+
+      have Bad'' : "n2 \<in> fst ` set (subst'_flip funs_t)"
+        using imageI[OF Bad', of fst]
+        by auto
+
+      have Notin2_alt : "n2 \<notin> fst ` set (subst'_flip funs_t)"
+        using Notin2
+        unfolding map_of_eq_None_iff
+        by auto
+
+      show False using Notin2_alt Bad''
+        by(auto)
+    qed
+
+    show ?thesis using Cons1 Cons2 X4 Y4 F1 F2 Funs_t Notin1 Notin2 Notin2'
+      by(auto)
+  next
+    case (YulIf x51 x52)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  next
+    case (YulSwitch x61 x62)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  next
+    case (YulForLoop x71 x72 x73 x74)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)  
+  next
+    case YulBreak
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)  
+  next
+    case YulContinue
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)  
+  next
+    case YulLeave
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)  
+  next
+    case (YulBlock x11)
+    then show ?thesis using Cons1 Cons2
+      by(cases sth2; auto)
+  qed
+qed
+*)
+
+
+
 (* YOU ARE HERE. See if we still need the check_decls cases lemma. *)
 lemma alpha_equiv_step :
   assumes Hc1 : "cont r1 = (c1h#c1t)"
@@ -2561,7 +2970,6 @@ lemma alpha_equiv_step :
   shows "alpha_equiv_results' fsubst' r1' r2'"
   using assms
 proof(cases c1h)
-  term "c1h"
   case ES1 : (EnterStatement x1)
 
   then obtain x2 where ES2 : "c2h = EnterStatement x2"
@@ -2739,17 +3147,99 @@ proof(cases c1h)
       using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2
       by(auto simp add: alpha_equiv_results'_def split: option.splits)
 
-    show ?thesis
-      using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls
-      unfolding alpha_equiv_results'_def
-      apply(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
-(* 2 things needed here.
-1. alpha_equiv_fun' of inputs implies alpha_equiv_funs' when updating the
-inputs using combine_keep and updating fsubst using the decls 
-2. equivalence of stack elements
-*)
-      then show ?thesis sorry
+    have Distinct1 : "distinct (map fst funcs')"
+      using check_decls_distinct1[OF Decls]
+      by auto
 
+    have Distinct2 : "distinct (map snd funcs')"
+      using check_decls_distinct2[OF Decls]
+      by auto
+
+    have Decls_eq : "zip (get_fun_decls sts1) (get_fun_decls sts2) = funcs'"
+      using check_decls_fun_decls[OF Decls]
+      by auto
+
+    have Conc1 : "list_all2
+       (alpha_equiv_fun (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+       (combine_keep (funs r1)
+         (map (\<lambda>(n, fs).
+                  (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>))
+           fs1))
+       (combine_keep (funs r2)
+         (map (\<lambda>(n, fs).
+                  (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>))
+           fs2))"
+      using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Distinct1 Distinct2
+      using alpha_equiv_gather_functions[OF Fs1 Fs2 _ Decls, of "[]" fsubst]
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
+
+(* statement equivalence implies stackEl equivalence for enter statement
+ * statement equivalence, locals equality, funs equivalence
+ * implies stackel equivalence for exit statement *)
+
+    have Conc2 : "list_all2 (alpha_equiv_stackEl' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+     (map EnterStatement sts1 @ ExitStatement (YulBlock sts1) (locals r2) (funs r1) # c1t)
+     (map EnterStatement sts2 @ ExitStatement (YulBlock sts2) (locals r2) (funs r2) # c2t)"
+    proof(rule list_all2_appendI)
+      show "list_all2 (alpha_equiv_stackEl' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+       (map EnterStatement sts1) (map EnterStatement sts2)"
+        using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
+        unfolding alpha_equiv_results'_def
+        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
+        sorry
+    next
+      have Conc' : "list_all2
+       (alpha_equiv_stackEl'
+         (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+       ([ExitStatement (YulBlock sts1) (locals r2) (funs r1)] @ c1t)
+       ([ExitStatement (YulBlock sts2) (locals r2) (funs r2)] @ c2t)"
+      proof(rule list_all2_appendI)
+        show "list_all2
+         (alpha_equiv_stackEl'
+           (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+         [ExitStatement (YulBlock sts1) (locals r2) (funs r1)]
+         [ExitStatement (YulBlock sts2) (locals r2) (funs r2)]"
+          using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
+          unfolding alpha_equiv_results'_def
+          apply(auto)
+(* there is redundancy here, we are augmenting the function context twice. *)
+          sorry
+      next
+        show "list_all2
+         (alpha_equiv_stackEl'
+           (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+         c1t c2t"
+          sorry
+      qed
+
+      then show "list_all2
+       (alpha_equiv_stackEl'
+         (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+       (ExitStatement (YulBlock sts1) (locals r2) (funs r1) # c1t)
+       (ExitStatement (YulBlock sts2) (locals r2) (funs r2) # c2t)"
+        by simp
+    qed
+    show ?thesis
+      using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Conc1 Conc2
+      unfolding alpha_equiv_results'_def
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
+
+(*
+assumes Heqv : "alpha_equiv_check_decls sts1 sts2 = Some funcs'"
+assumes Hsts : "list_all2 (alpha_equiv_statement' (funcs' # fsubst)) sts1 sts2"
+assumes Hfuns : "list_all2 (alpha_equiv_fun fsubst) (funs r1) (funs r2)"
+assumes Htail : "list_all2 (alpha_equiv_stackEl' fsubst) c1t c2t"
+shows
+  "list_all2
+    (alpha_equiv_stackEl'
+      (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+    (map EnterStatement sts1 @
+     ExitStatement (YulBlock sts1) (locals r2) (funs r1) # c1t)
+    (map EnterStatement sts2 @
+     ExitStatement (YulBlock sts2) (locals r2) (funs r2) # c2t)"
+
+      then show ?thesis sorry
+*)
 (*
 gatherYulFunctions'
  (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1)) sts1 = Inl fs1 \<Longrightarrow>
