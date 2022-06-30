@@ -217,9 +217,11 @@ fun alpha_equiv_check_decls ::
      else None)"
 | "alpha_equiv_check_decls _ _ = None"
 
+(* bool argument is True if we are exiting statement - in these cases
+ * we need to make sure we do not augment the context *)
 fun alpha_equiv_statement' ::
-  "subst \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> bool" where
-  "alpha_equiv_statement' fsubst
+  "subst \<Rightarrow> bool \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> bool" where
+  "alpha_equiv_statement' fsubst is_exit
     (YulFunctionCallStatement (YulFunctionCall fn1 args1)) stm2 =
     (case stm2 of
       (YulFunctionCallStatement (YulFunctionCall fn2 args2)) \<Rightarrow>
@@ -228,14 +230,14 @@ fun alpha_equiv_statement' ::
         (list_all2 (alpha_equiv_expr' fsubst) args1 args2))
       | _ \<Rightarrow> False)"
 
-| "alpha_equiv_statement' fsubst
+| "alpha_equiv_statement' fsubst is_exit
     (YulAssignmentStatement (YulAssignment ns1 e1)) stm2 =
     (case stm2 of
       (YulAssignmentStatement (YulAssignment ns2 e2)) \<Rightarrow>
         (alpha_equiv_expr' fsubst e1 e2 \<and> ns1 = ns2)
       | _ \<Rightarrow> False)"
 
-| "alpha_equiv_statement' fsubst
+| "alpha_equiv_statement' fsubst is_exit
     (YulVariableDeclarationStatement (YulVariableDeclaration ns1 eo1)) stm2 =
     (case stm2 of
       (YulVariableDeclarationStatement (YulVariableDeclaration ns2 eo2)) \<Rightarrow>
@@ -246,7 +248,7 @@ fun alpha_equiv_statement' ::
          (ns1 = ns2))
       | _ \<Rightarrow> False)"
 
-| "alpha_equiv_statement' fsubst
+| "alpha_equiv_statement' fsubst is_exit
   (YulFunctionDefinitionStatement
       (YulFunctionDefinition name1 args1 rets1 body1)) stm2 =
   (case stm2 of
@@ -258,11 +260,12 @@ fun alpha_equiv_statement' ::
             (args1 = args2 \<and>
              rets1 = rets2 \<and>
              (list_all2 (alpha_equiv_statement' 
-              (fsubst' # fsubst))
+              (fsubst' # fsubst) False)
               body1 body2)))
       | _ \<Rightarrow> False)"
 
-| "alpha_equiv_statement' fsubst
+(* TODO: need entry/exit  cases? *)
+| "alpha_equiv_statement' fsubst is_exit
   (YulIf e1 body1) stm2 =
   (case stm2 of
     (YulIf e2 body2) \<Rightarrow>
@@ -270,10 +273,12 @@ fun alpha_equiv_statement' ::
       (case alpha_equiv_check_decls body1 body2 of
         None \<Rightarrow> False
         | Some (fsubst') \<Rightarrow>
-          list_all2 (alpha_equiv_statement' (fsubst' # fsubst)) body1 body2))
+          list_all2 (alpha_equiv_statement' (fsubst' # fsubst) False) body1 body2))
     | _ \<Rightarrow> False)"
-  
-| "alpha_equiv_statement' fsubst
+
+(* TODO: need entry/exit  cases? *)
+
+| "alpha_equiv_statement' fsubst is_exit
   (YulSwitch e1 cases1) stm2 =
   (case stm2 of
     (YulSwitch e2 cases2) \<Rightarrow>
@@ -288,11 +293,13 @@ fun alpha_equiv_statement' ::
             (case alpha_equiv_check_decls body1 body2 of
               None \<Rightarrow> False
               | Some (fsubst') \<Rightarrow>
-                list_all2 (alpha_equiv_statement' (fsubst' # fsubst)) body1 body2)))))
+                list_all2 (alpha_equiv_statement' (fsubst' # fsubst) False) body1 body2)))))
         cases1 cases2))
     | _ \<Rightarrow> False)"
 
-| "alpha_equiv_statement' fsubst
+(* TODO: need entry/exit  cases? *)
+
+| "alpha_equiv_statement' fsubst is_exit
   (YulForLoop pre1 cond1 post1 body1) stm2 =
   (case stm2 of
     (YulForLoop pre2 cond2 post2 body2) \<Rightarrow>
@@ -306,38 +313,49 @@ fun alpha_equiv_statement' ::
         None \<Rightarrow> False
         | Some (fsubst'_body) \<Rightarrow>
           (alpha_equiv_expr' (fsubst'_pre # fsubst) cond1 cond2 \<and>
-           list_all2 (alpha_equiv_statement' (fsubst'_pre # fsubst)) pre1 pre2 \<and>
-           list_all2 (alpha_equiv_statement' ((fsubst'_body @ fsubst'_pre) # fsubst)) body1 body2 \<and>
-           list_all2 (alpha_equiv_statement' ((fsubst'_post @ fsubst'_pre) # fsubst)) post1 post2))))
+           list_all2 (alpha_equiv_statement' (fsubst'_pre # fsubst) False) pre1 pre2 \<and>
+           list_all2 (alpha_equiv_statement' ((fsubst'_body @ fsubst'_pre) # fsubst) False) body1 body2 \<and>
+           list_all2 (alpha_equiv_statement' ((fsubst'_post @ fsubst'_pre) # fsubst) False) post1 post2))))
     | _ \<Rightarrow> False)"
 
-| "alpha_equiv_statement' fsubst
+| "alpha_equiv_statement' fsubst _
   YulBreak stm2 =
   (case stm2 of
     YulBreak \<Rightarrow> True
     | _ \<Rightarrow> False)"
 
-| "alpha_equiv_statement' fsubst
+| "alpha_equiv_statement' fsubst _
   YulContinue stm2 =
   (case stm2 of
     YulContinue \<Rightarrow> True
     | _ \<Rightarrow> False)"
 
-| "alpha_equiv_statement' fsubst
+| "alpha_equiv_statement' fsubst _
   YulLeave stm2 =
   (case stm2 of
     YulLeave \<Rightarrow> True
     | _ \<Rightarrow> False)"
 
-| "alpha_equiv_statement' fsubst
+| "alpha_equiv_statement' fsubst False
   (YulBlock body1) stm2 =
   (case stm2 of
     (YulBlock body2) \<Rightarrow>
       (case alpha_equiv_check_decls body1 body2 of
         None \<Rightarrow> False
         | Some (fsubst') \<Rightarrow>
-          list_all2 (alpha_equiv_statement' (fsubst' # fsubst)) body1 body2)
+          list_all2 (alpha_equiv_statement' (fsubst' # fsubst) False) body1 body2)
     | _ \<Rightarrow> False)"
+
+| "alpha_equiv_statement' fsubst True
+  (YulBlock body1) stm2 =
+  (case stm2 of
+    (YulBlock body2) \<Rightarrow>
+      (case alpha_equiv_check_decls body1 body2 of
+        None \<Rightarrow> False
+        | Some (fsubst') \<Rightarrow>
+          list_all2 (alpha_equiv_statement' (fsubst) True) body1 body2)
+    | _ \<Rightarrow> False)"
+
 
 definition alpha_equiv_local ::
   "subst \<Rightarrow> (YulIdentifier * 'v) \<Rightarrow> (YulIdentifier * 'v) \<Rightarrow> bool" where
@@ -383,7 +401,7 @@ definition alpha_equiv_function_sig'_scheme ::
   (case (f_sig_body s1, f_sig_body s2) of
         (YulBuiltin b1, YulBuiltin b2) \<Rightarrow> s1 = s2
         | (YulFunction sts1, YulFunction sts2) \<Rightarrow>
-          alpha_equiv_statement' fsubst
+          alpha_equiv_statement' fsubst False
               (YulFunctionDefinitionStatement (YulFunctionDefinition n1 (f_sig_arguments s1) (f_sig_returns s1) sts1))
               (YulFunctionDefinitionStatement (YulFunctionDefinition n2 (f_sig_arguments s2) (f_sig_returns s2) sts2))
         | (_, _) \<Rightarrow> False)"
@@ -416,15 +434,23 @@ definition alpha_equiv_funs' ::
 
 (* TODO: make sure we are handling equivalence of function-contexts correctly.
  * this is a bit complicated to due to possibility of recursion/mutual recursion *)
-
+(* we are augmenting contexts twice when exiting statements.
+ * this remains a problem for equivalence of funs (we augment once, should augment 0 times)
+ *)
 fun alpha_equiv_stackEl' ::
   "subst \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> bool" where
 "alpha_equiv_stackEl' fsubst (EnterStatement s1) (EnterStatement s2) =
-  alpha_equiv_statement' fsubst s1 s2"
+  alpha_equiv_statement' fsubst False s1 s2"
+(* TODO: change this argument to True if we need different handling. *)
 | "alpha_equiv_stackEl' fsubst (ExitStatement s1 vs1 fs1) (ExitStatement s2 vs2 fs2) =
-    (alpha_equiv_statement' fsubst s1 s2 \<and>
-     alpha_equiv_locals' fsubst vs1 vs2 \<and>
-     alpha_equiv_funs' fsubst fs1 fs2)"
+    (let fsubst' =
+      (case s1 of
+        YulBlock _ \<Rightarrow> List.tl (fsubst)
+        | _ \<Rightarrow> fsubst)
+     in
+      (alpha_equiv_statement' fsubst' False s1 s2 \<and>
+       alpha_equiv_locals' fsubst' vs1 vs2 \<and>
+       alpha_equiv_funs' fsubst' fs1 fs2))"
 | "alpha_equiv_stackEl' fsubst (Expression e1) (Expression e2) =
   alpha_equiv_expr' fsubst e1 e2"
 | "alpha_equiv_stackEl' fsubst (EnterFunctionCall n1 f1) (EnterFunctionCall n2 f2) = 
@@ -2068,7 +2094,7 @@ assumes Hg1 : "gatherYulFunctions'
   (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1)) sts1 = Inl fs1"
 assumes Hg2 : "gatherYulFunctions'
    (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r2)) sts2 = Inl fs2"
-assumes Heqv :  "list_all2 (alpha_equiv_statement' ((pre @ funcs') # fsubst)) sts1 sts2"
+assumes Heqv :  "list_all2 (alpha_equiv_statement' ((pre @ funcs') # fsubst) False) sts1 sts2"
 assumes Hcheck : "alpha_equiv_check_decls sts1 sts2 = Some (funcs')"
 assumes Hpre1 : "distinct (map fst (pre @ funcs'))"
 assumes Hpre2 : "distinct (map snd (pre @ funcs'))"
@@ -2187,7 +2213,7 @@ next
         Gather1_None Gather2_None Funs1_None Noshadow'
       by (cases "map_of (subst'_flip funs_t) n1"; auto)
 
-    have Eqv' : "list_all2 (alpha_equiv_statement' (((pre @ [(n1, n2)]) @ funs_t) # fsubst)) stt1 stt2"
+    have Eqv' : "list_all2 (alpha_equiv_statement' (((pre @ [(n1, n2)]) @ funs_t) # fsubst) False) stt1 stt2"
       using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
         Gather1_None Gather2_None Funs1_None Funs2_None Noshadow' Noshadow_flip2
       by(auto)
@@ -2459,7 +2485,7 @@ assumes Hg1 : "gatherYulFunctions'
   (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1)) sts1 = Inl fs1"
 assumes Hg2 : "gatherYulFunctions'
    (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r2)) sts2 = Inl fs2"
-assumes Heqv :  "list_all2 (alpha_equiv_statement' ((pre @ funcs') # fsubst)) sts1 sts2"
+assumes Heqv :  "list_all2 (alpha_equiv_statement' ((pre @ funcs') # fsubst) False) sts1 sts2"
 assumes Hcheck : "alpha_equiv_check_decls sts1 sts2 = Some (funcs')"
 assumes Hpre1 : "distinct (map fst (pre @ funcs'))"
 assumes Hpre2 : "distinct (map snd (pre @ funcs'))"
@@ -2577,7 +2603,7 @@ next
         Gather1_None Gather2_None Funs1_None Funs2_None Noshadow Noshadow_flip2
       by(auto)
 
-    have Eqv' : "list_all2 (alpha_equiv_statement' (((pre @ [(n1, n2)]) @ funs_t) # fsubst)) stt1 stt2"
+    have Eqv' : "list_all2 (alpha_equiv_statement' (((pre @ [(n1, n2)]) @ funs_t) # fsubst) False) stt1 stt2"
       using Cons1.prems Cons2 X4 Y4 F1 F2 Funs_t Funs_body Gather1 Gather2 
         Gather1_None Gather2_None Funs1_None Funs2_None Noshadow' Noshadow_flip2
       by(auto)
@@ -2957,8 +2983,6 @@ next
 qed
 *)
 
-
-
 (* YOU ARE HERE. See if we still need the check_decls cases lemma. *)
 lemma alpha_equiv_step :
   assumes Hc1 : "cont r1 = (c1h#c1t)"
@@ -3201,15 +3225,18 @@ proof(cases c1h)
          [ExitStatement (YulBlock sts2) (locals r2) (funs r2)]"
           using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
           unfolding alpha_equiv_results'_def
-          apply(auto)
-(* there is redundancy here, we are augmenting the function context twice. *)
-          sorry
+          by(auto simp add: alpha_equiv_locals'_def)
       next
         show "list_all2
          (alpha_equiv_stackEl'
            (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
          c1t c2t"
+          using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
+          unfolding alpha_equiv_results'_def
+          apply(auto simp add: alpha_equiv_locals'_def)
+(* figure out "cleaning up" fsubst after exiting block. *)
           sorry
+
       qed
 
       then show "list_all2
