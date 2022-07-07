@@ -67,6 +67,8 @@ fun subst_update_enter_statement ::
   ((zip (get_fun_decls ls1) (get_fun_decls ls2))# fsubst)"
 | "subst_update_enter_statement fsubst _ _ = (fsubst)"
 
+(* TODO: one approach to solving the problems around break/continue/etc.
+ * is to *)
 fun subst_update_exit_statement ::
   "subst \<Rightarrow> 
    ('v, 't) YulStatement \<Rightarrow>
@@ -1872,6 +1874,385 @@ next
 qed
 
 
+definition min_prefix ::
+  "('a list \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'a list \<Rightarrow> bool"
+  where
+"min_prefix P pre full \<equiv>
+  (\<exists> post . full = pre @ post \<and> 
+   P pre \<and>
+   (\<forall> pre' post' . full = pre' @ post' \<longrightarrow> P pre' \<longrightarrow>
+     (\<exists> mid . pre' = pre @ mid)))"
+
+lemma min_prefixI :
+  assumes Heq : "full = pre @ post"
+  assumes HP : "P pre"
+  assumes Hmin : "\<And> pre' post' . pre @ post = pre' @ post' \<Longrightarrow> P pre' \<Longrightarrow> 
+    (\<exists> mid . pre' = pre @ mid)"
+  shows "min_prefix P pre full"
+  using assms
+  by(auto simp add: min_prefix_def)
+
+lemma min_prefixD0 :
+  assumes H : "min_prefix P pre full"
+  shows "\<exists> post . full = pre @ post"
+  using assms unfolding min_prefix_def by auto
+
+lemma min_prefixD1 :
+  assumes H : "min_prefix P pre full"
+  shows "P pre"
+  using assms unfolding min_prefix_def by auto
+
+lemma min_prefixD2 :
+  assumes H : "min_prefix P pre full"
+  assumes Heq' : "full = pre' @ post'"
+  assumes HP : "P pre'"
+  shows "\<exists> mid . pre' = pre @ mid"
+  using assms unfolding min_prefix_def by auto
+
+
+definition max_suffix ::
+  "('a list \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> 'a list \<Rightarrow> bool"
+  where
+"max_suffix P post full \<equiv>
+  (\<exists> pre . full = pre @ post \<and> 
+   P post \<and>
+   (\<forall> pre' post' . full = pre' @ post' \<longrightarrow> P post' \<longrightarrow>
+     (\<exists> mid . post = mid @ post')))"
+
+lemma max_suffixI :
+  assumes Heq : "full = pre @ post"
+  assumes HP : "P post"
+  assumes Hmin : "\<And> pre' post' . pre @ post = pre' @ post' \<Longrightarrow> P post' \<Longrightarrow> 
+    (\<exists> mid . post = mid @ post')"
+  shows "max_suffix P post full"
+  using assms
+  by(auto simp add: max_suffix_def)
+
+lemma max_suffixD0 :
+  assumes H : "max_suffix P post full"
+  shows "\<exists> pre . full = pre @ post"
+  using assms unfolding max_suffix_def by auto
+
+lemma max_suffixD1 :
+  assumes H : "max_suffix P post full"
+  shows "P post"
+  using assms unfolding max_suffix_def by auto
+
+lemma max_suffixD2 :
+  assumes H : "max_suffix P post full"
+  assumes Heq' : "full = pre' @ post'"
+  assumes HP : "P post'"
+  shows "\<exists> mid . post = mid @ post'"
+  using assms unfolding max_suffix_def by auto
+
+(* TODO: figure out if we are properly restricting
+   locals. I think we are.
+*)
+lemma yulBreak_result :
+  assumes H : "yulBreak d c1 r1 = YulResult r1'"
+  shows "global r1' = global r1 \<and>
+         vals r1' = vals r1 \<and>
+         locals r1' = locals r1 \<and>
+         funs r1' = funs r1 \<and>
+         (\<exists> c1pre . c1 = c1pre @ cont r1')"
+  using assms
+proof(induction c1 arbitrary: r1 r1')
+case Nil
+  then show ?case
+    by(auto)
+next
+  case (Cons c1h c1t)
+  show ?case
+  proof(cases c1h)
+    case C1h : (EnterStatement st1)
+    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1']
+      by(auto)
+  next
+    case C1h : (ExitStatement st1 locals1 funs1)
+    show ?thesis
+    proof(cases st1)
+      case (YulFunctionCallStatement x1)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+      by(auto)
+    next
+      case (YulAssignmentStatement x2)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulVariableDeclarationStatement x3)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulFunctionDefinitionStatement x4)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulIf x51 x52)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulSwitch x61 x62)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulForLoop x71 x72 x73 x74)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case YulBreak
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+    case YulContinue
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case YulLeave
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulBlock x11)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    qed
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1']
+      by(auto)
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1']
+      by(auto)
+  next
+    case (Expression x5)
+    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] 
+      by(auto)
+  qed
+qed
+
+(* this is actually kind of interesting. alpha equiv may not hold while in the middle
+ * of skipping statements with YulBreak, but will hold by the end
+ *)
+(*
+lemma yulBreak_result_equiv :
+  assumes H1 : "yulBreak d c1 r1 = YulResult r1'"
+  assumes H2 : "yulBreak d c2 r2 = YulResult r2'"
+  assumes Halpha : "alpha_equiv_stackEls' fsubst c1 c2"
+  shows "alpha_equiv_stackEls' fsubst (cont r1') (cont r2')"
+  using assms
+proof(induction c1 arbitrary: r1 r1' c2 r2 r2' fsubst)
+  case Nil
+  then show ?case
+    by(auto)
+next
+  case Cons1 : (Cons c1h c1t)
+
+  obtain c2h c2t where Cons2 : "c2 = (c2h # c2t)"
+    using Cons1.prems
+    by(cases c2; auto)
+
+  show ?case
+  proof(cases c1h)
+    case C1h : (EnterStatement st1)
+    then show ?thesis using Cons1.prems Cons1.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1' c2t "(r2 \<lparr> cont := c2t \<rparr>)" r2'] Cons2
+      apply(cases c2h; auto)
+  next
+    case C1h : (ExitStatement st1 locals1 funs1)
+    show ?thesis
+    proof(cases st1)
+      case (YulFunctionCallStatement x1)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+      by(auto)
+    next
+      case (YulAssignmentStatement x2)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulVariableDeclarationStatement x3)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulFunctionDefinitionStatement x4)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulIf x51 x52)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulSwitch x61 x62)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulForLoop x71 x72 x73 x74)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case YulBreak
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+    case YulContinue
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case YulLeave
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    next
+      case (YulBlock x11)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+        by(auto)
+    qed
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1']
+      by(auto)
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1']
+      by(auto)
+  next
+    case (Expression x5)
+    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] 
+      by(auto)
+  qed
+
+
+    using Cons1 Cons2
+    apply(auto)
+
+    apply(auto)
+qed
+*)
+
+
+(* need to characterize cont differently. *)
+lemma yulContinue_result :
+  assumes H : "yulContinue d c1 r1 = YulResult r1'"
+(*  assumes Hr1 : "cont r1 = c1"*)
+  shows "global r1' = global r1 \<and>
+         vals r1' = vals r1 \<and>
+         locals r1' = locals r1 \<and>
+         funs r1' = funs r1 \<and>
+         (\<exists> c1pre c1post pre cond1 cond post body fx cx .
+            c1 = c1pre @ Expression cond1 # ExitStatement (YulForLoop pre cond post body) fx cx # c1post \<and>
+            cont r1' = EnterStatement (YulBlock post) # Expression cond1 # ExitStatement (YulForLoop pre cond post body) fx cx # c1post)"
+  using assms
+proof(induction c1 arbitrary: r1 r1')
+case Nil
+  then show ?case
+    by(auto)
+next
+  case (Cons c1h c1t)
+  show ?case
+  proof(cases c1h)
+    case C1h : (EnterStatement st1)
+    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1']
+      by(auto)
+  next
+    case C1h : (ExitStatement st1 locals1 funs1)
+      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+      by(auto)
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1']
+      by(auto)
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1']
+      by(auto)
+  next
+    case C1h : (Expression e1)
+    show ?thesis
+    proof(cases c1t)
+      case Nil' : Nil
+      then show ?thesis
+        using Cons C1h 
+        by(auto)
+    next
+      case Cons' : (Cons c1h' c1t')
+      then show ?thesis
+      proof(cases c1h')
+        case (EnterStatement x1)
+        then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h Cons'
+          by(auto)
+      next
+        case C1h' : (ExitStatement st1' locals1' funs1')
+        then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h Cons'
+          by(cases st1'; auto)
+      next
+        case (EnterFunctionCall x31 x32)
+        then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h Cons'
+          by(auto)
+      next
+        case (ExitFunctionCall x41 x42 x43 x44 x45)
+        then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h Cons'
+          by(auto)
+      next
+        case (Expression x5)
+        then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h Cons'
+          by(auto)
+      qed
+    qed
+  qed
+qed
+
+(* TODO: is it an issue that yulLeave
+ * does not update state continuation on recursive calls?
+ * Probably not, since program ends anyway
+ *)
+lemma yulLeave_result :
+  assumes H : "yulLeave d c1 r1 = YulResult r1'"
+  shows "global r1' = global r1 \<and>
+         vals r1' = vals r1 \<and>
+         locals r1' = locals r1 \<and>
+         funs r1' = funs r1 \<and>
+         (\<exists> c1pre . c1 = c1pre @ cont r1')"
+  using assms
+proof(induction c1 arbitrary: r1 r1')
+case Nil
+  then show ?case
+    by(auto)
+next
+  case (Cons c1h c1t)
+  show ?case
+  proof(cases c1h)
+    case C1h : (EnterStatement st1)
+    then show ?thesis
+      using Cons.prems Cons.IH[of r1 r1']
+      by(auto)
+  next
+    case C1h : (ExitStatement st1 locals1 funs1)
+    then show ?thesis
+      using Cons.prems Cons.IH[of r1 r1']
+      by(auto)
+  next
+    case (EnterFunctionCall x31 x32)
+    then show ?thesis using Cons.prems Cons.IH[of "r1" r1']
+      by(auto)
+  next
+    case (ExitFunctionCall x41 x42 x43 x44 x45)
+    then show ?thesis using Cons.prems Cons.IH[of r1 r1']
+      by(auto)
+  next
+    case (Expression x5)
+    then show ?thesis using Cons.prems Cons.IH[of r1 r1'] 
+      by(auto)
+  qed
+qed
+
+
+(*
+lemma yulBreak_result :
+  assumes H1c : "cont r1 = c1"
+  (*assumes H1v : "vals r1 = []" *)
+  assumes H1br : "yulBreak d c1 r1 = YulResult r1'"
+  assumes H2c : "cont r2 = c2"
+  assumes H2br : "yulBreak d c2 r2 = YulResult r2'"
+  assumes Halpha : "alpha_equiv_stackEls' fsubst
+*)
+
 (* YOU ARE HERE. See if we still need the check_decls cases lemma. *)
 lemma alpha_equiv_step :
   assumes Hc1 : "cont r1 = (c1h#c1t)"
@@ -1997,12 +2378,74 @@ proof(cases c1h)
       using ES1 ES2 L1 Hc1 Hc2 Hinit
       by(cases x2; auto simp add: alpha_equiv_results'_def)
 
+    obtain funcs'_pre where Decls_pre :
+      "alpha_equiv_check_decls pre1 pre2 = Some (funcs'_pre)"
+      using ES1 L1 ES2 L2 Hinit H1 H2 Hc1 Hc2 Hupd
+      by(auto simp add: alpha_equiv_results'_def split: option.splits)
+
+    obtain funcs'_body where Decls_body :
+      "alpha_equiv_check_decls body1 body2 = Some (funcs'_body)"
+      using ES1 L1 ES2 L2 Hinit H1 H2 Hc1 Hc2 Hupd
+      by(auto simp add: alpha_equiv_results'_def split: option.splits)
+
+    obtain funcs'_post where Decls_post :
+      "alpha_equiv_check_decls post1 post2 = Some (funcs'_post)"
+      using ES1 L1 ES2 L2 Hinit H1 H2 Hc1 Hc2 Hupd
+      by(auto simp add: alpha_equiv_results'_def split: option.splits)
+
+    show ?thesis
+    proof(cases pre1)
+      case Nil
+
+      then show ?thesis
+        using ES1 L1 ES2 L2 Hinit H1 H2 Hc1 Hc2 Hupd Decls_pre Decls_body Decls_post
+        by(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
+    next
+
+      case Cons1 : (Cons pre1h pre1t)
+
+      obtain pre2h pre2t where Cons2 :
+        "pre2 = pre2h # pre2t"
+        using Cons1 ES1 L1 ES2 L2 Hinit H1 H2 Hc1 Hc2 Hupd Decls_pre
+        by(cases pre2; auto)
+
+      show ?thesis
+        using Cons1 Cons2 ES1 L1 ES2 L2 Hinit H1 H2 Hc1 Hc2 Hupd Decls_pre Decls_body Decls_post
+        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
+        sorry
+    qed
+(* I think we just need some lemmas about splitting
+ * alpha_equiv_check_decls
+ *)
+
+(*
+    show ?thesis
+      using ES1 L1 ES2 L2 Hinit H1 H2 Hc1 Hc2 Hupd Decls_pre Decls_body Decls_post
+      apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
+
+
+    have Distinct1 : "distinct (map fst funcs')"
+      using check_decls_distinct1[OF Decls]
+      by auto
+
+    have Distinct2 : "distinct (map snd funcs')"
+      using check_decls_distinct2[OF Decls]
+      by auto
+
+    have Decls_eq : "zip (get_fun_decls sts1) (get_fun_decls sts2) = funcs'"
+      using check_decls_fun_decls[OF Decls]
+      by auto
+
+    show ?thesis
+      using ES1 L1 ES2 L2 Hinit H1 H2 Hc1 Hc2 Hupd
+      apply(auto simp add: alpha_equiv_results'_def)
+      sorry
+*)
 (*
     show ?thesis
       using ES1 L1 ES2 L2 Hinit H1 H2 Hc1 Hc2 Hupd
       apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
 *)
-    show ?thesis sorry
 
   next
     case B1 : YulBreak
@@ -2085,67 +2528,6 @@ proof(cases c1h)
       using alpha_equiv_gather_functions[OF Fs1 Fs2 _ Decls, of "[]" fsubst]
       by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
 
-
-(* statement equivalence implies stackEl equivalence for enter statement
- * statement equivalence, locals equality, funs equivalence
- * implies stackel equivalence for exit statement *)
-(*
-    have Conc2 : "list_all2 (alpha_equiv_stackEl' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
-     (map EnterStatement sts1 @ ExitStatement (YulBlock sts1) (locals r2) (funs r1) # c1t)
-     (map EnterStatement sts2 @ ExitStatement (YulBlock sts2) (locals r2) (funs r2) # c2t)"
-    proof(rule list_all2_appendI)
-      show "list_all2 (alpha_equiv_stackEl' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
-       (map EnterStatement sts1) (map EnterStatement sts2)"
-        using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
-        unfolding alpha_equiv_results'_def
-        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
-        sorry
-    next
-      have Conc' : "list_all2
-       (alpha_equiv_stackEl'
-         (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
-       ([ExitStatement (YulBlock sts1) (locals r2) (funs r1)] @ c1t)
-       ([ExitStatement (YulBlock sts2) (locals r2) (funs r2)] @ c2t)"
-      proof(rule list_all2_appendI)
-        show "list_all2
-         (alpha_equiv_stackEl'
-           (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
-         [ExitStatement (YulBlock sts1) (locals r2) (funs r1)]
-         [ExitStatement (YulBlock sts2) (locals r2) (funs r2)]"
-          using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
-          unfolding alpha_equiv_results'_def
-          by(auto simp add: alpha_equiv_locals'_def)
-      next
-        show "list_all2
-         (alpha_equiv_stackEl'
-           (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
-         c1t c2t"
-          using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
-          unfolding alpha_equiv_results'_def
-          apply(auto simp add: alpha_equiv_locals'_def)
-(* figure out "cleaning up" fsubst after exiting block. *)
-          sorry
-
-      qed
-
-
-      then show "list_all2
-       (alpha_equiv_stackEl'
-         (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
-       (ExitStatement (YulBlock sts1) (locals r2) (funs r1) # c1t)
-       (ExitStatement (YulBlock sts2) (locals r2) (funs r2) # c2t)"
-        by simp
-    qed
-*)
-
-(* this is promising.
- * we just need:
- * - admitted lemmas above about splitting equiv_stackEls'
- * - lemma saying that comparing map EnterStatement for equality is just
- *   comparing statements for equality
- * - lemma saying that EnterStatement doesn't
-     affect the substitution
- *)
     have Conc2 :
       "alpha_equiv_stackEls' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
        (map EnterStatement sts1 @ ExitStatement (YulBlock sts1) (locals r2) (funs r1) # c1t)
@@ -2214,8 +2596,25 @@ next
       by(cases "vals r2"; auto simp add: alpha_equiv_results'_def)
 
   next
-    case (YulAssignmentStatement x2)
-    then show ?thesis sorry
+    case A1 : (YulAssignmentStatement a1)
+
+    then obtain vs1 e1 where
+      AS1 : "a1 = YulAssignment vs1 e1"
+      by(cases a1; auto)
+
+    obtain a2 where A2 :
+      "x2 = YulAssignmentStatement a2"
+      using XS1 XS2 A1 AS1 Hc1 Hc2 Hinit
+      by(cases x2; auto simp add: alpha_equiv_results'_def)
+
+    then obtain vs2 e2 where
+      AS2 : "a2 = YulAssignment vs2 e2"
+      by(cases a2; auto)
+
+    show ?thesis
+      using XS1 A1 AS1 XS2 A2 AS2 Hinit H1 H2 Hc1 Hc2 Hupd
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
+          split:if_split_asm option.split_asm)
   next
     case D1 : (YulVariableDeclarationStatement d1)
 
@@ -2233,74 +2632,132 @@ next
       by(cases d2; auto)
 
     show ?thesis
-    proof(cases eo1)
-      case None1 : None
-
-      then have None2 : "eo2 = None"
-        using XS1 D1 VD1 XS2 D2 VD2 Hinit H1 H2 Hc1 Hc2 Hupd
-        by(cases eo2; auto simp add: alpha_equiv_results'_def)
-
-      have Vemp : "vals r1 = []" 
-        using XS1 D1 VD1 XS2 D2 VD2 Hinit H1 H2 Hc1 Hc2 Hupd None1 None2
-        by(cases "vals r2"; auto simp add: alpha_equiv_results'_def)
-
-      obtain substh substt where Subst_cons :
-        "vsubst = substh#substt"
-        using XS1 D1 VD1 XS2 D2 VD2 Hinit H1 H2 Hc1 Hc2 Hupd None1 None2 Vemp
-        by(cases vsubst; auto simp add: alpha_equiv_results'_def)
-
-      obtain L1 where L1v :
-        "insert_values (locals r1) (map strip_id_type vs1) (replicate (length vs1) (default_val d)) = Some L1"
-        using XS1 D1 VD1 XS2 D2 VD2 Hinit H1 H2 Hc1 Hc2 Hupd None1 None2 Vemp Subst_cons
-        by(auto simp add: alpha_equiv_results'_def split: option.split_asm)
-
-      obtain L2 where L2v :
-        "insert_values (locals r2) (map strip_id_type vs2) (replicate (length vs2) (default_val d)) = Some L2"
-        using XS1 D1 VD1 XS2 D2 VD2 Hinit H1 H2 Hc1 Hc2 Hupd None1 None2 Vemp Subst_cons
-        by(auto simp add: alpha_equiv_results'_def split: option.split_asm)
-
-      have Vlens : "length vs1 = length vs2"
-        using XS1 D1 VD1 XS2 D2 VD2 Hinit H1 H2 Hc1 Hc2 
-        by(auto simp add: alpha_equiv_results'_def)
-
-      show ?thesis sorry
-
-    next
-      case (Some a)
-      then show ?thesis sorry
-    qed
-
+      using XS1 D1 VD1 XS2 D2 VD2 Hinit H1 H2 Hc1 Hc2 Hupd
+      by(cases eo1; cases eo2; auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
+          split: if_split_asm option.split_asm)
   next
+    case F1 : (YulFunctionDefinitionStatement f1)
 
-    case (YulVariableDeclarationStatement x3)
+    then obtain names1 args1 rets1 body1 where
+      FS1 : "f1 = YulFunctionDefinition names1 args1 rets1 body1"
+      by(cases f1; auto)
+
+    obtain f2 where F2 :
+      "x2 = YulFunctionDefinitionStatement f2"
+      using XS1 XS2 F1 FS1 Hc1 Hc2 Hinit
+      by(cases x2; auto simp add: alpha_equiv_results'_def)
+
+    then obtain names2 args2 rets2 body2 where
+      FS2 : "f2 = YulFunctionDefinition names2 args2 rets2 body2"
+      by(cases f2; auto)
+
+    show ?thesis
+      using XS1 F1 FS1 XS2 F2 FS2 Hinit H1 H2 Hc1 Hc2 Hupd
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
+  next
+    case I1 : (YulIf x51 x52)
     then show ?thesis sorry
   next
-    case (YulFunctionDefinitionStatement x4)
+    case S1 : (YulSwitch x61 x62)
     then show ?thesis sorry
   next
-  case (YulIf x51 x52)
-  then show ?thesis sorry
-  next
-    case (YulSwitch x61 x62)
+    case L1 : (YulForLoop x71 x72 x73 x74)
     then show ?thesis sorry
   next
-    case (YulForLoop x71 x72 x73 x74)
+    case B1 : YulBreak
+
+    then have B2 : "x2 = YulBreak"
+      using XS1 XS2 B1 Hc1 Hc2 Hinit
+      by(cases x2; auto simp add: alpha_equiv_results'_def)
+
+    have Break1 : "yulBreak d c1t (r1\<lparr>cont := c1t, vals := []\<rparr>) = YulResult r1'"
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
+          split: if_split_asm option.split_asm)      
+
+    have Break2 : "yulBreak d c2t (r2\<lparr>cont := c2t, vals := []\<rparr>) = YulResult r2'"
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
+          split: if_split_asm option.split_asm)      
+
+    obtain c1pre c2pre where 
+      Breaks : "alpha_equiv_stackEls' fsubst' (c1pre @ cont r1') (c2pre @ cont r2')"
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
+      using yulBreak_result[OF Break1] yulBreak_result[OF Break2]
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
+          split: if_split_asm option.split_asm)      
+
+(* YOU ARE HERE
+ * we need to further characterize c1pre and c2pre. they need to be the earliest occurrence
+ * of the thing we are looking for, but that may not be enough
+ * maybe something about how if two stack element lists are alpha equivalent,
+ * the suffixes returned by break will also be *)
+
+(* this one might be sort of interesting... *)
+    show ?thesis
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
+      using yulBreak_result[OF Break1] yulBreak_result[OF Break2] Breaks Break1 Break2
+      apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
+          split: if_split_asm option.split_asm)      
+(*
+
+  (* vals = [] ? *)
+  yulBreak d c1t (r1 \<lparr> cont := c1t \<rparr>) = YulResult r1' \<Longrightarrow>
+  yulBreak d c2t (r2 \<lparr> cont := c2t \<rparr>) = YulResult r2' \<Longrightarrow>
+alpha_equiv_stackEls' fsubst' c1t c2t \<Longrightarrow> global r1' = global r2'
+
+likewise for vals
+
+for funs:
+alpha_equiv_funs' fsubst (funs r1') (funs r2')
+
+likewise for cont (interesting case)
+
+alpha_equiv_stackEls' fsubst' (cont r1') (cont r2')
+
+*)
+      sorry
+  next
+    case C1 : YulContinue
     then show ?thesis sorry
   next
-    case YulBreak
+    case L1 : YulLeave
     then show ?thesis sorry
   next
-    case YulContinue
-    then show ?thesis sorry
-  next
-    case YulLeave
-    then show ?thesis sorry
-  next
-    case (YulBlock x11)
-    then show ?thesis sorry
+    case B1: (YulBlock sts1)
+
+    obtain sts2 where B2 :
+      "x2 = YulBlock sts2"
+      using XS1 XS2 B1 Hc1 Hc2 Hinit
+      by(cases x2; auto simp add: alpha_equiv_results'_def)
+
+    obtain funcs' where Decls :
+      "alpha_equiv_check_decls sts1 sts2 = Some (funcs')"
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd 
+      by(auto simp add: alpha_equiv_results'_def split: option.splits)
+
+    have Distinct1 : "distinct (map fst funcs')"
+      using check_decls_distinct1[OF Decls]
+      by auto
+
+    have Distinct2 : "distinct (map snd funcs')"
+      using check_decls_distinct2[OF Decls]
+      by auto
+
+    have Decls_eq : "zip (get_fun_decls sts1) (get_fun_decls sts2) = funcs'"
+      using check_decls_fun_decls[OF Decls]
+      by auto
+
+    have Locs_Eq : "alpha_equiv_locals' fsubst' locs1 locs2"
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Decls 
+      unfolding alpha_equiv_results'_def
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
+
+    show ?thesis
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Decls Locs_Eq
+      unfolding alpha_equiv_results'_def alpha_equiv_locals'_def
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
   qed
-
-  then show ?thesis sorry
 next
   case (EnterFunctionCall x31 x32)
   then show ?thesis sorry

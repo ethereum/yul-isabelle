@@ -49,6 +49,21 @@ value "
   Inl x \<Rightarrow> edata_gets 0 72 (e_memory x))"
 *)
 
+definition break_yul :: "(eint, unit) YulStatement" where
+"break_yul \<equiv>
+YUL{
+    for { let x := 2 } lt(x, 10) { x := add(x, 1) } {
+      {
+        let y := 50
+        mstore(x, x)
+        break
+      }
+    }
+    mstore(y, y)
+}"  
+
+value "eval break_yul"
+
 definition memtest_yul :: "(eint, unit) YulStatement" where
 "memtest_yul \<equiv>
 YUL{mstore(40, 22)}"
