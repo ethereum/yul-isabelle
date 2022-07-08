@@ -67,8 +67,15 @@ fun subst_update_enter_statement ::
   ((zip (get_fun_decls ls1) (get_fun_decls ls2))# fsubst)"
 | "subst_update_enter_statement fsubst _ _ = (fsubst)"
 
+(*
+fun subst_update_break ::
+  "subst \<Rightarrow> 
+*)
+
 (* TODO: one approach to solving the problems around break/continue/etc.
- * is to *)
+ * is to handle them here. this requires changing type signatures though.
+ * or does it? maybe we can get away with just removing the first element *)
+
 fun subst_update_exit_statement ::
   "subst \<Rightarrow> 
    ('v, 't) YulStatement \<Rightarrow>
@@ -112,7 +119,10 @@ fun subst_update ::
   subst_update_exit_fun_call fsubst"
 | "subst_update fsubst _ _ = Some (fsubst)"
 
-
+(* subst_updatex is used when comparing stack element lists.
+ * it does not extend the context when processing statement entry,
+ * but does remove context elements on statement exit.
+ *)
 fun subst_updatex_enter_statement ::
   "subst \<Rightarrow> 
    ('v, 't) YulStatement \<Rightarrow>
