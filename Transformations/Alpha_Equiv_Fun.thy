@@ -53,6 +53,19 @@ fun get_fun_decls ::
 | "get_fun_decls (h#t) = 
     get_fun_decls t"
 
+(* restrict a substitution context based on contents of locals.
+ * we are going to use this to hopefully simplify reasoning about
+ * break, continue, etc
+ *)
+type_synonym 'a fun_cxt =
+  "(String.literal * 'a) list"
+
+definition subst_restrict ::
+  "subst \<Rightarrow> 'a fun_cxt \<Rightarrow> subst"
+  where
+"subst_restrict l1 l2 =
+  (drop (length l1 - length l2) l1)"
+
 (* whenever we extend the variable context, we also need to update subst.  *)
 (* also need to update subst on function entry. *)
 
@@ -79,19 +92,19 @@ fun subst_update_break ::
 fun subst_update_exit_statement ::
   "subst \<Rightarrow> 
    ('v, 't) YulStatement \<Rightarrow>
+   'a fun_cxt \<Rightarrow>
    ('v, 't) YulStatement \<Rightarrow>
-   (subst) option" where
+   'a fun_cxt \<Rightarrow>
+   (subst)" where
 "subst_update_exit_statement fsubst
-  (YulVariableDeclarationStatement (YulVariableDeclaration ns1 eo1))
-  (YulVariableDeclarationStatement (YulVariableDeclaration ns2 eo2)) = Some fsubst"
+  (YulVariableDeclarationStatement (YulVariableDeclaration ns1 eo1)) _
+  (YulVariableDeclarationStatement (YulVariableDeclaration ns2 eo2)) _ = fsubst"
 | "subst_update_exit_statement fsubst
-  (YulBlock ls1)
-  (YulBlock ls2) = 
-  (case (fsubst) of
-    (fsh # fsubst') \<Rightarrow> Some (fsubst')
-   | _ \<Rightarrow> None)"
+  (YulBlock ls1) cxt1
+  (YulBlock ls2) cxt2 = 
+  (subst_restrict fsubst cxt1)"
 (* bogus cases mixed with noop cases here. *)
-| "subst_update_exit_statement fsubst _ _ = Some (fsubst)" 
+| "subst_update_exit_statement fsubst _ _ _ _ = fsubst" 
 
 (* TODO: update fsubst with sig? *)
 fun subst_update_enter_fun_call ::
@@ -111,8 +124,8 @@ fun subst_update ::
   "subst \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> (subst) option" where
 "subst_update fsubst (EnterStatement s1) (EnterStatement s2) =
   Some (subst_update_enter_statement fsubst s1 s2)"
-| "subst_update fsubst (ExitStatement s1 _ _) (ExitStatement s2 _ _) =
-  subst_update_exit_statement fsubst s1 s2"
+| "subst_update fsubst (ExitStatement s1 _ f1) (ExitStatement s2 _ f2) =
+  Some (subst_update_exit_statement fsubst s1 f1 s2 f2)"
 | "subst_update fsubst (EnterFunctionCall f1 s1) (EnterFunctionCall f2 s2) =
   Some (subst_update_enter_fun_call fsubst s1 s2)"
 | "subst_update fsubst (ExitFunctionCall _ _ _ _ _) (ExitFunctionCall _ _ _ _ _) = 
@@ -131,7 +144,7 @@ fun subst_updatex_enter_statement ::
 "subst_updatex_enter_statement fsubst (YulBlock ls1) (YulBlock ls2) =
   (fsubst)"
 | "subst_updatex_enter_statement fsubst _ _ = (fsubst)"
-
+(*
 fun subst_updatex_exit_statement ::
   "subst \<Rightarrow> 
    ('v, 't) YulStatement \<Rightarrow>
@@ -148,6 +161,7 @@ fun subst_updatex_exit_statement ::
    | _ \<Rightarrow> None)"
 (* bogus cases mixed with noop cases here. *)
 | "subst_updatex_exit_statement fsubst _ _ = Some (fsubst)" 
+*)
 
 (* TODO: update fsubst with sig? *)
 fun subst_updatex_enter_fun_call ::
@@ -167,8 +181,8 @@ fun subst_updatex ::
   "subst \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> (subst) option" where
 "subst_updatex fsubst (EnterStatement s1) (EnterStatement s2) =
   Some (subst_updatex_enter_statement fsubst s1 s2)"
-| "subst_updatex fsubst (ExitStatement s1 _ _) (ExitStatement s2 _ _) =
-  subst_updatex_exit_statement fsubst s1 s2"
+| "subst_updatex fsubst (ExitStatement s1 _ f1) (ExitStatement s2 _ f2) =
+  Some (subst_update_exit_statement fsubst s1 f1 s2 f2)"
 | "subst_updatex fsubst (EnterFunctionCall f1 s1) (EnterFunctionCall f2 s2) =
   Some (subst_updatex_enter_fun_call fsubst s1 s2)"
 | "subst_updatex fsubst (ExitFunctionCall _ _ _ _ _) (ExitFunctionCall _ _ _ _ _) = 
@@ -573,13 +587,13 @@ next
       "preh2 = ExitStatement s2 locals2 funcs2"
       using Cons1.prems Cons2
       by(cases preh2; auto)
-
+(*
     obtain fsubst' where Fsubst' :
-      "subst_updatex_exit_statement fsubst s1 s2 = Some fsubst'"
+      "subst_update_exit_statement fsubst s1 funcs1 s2 funcs2 = fsubst'"
       using Cons1 Cons2 XS1 XS2
       by(cases "subst_updatex_exit_statement fsubst s1 s2"; auto)
-
-    show ?thesis using Cons1 Cons2 XS1 XS2 Fsubst'
+*)
+    show ?thesis using Cons1 Cons2 XS1 XS2
       by(auto)
   next
     case EF1 : (EnterFunctionCall name1 sig1)
@@ -2569,7 +2583,9 @@ proof(cases c1h)
      (ExitStatement (YulBlock sts2) (locals r2) (funs r2) # c2t)"
         using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
         unfolding alpha_equiv_results'_def
-        by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_locals'_eq)
+        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_locals'_eq
+subst_restrict_def)
+        term "ExitStatement"
     qed
 
     show ?thesis
