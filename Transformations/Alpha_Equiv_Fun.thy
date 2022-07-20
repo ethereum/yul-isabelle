@@ -523,17 +523,6 @@ definition alpha_equiv_function_sig'_scheme ::
               (YulFunctionDefinitionStatement (YulFunctionDefinition n2 (f_sig_arguments s2) (f_sig_returns s2) sts2))
         | (_, _) \<Rightarrow> False)"
 
-(* add to function_sig'_scheme? :
-  list_all2 (alpha_equiv_name vsubst fsubst) visible1 visible2
-and/or
-  do restriction on functions context?
-*)
-
-(* fun alpha_equiv_function_bodies' ::
-  "subst \<Rightarrow> ('g, 'v, 't) YulFunctionBody \<Rightarrow> ('g, 'v, 't) YulFunctionBody \<Rightarrow> bool" where
-(* TODO: see if we need it *)
-*)
-
 definition alpha_equiv_fun ::
   "subst \<Rightarrow> (YulIdentifier * ('g, 'v, 't, 'z) function_sig_scheme) \<Rightarrow> (YulIdentifier * ('g, 'v, 't, 'z) function_sig_scheme) \<Rightarrow> bool"
   where
@@ -570,6 +559,9 @@ fun alpha_equiv_stackEl' ::
 
 (* do we need a subst_updatex variant also? *)
 
+(* TODO: perhaps there is an easier way to handle "jumping" to after the break.
+ * e.g. we just run the "normal alpha equiv interpreter" a bunch of times.
+ *)
 (* do we need more error cases in this? *)
 fun subst_update_cont_break ::
   "subst \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow>
@@ -596,7 +588,7 @@ where
       (if yul_statement_same_constructor st1 st2
        then subst_update_cont_break fsubst t1 t2
        else None))"
-(* YOU ARE HERE. How to handle exitFunction here? *)
+(* How to handle exitFunction here? *)
 | "subst_update_cont_break fsubst ((ExitFunctionCall _ _ _ _ _)#t1) ((ExitFunctionCall _ _ _ _ _)#t2) = None"
 | "subst_update_cont_break fsubst (h1#t1) (h2#t2) =
    (if stackEl_same_constructor_strong h1 h2 then
@@ -704,6 +696,10 @@ function (sequential) alpha_equiv_stackEls' ::
   done
 *)
 
+(* TODO: one way to understand the problem is that we are giving the wrong result
+ * in cases where the programs will crash on the next step 
+ * eg. if we are about to exit a block but the fsubst context is nil.
+ * do we say that the programs are equal under this context?*)
 function (sequential) alpha_equiv_stackEls' ::
   "subst \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> bool" where
 "alpha_equiv_stackEls' fsubst [] [] = True"
@@ -713,15 +709,17 @@ function (sequential) alpha_equiv_stackEls' ::
       (case h2 of
         (ExitStatement YulBreak _ _) \<Rightarrow>
           (case subst_update_cont_break fsubst t1 t2 of
-            None \<Rightarrow> False
+            None \<Rightarrow> alpha_equiv_stackEl' fsubst h1 h2 \<and>
+                    alpha_equiv_stackEls' fsubst t1 t2
             | Some (fsubst', t1', t2') \<Rightarrow> 
+              alpha_equiv_stackEl' fsubst h1 h2 \<and>
               alpha_equiv_stackEls' fsubst t1 t2 \<and>
               alpha_equiv_stackEls' fsubst' t1' t2')
         | _ \<Rightarrow> False)
     | _ \<Rightarrow>
     (if stackEl_same_constructor_strong h1 h2 then
      (case subst_updatex fsubst h1 h2 of
-      None \<Rightarrow> False
+      None \<Rightarrow> True
       | Some fsubst' \<Rightarrow>
       (alpha_equiv_stackEl' fsubst' h1 h2 \<and>
        alpha_equiv_stackEls' fsubst' t1 t2))
@@ -844,11 +842,20 @@ next
 
 qed
 
+lemma newsubst_subst_update_cont_break_tail :
+  assumes "alpha_equiv_stackEls'_newsubst fsubst pre1 pre2 = Some fsubst'"
+  assumes "alpha_equiv_stackEls'_newsubst fsubst' post1 post2 = Some fsubst''"
+  shows "alpha_equiv_stackEls'_newsubst fsubst (pre1 @ post1) (pre2 @ post2) = Some fsubst''"
+  sorry
+
+
 (*
 lemma alpha_equiv_stackEls'_newsubst_comp :
-  assumes "alpha_equiv_stackEls'_newsubst
+  assumes "alpha_equiv_stackEls'_newsubst fsubst pre1 pre2 = Some fsubst'"
+  assumes "alpha_equiv_stackEls'_newsubst fsubst' post1 post2 = Some fsubst''"
+  shows "alpha_equiv_stackEls'_newsubst fsubst (pre1 @ post1) (pre2 @ post2) = Some fsubst''"
+  sorry
 *)
-
 (*
 lemma subst_update_cont_break_tail_None :
   assumes "subst_update_cont_break fsubst (pre1h # pre1t) (pre2h # pre2t) = None"
@@ -987,6 +994,7 @@ lemma subst_update_cont_break_split :
 *)
 
 (* need a more general version of this? *)
+(*
 lemma alpha_equiv_stackEls'_split :
   assumes "alpha_equiv_stackEls' fsubst pre1 pre2"
   assumes "alpha_equiv_stackEls'_newsubst fsubst pre1 pre2 = Some fsubst'"
@@ -1078,7 +1086,7 @@ next
         by(cases "subst_update_cont_break fsubst pret1 pret2"; auto)
 
       show ?thesis
-        using Cons1 Cons2 XS1 XS2 B1 B2 Upd_Break subst_update_cont_break_tail[OF Upd_Break, of post1 post2]
+        using Cons1.prems Cons1.IH[of fsubst pret2 _ post1 post2] Cons2 XS1 XS2 B1 B2 Upd_Break subst_update_cont_break_tail[OF Upd_Break, of post1 post2]
         apply(auto)
 
       proof(cases "subst_update_cont_break fsubst2 pret1 pret2")
@@ -1209,7 +1217,7 @@ next
       by(cases e1; auto)
   qed
 qed
-
+*)
 
 (*
 abbreviation (input) alpha_equiv_stackEls' ::
@@ -3249,8 +3257,8 @@ proof(cases c1h)
     then have B2 : "x2 = YulBreak"
       using ES1 ES2 B1 Hc1 Hc2 Hinit
       by(cases x2; auto simp add: alpha_equiv_results'_def)
-    
-    show ?thesis
+
+    then show ?thesis
     proof(cases "subst_update_cont_break fsubst' c1t c2t")
       case None
       then show ?thesis
