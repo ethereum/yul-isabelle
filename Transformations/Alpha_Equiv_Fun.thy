@@ -557,12 +557,9 @@ fun alpha_equiv_stackEl' ::
      alpha_equiv_funs' fsubst fs1 fs2)"
 | "alpha_equiv_stackEl' fsubst _ _ = False"
 
-(* do we need a subst_updatex variant also? *)
-
-(* TODO: perhaps there is an easier way to handle "jumping" to after the break.
- * e.g. we just run the "normal alpha equiv interpreter" a bunch of times.
- *)
 (* do we need more error cases in this? *)
+(* compute the resulting substitution and remaining stacks
+ * after an equality check finds a break *)
 fun subst_update_cont_break ::
   "subst \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow>
     (subst * ('g, 'v, 't) StackEl list * ('g, 'v, 't) StackEl list) option"
@@ -589,7 +586,10 @@ where
        then subst_update_cont_break fsubst t1 t2
        else None))"
 (* How to handle exitFunction here? *)
-| "subst_update_cont_break fsubst ((ExitFunctionCall _ _ _ _ _)#t1) ((ExitFunctionCall _ _ _ _ _)#t2) = None"
+| "subst_update_cont_break fsubst ((ExitFunctionCall _ _ _ _ _)#t1) ((ExitFunctionCall _ _ _ _ _)#t2) = 
+  (case fsubst of
+              [] \<Rightarrow> None
+              | fsubsth#fsubstt \<Rightarrow> subst_update_cont_break fsubstt t1 t2)"
 | "subst_update_cont_break fsubst (h1#t1) (h2#t2) =
    (if stackEl_same_constructor_strong h1 h2 then
     subst_update_cont_break fsubst t1 t2
@@ -655,9 +655,44 @@ next
     then show ?thesis using Cons1.prems Cons1.IH[of subst l2t] Cons2
       by(cases l2h; auto)
   next
-    case (ExitFunctionCall x41 x42 x43 x44 x45)
-    then show ?thesis using Cons1.prems Cons1.IH[of subst l2t] Cons2
-      by(cases l2h; auto)
+    case XF1 : (ExitFunctionCall x41 x42 x43 x44 x45)
+
+    show ?thesis
+    proof(cases l2h)
+      case (EnterStatement x1)
+      then show ?thesis
+        using Cons1 Cons2 XF1
+        by(auto)
+    next
+      case (ExitStatement x21 x22 x23)
+      then show ?thesis
+        using Cons1 Cons2 XF1
+        by(auto)
+    next
+      case (EnterFunctionCall x31 x32)
+      then show ?thesis
+        using Cons1 Cons2 XF1
+        by(auto)
+    next
+      case XF2 : (ExitFunctionCall x41 x42 x43 x44 x45)
+
+      show ?thesis
+      proof(cases subst)
+        case Nil
+        then show ?thesis
+          using Cons1 Cons2 XF1 XF2
+          by(auto)
+      next
+        case (Cons substh substt)
+        then show ?thesis using Cons1.prems Cons1.IH[of subst l2t] Cons1.IH[of substt l2t] Cons2 XF1 XF2
+          by(auto)
+      qed
+    next
+      case (Expression x5)
+      then show ?thesis
+        using Cons1 Cons2 XF1
+        by(auto)
+    qed
   next
     case (Expression x5)
     then show ?thesis using Cons1.prems Cons1.IH[of subst l2t] Cons2
@@ -829,10 +864,45 @@ next
       using Cons1 Cons2
       by(cases pre2h; auto)
   next
-    case (ExitFunctionCall x41 x42 x43 x44 x45)
-    then show ?thesis 
-      using Cons1 Cons2
-      by(cases pre2h; auto)
+    case XF1 : (ExitFunctionCall x41 x42 x43 x44 x45)
+
+    show ?thesis
+    proof(cases pre2h)
+      case (EnterStatement x1)
+      then show ?thesis 
+        using Cons1 Cons2 XF1
+        by(auto)
+    next
+      case (ExitStatement x21 x22 x23)
+      then show ?thesis 
+        using Cons1 Cons2 XF1
+        by(auto)
+    next
+      case (EnterFunctionCall x31 x32)
+      then show ?thesis 
+        using Cons1 Cons2 XF1
+        by(auto)
+    next
+      case XF2 : (ExitFunctionCall x41 x42 x43 x44 x45)
+
+      show ?thesis
+      proof(cases fsubst)
+        case Nil
+        then show ?thesis
+          using Cons1 Cons2 XF1 XF2
+          by(auto)
+      next
+        case (Cons fsubsth fsubstt)
+        then show ?thesis 
+          using Cons1 Cons2 XF1 XF2
+          by(auto)
+      qed
+    next
+    case (Expression x5)
+      then show ?thesis 
+        using Cons1 Cons2 XF1
+        by(auto)
+    qed
   next
     case (Expression x5)
     then show ?thesis 
@@ -994,14 +1064,28 @@ lemma subst_update_cont_break_split :
 *)
 
 (* need a more general version of this? *)
-(*
-lemma alpha_equiv_stackEls'_split :
+(* have newsubst also return remaining everything? *)
+(* do we need a Some case as well; is this the generalization? *)
+
+(* if cont_break is None, then we can just get the resulting substitution after doing prefix,
+ * then continue with suffix
+ * otherwise, we need to begin with the tail of the prefix given by cont_break,
+ * then proceed with suffix
+ *)
+
+lemma alpha_equiv_stackEls'_split:
   assumes "alpha_equiv_stackEls' fsubst pre1 pre2"
-  assumes "alpha_equiv_stackEls'_newsubst fsubst pre1 pre2 = Some fsubst'"
-  assumes "alpha_equiv_stackEls' fsubst' post1 post2"
-  shows "alpha_equiv_stackEls' fsubst (pre1 @ post1) (pre2 @ post2)"
+  shows "(\<forall> fsubst' post1 post2 . 
+         subst_update_cont_break fsubst pre1 pre2 = None \<longrightarrow>
+         alpha_equiv_stackEls'_newsubst fsubst pre1 pre2 = Some fsubst'\<longrightarrow>
+         alpha_equiv_stackEls' fsubst' post1 post2 \<longrightarrow>
+         alpha_equiv_stackEls' fsubst (pre1 @ post1) (pre2 @ post2)) \<and>
+         (\<forall> fsubst' post1 post2 pre1' pre2'. 
+         subst_update_cont_break fsubst pre1 pre2 = Some (fsubst', pre1', pre2') \<longrightarrow>
+         alpha_equiv_stackEls' fsubst' (pre1' @ post1) (pre2' @ post2) \<longrightarrow>
+         alpha_equiv_stackEls' fsubst (pre1 @ post1) (pre2 @ post2))"
 using assms
-proof(induction pre1 arbitrary: fsubst pre2 fsubst' post1 post2)
+proof(induction pre1 arbitrary: fsubst pre2)
   case Nil1 : Nil
 
   have Nil2 : "pre2 = []"
@@ -1028,7 +1112,7 @@ next
 
     then show ?thesis
       using Cons1 Cons2 ES1 ES2
-      by(cases s1; auto split: if_split_asm)
+      by(cases s1; cases s2; auto split: if_split_asm)
   next
     case XS1 : (ExitStatement s1 locals1 funcs1)
 
@@ -1049,10 +1133,23 @@ next
         using Cons1 Cons2 XS1 XS2
         by(cases s2; auto)
     next
-      case (YulVariableDeclarationStatement x3)
-      then show ?thesis
-        using Cons1 Cons2 XS1 XS2
-        by(cases s2; auto split: option.splits)
+      case VD1 : (YulVariableDeclarationStatement d1)
+ 
+      obtain a1 b1 where D1 : "d1 = YulVariableDeclaration a1 b1"
+        using Cons1 Cons2 XS1 XS2 VD1
+        by(cases d1; auto)
+
+      obtain d2 where VD2 : "s2 = YulVariableDeclarationStatement d2"
+        using Cons1 Cons2 XS1 XS2 VD1
+        by(cases s2; auto)
+
+      obtain a2 b2 where D2 : "d2 = YulVariableDeclaration a2 b2"
+        using Cons1 Cons2 XS1 XS2 VD1 VD2
+        by(cases d2; auto)
+
+      show ?thesis
+        using Cons1 Cons2 XS1 XS2 VD1 D1 VD2 D2
+        by(auto)
     next
       case (YulFunctionDefinitionStatement x4)
       then show ?thesis
@@ -1080,106 +1177,26 @@ next
         using Cons1 Cons2 XS1 XS2 B1
         by(cases s2; auto)
 
-      obtain pret1'' pret2'' fsubst'' where Upd_Break :
-        "subst_update_cont_break fsubst pret1 pret2 = Some (fsubst'', pret1'', pret2'')"
-        using Cons1 Cons2 XS1 XS2 B1 B2
-        by(cases "subst_update_cont_break fsubst pret1 pret2"; auto)
-
       show ?thesis
-        using Cons1.prems Cons1.IH[of fsubst pret2 _ post1 post2] Cons2 XS1 XS2 B1 B2 Upd_Break subst_update_cont_break_tail[OF Upd_Break, of post1 post2]
-        apply(auto)
-
-      proof(cases "subst_update_cont_break fsubst2 pret1 pret2")
-        case None1 : None
-
-        show ?thesis
-          using Cons1 Cons2 XS1 XS2 Fsubst2 B1 B2 None1
-          by(auto)
-      next
-        case Some1 : (Some r1)
-        then obtain fsubst_out_1 pret1_out_1 pret2_out_1 where R1 :
-          "r1 = (fsubst_out_1, pret1_out_1, pret2_out_1)"
-          by (cases r1; auto)
-
-(* relate subst_update_cont_break to alpha_equiv_stackEls'_newsubst? *)
-
-        then show ?thesis
-          using Cons1 Cons2 XS1 XS2 Fsubst2 B1 B2 Some1
-          using subst_update_cont_break_tail[OF Some1[unfolded R1]]
-          apply(auto)
-
-(*
-        proof(cases "subst_update_cont_break fsubst2 (pret1 @ post1) (pret2 @ post2)")
-          case None2 : None
-
-          show ?thesis
-            using Cons1 Cons2 XS1 XS2 Fsubst2 B1 B2 None1 None2
-            by(auto)
-        next
-          case Some2 : (Some r2)
-
-          then obtain fsubst_out_2 pret1_out_2 pret2_out_2 where R2 :
-            "r2 = (fsubst_out_2, pret1_out_2, pret2_out_2)"
-            by (cases r2; auto)
-
-          then show ?thesis
-            using Cons1 Cons2 XS1 XS2 Fsubst2 B1 B2 None1 Some2
-            apply(auto)
-      next
-        case (Some a)
-        then show ?thesis sorry
-      qed
-
-        using Cons1 Cons2 XS1 XS2 Fsubst2 B1 B2
-        apply( auto)
-*)
-      obtain pret1'' pret2'' fsubst'' where Upd_Break :
-        "subst_update_cont_break fsubst pret1 pret2 = Some (fsubst'', pret1'', pret2'')"
-        using Cons1 Cons2 XS1 XS2 B1 B2
-        by(cases "subst_update_cont_break fsubst pret1 pret2"; auto)
-
-(* idea here.
- * need to show that last element of prefix is loop exit.
- * we probably need another lemma as well
- *)
-      have Break_Tail :
-        "subst_update_cont_break fsubst2 (pret1 @ post1) (pret2 @ post2) = 
-          Some (fsubst'', pret1'' @ post1, pret2'' @ post2)"
-        using subst_update_cont_break_tail[OF Upd_Break, of "post1" "post2"]
+        using Cons1.prems Cons1.IH[] Cons2 XS1 XS2 B1 B2
+        using subst_update_cont_break_tail[of fsubst pret1 pret2]
         by(auto)
-
-      show ?thesis
-        using Cons1.prems Cons1.IH [of fsubst2 pret2 fsubst' post1 post2] Cons2 XS1 XS2 Fsubst2 B1 B2 Upd_Break Break_Tail
-        apply(auto)
-        apply(rule_tac Cons1.IH)
-
     next
       case YulContinue
       then show ?thesis
-        using Cons1 Cons2 XS1 XS2 Fsubst2
+        using Cons1 Cons2 XS1 XS2
         by(cases s2; auto)
     next
       case YulLeave
       then show ?thesis
-        using Cons1 Cons2 XS1 XS2 Fsubst2
+        using Cons1 Cons2 XS1 XS2
         by(cases s2; auto)
     next
       case (YulBlock x11)
       then show ?thesis
-        using Cons1 Cons2 XS1 XS2 Fsubst2
-        by(cases s2; auto)
+        using Cons1 Cons2 XS1 XS2
+        by(cases s2; auto split: list.splits)
     qed
-(*
-    obtain fsubst3 pret1' pret2' where Fsubst3 :
-      "subst_update_cont_break fsubst2 pret1 pret2 = Some (fsubst3, pret1', pret2')"
-      using Cons1 Cons2 XS1 XS2 Fsubst2
-      apply(cases s1; auto)
-      apply(cases s2; auto)
-*)
-    show ?thesis using Cons1 Cons2 XS1 XS2 Fsubst2
-      apply(cases s1; auto)
-      apply(cases s2; auto)
-      apply(cases "subst_update_cont_break fsubst2 pret1 pret2"; auto)
   next
     case EF1 : (EnterFunctionCall name1 sig1)
 
@@ -1198,13 +1215,18 @@ next
       using XF1 Cons1.prems Cons2
       by(cases preh2; auto)
 
-    obtain fsubst' where Fsubst' :
-      "subst_updatex_exit_fun_call fsubst = Some fsubst'"
-      using Cons1 Cons2 XF1 XF2
-      by(cases "subst_updatex_exit_fun_call fsubst"; auto)
-
-    show ?thesis using Cons1 Cons2 XF1 XF2 Fsubst'
-      by(auto)
+    show ?thesis
+    proof(cases "fsubst")
+      case Nil_in : Nil
+      then show ?thesis 
+        using Cons1 Cons2 XF1 XF2
+        by(auto)
+    next
+      case (Cons fsubsth fsubstt)
+      then show ?thesis 
+        using Cons1 Cons2 XF1 XF2
+        by(auto)
+    qed
   next
     case Exp1 : (Expression e1)
 
@@ -1217,14 +1239,27 @@ next
       by(cases e1; auto)
   qed
 qed
-*)
 
-(*
-abbreviation (input) alpha_equiv_stackEls' ::
-  "subst \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> bool" where
-"alpha_equiv_stackEls' fsubst l1 l2 \<equiv>
-  list_all2 (alpha_equiv_stackEl' fsubst) l1 l2"
-*)
+lemma alpha_equiv_stackEls'_split_None:
+  fixes pre1 :: "('a, 'b, 'c) StackEl list"
+  assumes "alpha_equiv_stackEls' fsubst pre1 pre2"
+  assumes "subst_update_cont_break fsubst pre1 pre2 =
+    (None :: (_ * ('a, 'b, 'c) StackEl list * ('a, 'b, 'c) StackEl list) option)"
+  assumes "alpha_equiv_stackEls'_newsubst fsubst pre1 pre2 = Some fsubst'"
+  assumes "alpha_equiv_stackEls' fsubst' post1 post2"
+  shows "alpha_equiv_stackEls' fsubst (pre1 @ post1) (pre2 @ post2)"
+  using assms alpha_equiv_stackEls'_split
+  by blast
+
+lemma alpha_equiv_stackEls'_split_Some:
+  assumes "alpha_equiv_stackEls' fsubst pre1 pre2"
+  assumes "subst_update_cont_break fsubst pre1 pre2 = Some (fsubst', pre1', pre2')"
+  assumes "alpha_equiv_stackEls' fsubst' (pre1' @ post1) (pre2' @ post2) "
+  shows "alpha_equiv_stackEls' fsubst (pre1 @ post1) (pre2 @ post2)"
+  using assms alpha_equiv_stackEls'_split
+  by blast
+
+
 
 definition alpha_equiv_results' ::
   "subst \<Rightarrow>
@@ -2435,7 +2470,7 @@ qed
 
 (*lemma*)
 (* TODO: is this still true? *)
-(*
+
 lemma alpha_equiv_stackEls'_enter :
   assumes "list_all2 (alpha_equiv_statement' subst) sts1 sts2"
   shows
@@ -2455,10 +2490,65 @@ next
     using Cons1.prems
     by(cases sts2; auto)
 
-  show ?case using Cons1 Cons2
-    by(cases st1h; cases st2h; auto)
+  show ?case
+  proof(cases st1h)
+    case (YulFunctionCallStatement x1)
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h; cases x1; auto)
+  next
+    case (YulAssignmentStatement x2)
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h; cases x2; auto)
+  next
+    case (YulVariableDeclarationStatement x3)
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h; cases x3; auto)
+  next
+    case (YulFunctionDefinitionStatement x4)
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h; cases x4; auto)
+  next
+    case (YulIf x51 x52)
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h; auto)
+  next
+    case (YulSwitch x61 x62)
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h;  auto)
+  next
+    case (YulForLoop x71 x72 x73 x74)
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h; auto)
+  next
+    case YulBreak
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h; auto)
+  next
+  case YulContinue
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h; auto)
+  next
+    case YulLeave
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h; auto)
+  next
+    case (YulBlock x11)
+    then show ?thesis 
+      using Cons1 Cons2
+      by(cases st2h; auto)
+  qed
 qed
-*)
+
 
 lemma alpha_equiv_stackEls'_newsubst_enter :
   assumes "list_all2 (alpha_equiv_statement' subst) sts1 sts2"
@@ -3044,14 +3134,33 @@ next
       by(cases l2h; auto)
 
     then show ?thesis using Cons1.prems Cons1.IH Cons2 XF1
-      by(auto simp add:alpha_equiv_function_sig'_scheme_def split: option.splits YulFunctionBody.splits)
+      by(auto simp add:alpha_equiv_function_sig'_scheme_def split: option.splits YulFunctionBody.splits list.splits)
   next
     case (Expression x5)
     then show ?thesis using Cons1.prems Cons1.IH[of fsubst l2t fsubst'] Cons2
       by(cases l2h; auto split: if_splits)
   qed
 qed
+
+lemma subst_update_cont_break_enter :
   
+  shows
+    "subst_update_cont_break
+     (subst)
+     (map EnterStatement sts1) (map EnterStatement sts2) = None"
+proof(induction sts1 arbitrary: subst sts2)
+  case Nil
+  then show ?case 
+    by(cases sts2; auto)
+next
+  case Cons1 : (Cons st1h st1t)
+
+  then show ?case
+    by(cases sts2; auto)
+qed
+
+declare [[show_types]]
+declare [[show_sorts]]
 
 (* YOU ARE HERE. See if we still need the check_decls cases lemma. *)
 lemma alpha_equiv_step :
@@ -3347,39 +3456,53 @@ proof(cases c1h)
       using alpha_equiv_gather_functions[OF Fs1 Fs2 _ Decls, of "[]" fsubst]
       by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
 
+    have None : "subst_update_cont_break
+     (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
+     (map EnterStatement sts1) (map EnterStatement sts2)  = (None ::
+      (_ * ('a, 'b, 'c) StackEl list * _) option)"
+      using subst_update_cont_break_enter
+      by(auto)
+
     have Conc2 :
       "alpha_equiv_stackEls' (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
        (map EnterStatement sts1 @ ExitStatement (YulBlock sts1) (locals r2) (funs r1) # c1t)
        (map EnterStatement sts2 @ ExitStatement (YulBlock sts2) (locals r2) (funs r2) # c2t)"
-    proof(rule alpha_equiv_stackEls'_split)
-      show "alpha_equiv_stackEls'
-       (zip (get_fun_decls sts1)
-         (get_fun_decls sts2) #
-        fsubst)
-       (map EnterStatement sts1)
-       (map EnterStatement sts2)"
-        using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
-        using alpha_equiv_stackEls'_enter
-        unfolding alpha_equiv_results'_def
-        by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_locals'_eq)
-    next
-      show "alpha_equiv_stackEls'_newsubst
-           (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
-           (map EnterStatement sts1) (map EnterStatement sts2) =
-          Some (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)"
-        using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
-        using alpha_equiv_stackEls'_newsubst_enter
-        unfolding alpha_equiv_results'_def
-        by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_locals'_eq)
-    next
-      show "alpha_equiv_stackEls'
-     (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
-     (ExitStatement (YulBlock sts1) (locals r2) (funs r1) # c1t)
-     (ExitStatement (YulBlock sts2) (locals r2) (funs r2) # c2t)"
-        using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
-        unfolding alpha_equiv_results'_def
-        by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_locals'_eq)
-    qed
+      proof(rule alpha_equiv_stackEls'_split_None)
+        show "alpha_equiv_stackEls'
+         (zip (get_fun_decls sts1)
+           (get_fun_decls sts2) #
+          fsubst)
+         (map EnterStatement sts1)
+         (map EnterStatement sts2)"
+          using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
+          using alpha_equiv_stackEls'_enter
+          unfolding alpha_equiv_results'_def
+          by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_locals'_eq)
+      next
+        show "subst_update_cont_break
+         (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
+         (map EnterStatement sts1) (map EnterStatement sts2) =
+         (None :: (_ * ('a, 'b, 'c) StackEl list * _) option)"
+          using None
+          by auto
+      next
+        show "alpha_equiv_stackEls'_newsubst
+             (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
+             (map EnterStatement sts1) (map EnterStatement sts2) =
+            Some (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)"
+          using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
+          using alpha_equiv_stackEls'_newsubst_enter
+          unfolding alpha_equiv_results'_def
+          by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_locals'_eq)
+      next
+        show "alpha_equiv_stackEls'
+       (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst)
+       (ExitStatement (YulBlock sts1) (locals r2) (funs r1) # c1t)
+       (ExitStatement (YulBlock sts2) (locals r2) (funs r2) # c2t)"
+          using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Decls_eq
+          unfolding alpha_equiv_results'_def
+          by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_locals'_eq)
+      qed
 
     show ?thesis
       using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Conc1 Conc2
