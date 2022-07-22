@@ -3159,9 +3159,6 @@ next
     by(cases sts2; auto)
 qed
 
-declare [[show_types]]
-declare [[show_sorts]]
-
 (* YOU ARE HERE. See if we still need the check_decls cases lemma. *)
 lemma alpha_equiv_step :
   assumes Hc1 : "cont r1 = (c1h#c1t)"
@@ -3514,7 +3511,7 @@ next
 
   then obtain x2 locs2 funs2 where XS2 : "c2h = ExitStatement x2 locs2 funs2"
     using Hc1 Hc2 Hinit
-    by(cases c2h; auto simp add: alpha_equiv_results'_def)
+    by(cases c2h; cases x1; auto simp add: alpha_equiv_results'_def)
 
   show ?thesis
   proof(cases x1)
@@ -3635,12 +3632,35 @@ next
  * maybe something about how if two stack element lists are alpha equivalent,
  * the suffixes returned by break will also be *)
 
+    show ?thesis
+    proof(cases "subst_update_cont_break fsubst' c1t c2t")
+      case None
+      then show ?thesis 
+        using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
+        using yulBreak_result[OF Break1] yulBreak_result[OF Break2] Breaks Break1 Break2
+        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
+(* need to relate prefixes here *)
+(* this should be false: subst_update_cont_break returns None, but yulBreak returns Some. *)
+        sorry
+
+    next
+      case (Some a)
+      then show ?thesis
+        using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
+        using yulBreak_result[OF Break1] yulBreak_result[OF Break2] Breaks Break1 Break2
+        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
+        sorry
+(* subst_update is not doing the right thing here (break case)
+ * it needs to update the substitution based on walking the tail of the list.
+ *)
+    qed
+
 (* this one might be sort of interesting... *)
     show ?thesis
       using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
-      using yulBreak_result[OF Break1] yulBreak_result[OF Break2] Breaks Break1 Break2
-      apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
-          split: if_split_asm option.split_asm)      
+      using (*yulBreak_result[OF Break1] yulBreak_result[OF Break2]*) Breaks Break1 Break2
+      apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)      
+      sorry
 (*
 
   (* vals = [] ? *)
