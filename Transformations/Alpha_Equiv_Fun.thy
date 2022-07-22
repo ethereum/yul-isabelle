@@ -53,11 +53,6 @@ fun get_fun_decls ::
 | "get_fun_decls (h#t) = 
     get_fun_decls t"
 
-(* whenever we extend the variable context, we also need to update subst.  *)
-(* also need to update subst on function entry. *)
-
-(* gather yul functions / get_fun_decls *)
-
 fun subst_update_enter_statement ::
   "subst \<Rightarrow> 
    ('v, 't) YulStatement \<Rightarrow>
@@ -66,15 +61,6 @@ fun subst_update_enter_statement ::
 "subst_update_enter_statement fsubst (YulBlock ls1) (YulBlock ls2) =
   ((zip (get_fun_decls ls1) (get_fun_decls ls2))# fsubst)"
 | "subst_update_enter_statement fsubst _ _ = (fsubst)"
-
-(*
-fun subst_update_break ::
-  "subst \<Rightarrow> 
-*)
-
-(* TODO: one approach to solving the problems around break/continue/etc.
- * is to handle them here. this requires changing type signatures though.
- * or does it? maybe we can get away with just removing the first element *)
 
 fun subst_update_exit_statement ::
   "subst \<Rightarrow> 
@@ -106,7 +92,7 @@ fun subst_update_exit_fun_call ::
   where
 "subst_update_exit_fun_call (fsh # fsubst') = Some (fsubst')"
 | "subst_update_exit_fun_call fsubst = None"
-
+(*
 fun subst_update ::
   "subst \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> ('g, 'v, 't) StackEl \<Rightarrow> (subst) option" where
 "subst_update fsubst (EnterStatement s1) (EnterStatement s2) =
@@ -118,6 +104,9 @@ fun subst_update ::
 | "subst_update fsubst (ExitFunctionCall _ _ _ _ _) (ExitFunctionCall _ _ _ _ _) = 
   subst_update_exit_fun_call fsubst"
 | "subst_update fsubst _ _ = Some (fsubst)"
+*)
+
+
 
 (* subst_updatex is used when comparing stack element lists.
  * it does not extend the context when processing statement entry,
@@ -557,6 +546,8 @@ fun alpha_equiv_stackEl' ::
      alpha_equiv_funs' fsubst fs1 fs2)"
 | "alpha_equiv_stackEl' fsubst _ _ = False"
 
+
+
 (* do we need more error cases in this? *)
 (* compute the resulting substitution and remaining stacks
  * after an equality check finds a break *)
@@ -822,6 +813,33 @@ proof(relation "measure (\<lambda>(s, l1, l2) . length l1)"; auto)
     using subst_update_cont_break_length[OF H]
     by auto
 qed
+
+fun subst_update ::
+  "subst \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> subst option" where
+"subst_update fsubst [] [] = None"
+| "subst_update fsubst
+    (ExitStatement st1 vs1 fs1 # t1)
+    (ExitStatement st2 vs2 fs2 # t2) =
+    (case st1 of
+      YulBreak \<Rightarrow>
+      (case st2 of
+        YulBreak \<Rightarrow>
+          (case subst_update_cont_break fsubst t1 t2 of
+            None \<Rightarrow> None
+            | Some (fsubst', _, _) \<Rightarrow> Some fsubst')
+        | _ \<Rightarrow> None)
+       | _ \<Rightarrow> subst_update_exit_statement fsubst st1 st2)"
+| "subst_update fsubst
+    (EnterStatement s1 # _) (EnterStatement s2 # _) =
+    Some (subst_update_enter_statement fsubst s1 s2)"
+| "subst_update fsubst (EnterFunctionCall f1 s1 # _) (EnterFunctionCall f2 s2 # _) =
+  Some (subst_update_enter_fun_call fsubst s1 s2)"
+| "subst_update fsubst (ExitFunctionCall _ _ _ _ _ # _) (ExitFunctionCall _ _ _ _ _ # _) = 
+  subst_update_exit_fun_call fsubst"
+| "subst_update fsubst (_ # _) (_ # _) = Some (fsubst)"
+| "subst_update _ _ _ = None"
+  
+
 
 lemma subst_update_cont_break_tail :
   assumes "subst_update_cont_break fsubst pre1 pre2 = Some (fsubst', pre1', pre2')"
@@ -3166,7 +3184,7 @@ lemma alpha_equiv_step :
   assumes Hinit : "alpha_equiv_results' fsubst r1 r2"
   assumes H1 : "evalYulStep d r1 = YulResult r1'"
   assumes H2 : "evalYulStep d r2 = YulResult r2'"
-  assumes Hupd : "subst_update fsubst c1h c2h = Some (fsubst')"
+  assumes Hupd : "subst_update fsubst (cont r1) (cont r2) = Some (fsubst')"
   shows "alpha_equiv_results' fsubst' r1' r2'"
   using assms
 proof(cases c1h)
@@ -3619,11 +3637,49 @@ next
       by(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
           split: if_split_asm option.split_asm)      
 
+    show ?thesis
+    proof(cases "subst_update_cont_break fsubst c1t c2t")
+      case None
+      then show ?thesis
+        using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
+        by(auto)
+    next
+      case (Some r)
+
+      then obtain fsubstx c1x c2x where R :
+        "r = (fsubstx, c1x, c2x)"
+        by(cases r; auto)
+
+(*
     obtain c1pre c2pre where 
       Breaks : "alpha_equiv_stackEls' fsubst' (c1pre @ cont r1') (c2pre @ cont r2')"
       using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
       using yulBreak_result[OF Break1] yulBreak_result[OF Break2]
-      by(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
+      apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
+          split: if_split_asm option.split_asm)      
+*)
+
+    show ?thesis
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Some R
+
+        apply(auto simp add:)
+        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
+        apply(auto simp add: alpha_equiv_funs'_def )
+
+    (* fsubst vs. fsubst'.
+     * are we updating the substitution too early in the case of break? *)
+
+    qed
+
+    show ?thesis
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
+      apply(auto)
+
+    obtain c1pre c2pre where 
+      Breaks : "alpha_equiv_stackEls' fsubst' (c1pre @ cont r1') (c2pre @ cont r2')"
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
+      using yulBreak_result[OF Break1] yulBreak_result[OF Break2]
+      apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
           split: if_split_asm option.split_asm)      
 
 (* YOU ARE HERE
