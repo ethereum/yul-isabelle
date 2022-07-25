@@ -814,6 +814,7 @@ proof(relation "measure (\<lambda>(s, l1, l2) . length l1)"; auto)
     by auto
 qed
 
+(*
 fun subst_update ::
   "subst \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> subst option" where
 "subst_update fsubst [] [] = None"
@@ -838,8 +839,32 @@ fun subst_update ::
   subst_update_exit_fun_call fsubst"
 | "subst_update fsubst (_ # _) (_ # _) = Some (fsubst)"
 | "subst_update _ _ _ = None"
-  
+*)  
 
+fun subst_update ::
+  "subst \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> ('g, 'v, 't) StackEl list \<Rightarrow> subst option" where
+"subst_update fsubst [] [] = None"
+| "subst_update fsubst
+    (ExitStatement st1 vs1 fs1 # t1)
+    (ExitStatement st2 vs2 fs2 # t2) =
+    (case st1 of
+      YulBreak \<Rightarrow>
+      (case st2 of
+        YulBreak \<Rightarrow>
+          (case subst_update_cont_break fsubst t1 t2 of
+            None \<Rightarrow> None
+            | Some (fsubst', _, _) \<Rightarrow> Some fsubst') \<comment> \<open>this should probably be fsubst'; testing\<close>
+        | _ \<Rightarrow> None)
+       | _ \<Rightarrow> subst_update_exit_statement fsubst st1 st2)"
+| "subst_update fsubst
+    (EnterStatement s1 # _) (EnterStatement s2 # _) =
+    Some (subst_update_enter_statement fsubst s1 s2)"
+| "subst_update fsubst (EnterFunctionCall f1 s1 # _) (EnterFunctionCall f2 s2 # _) =
+  Some (subst_update_enter_fun_call fsubst s1 s2)"
+| "subst_update fsubst (ExitFunctionCall _ _ _ _ _ # _) (ExitFunctionCall _ _ _ _ _ # _) = 
+  subst_update_exit_fun_call fsubst"
+| "subst_update fsubst (_ # _) (_ # _) = Some (fsubst)"
+| "subst_update _ _ _ = None"
 
 lemma subst_update_cont_break_tail :
   assumes "subst_update_cont_break fsubst pre1 pre2 = Some (fsubst', pre1', pre2')"
@@ -2663,16 +2688,19 @@ lemma max_suffixD2 :
   shows "\<exists> mid . post = mid @ post'"
   using assms unfolding max_suffix_def by auto
 
-(* TODO: figure out if we are properly restricting
-   locals. I think we are.
-*)
+(*
+lemma yulBreak_result_cont :
+  assumes H : "yulBreak d c1 r1 = YulResult r1'"
+*)  
+
 lemma yulBreak_result :
   assumes H : "yulBreak d c1 r1 = YulResult r1'"
   shows "global r1' = global r1 \<and>
          vals r1' = vals r1 \<and>
          locals r1' = locals r1 \<and>
          funs r1' = funs r1 \<and>
-         (\<exists> c1pre . c1 = c1pre @ cont r1')"
+         (\<exists> pre w1 w2 w3 w4 l f . c1 = pre @ ExitStatement (YulForLoop w1 w2 w3 w4) l f # cont r1' \<and>
+         (\<forall> x  w1' w2' w3' w4' l' f' . x \<in> set pre \<longrightarrow> x \<noteq> ExitStatement (YulForLoop w1' w2' w3' w4') l' f' ))"
   using assms
 proof(induction c1 arbitrary: r1 r1')
 case Nil
@@ -2713,8 +2741,8 @@ next
       then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
         by(auto)
     next
-      case (YulForLoop x71 x72 x73 x74)
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
+      case L: (YulForLoop x71 x72 x73 x74)
+      then show ?thesis  using L Cons.prems C1h
         by(auto)
     next
       case YulBreak
@@ -2747,102 +2775,6 @@ next
       by(auto)
   qed
 qed
-
-(* this is actually kind of interesting. alpha equiv may not hold while in the middle
- * of skipping statements with YulBreak, but will hold by the end
- *)
-(*
-lemma yulBreak_result_equiv :
-  assumes H1 : "yulBreak d c1 r1 = YulResult r1'"
-  assumes H2 : "yulBreak d c2 r2 = YulResult r2'"
-  assumes Halpha : "alpha_equiv_stackEls' fsubst c1 c2"
-  shows "alpha_equiv_stackEls' fsubst (cont r1') (cont r2')"
-  using assms
-proof(induction c1 arbitrary: r1 r1' c2 r2 r2' fsubst)
-  case Nil
-  then show ?case
-    by(auto)
-next
-  case Cons1 : (Cons c1h c1t)
-
-  obtain c2h c2t where Cons2 : "c2 = (c2h # c2t)"
-    using Cons1.prems
-    by(cases c2; auto)
-
-  show ?case
-  proof(cases c1h)
-    case C1h : (EnterStatement st1)
-    then show ?thesis using Cons1.prems Cons1.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1' c2t "(r2 \<lparr> cont := c2t \<rparr>)" r2'] Cons2
-      apply(cases c2h; auto)
-  next
-    case C1h : (ExitStatement st1 locals1 funs1)
-    show ?thesis
-    proof(cases st1)
-      case (YulFunctionCallStatement x1)
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-      by(auto)
-    next
-      case (YulAssignmentStatement x2)
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-        by(auto)
-    next
-      case (YulVariableDeclarationStatement x3)
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-        by(auto)
-    next
-      case (YulFunctionDefinitionStatement x4)
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-        by(auto)
-    next
-      case (YulIf x51 x52)
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-        by(auto)
-    next
-      case (YulSwitch x61 x62)
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-        by(auto)
-    next
-      case (YulForLoop x71 x72 x73 x74)
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-        by(auto)
-    next
-      case YulBreak
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-        by(auto)
-    next
-    case YulContinue
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-        by(auto)
-    next
-      case YulLeave
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-        by(auto)
-    next
-      case (YulBlock x11)
-      then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] C1h
-        by(auto)
-    qed
-  next
-    case (EnterFunctionCall x31 x32)
-    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1']
-      by(auto)
-  next
-    case (ExitFunctionCall x41 x42 x43 x44 x45)
-    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1']
-      by(auto)
-  next
-    case (Expression x5)
-    then show ?thesis using Cons.prems Cons.IH[of "(r1\<lparr>cont := c1t\<rparr>)" r1'] 
-      by(auto)
-  qed
-
-
-    using Cons1 Cons2
-    apply(auto)
-
-    apply(auto)
-qed
-*)
 
 
 (* need to characterize cont differently. *)
@@ -3649,22 +3581,46 @@ next
       then obtain fsubstx c1x c2x where R :
         "r = (fsubstx, c1x, c2x)"
         by(cases r; auto)
-
 (*
+
     obtain c1pre c2pre where 
       Breaks : "alpha_equiv_stackEls' fsubst' (c1pre @ cont r1') (c2pre @ cont r2')"
       using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd
       using yulBreak_result[OF Break1] yulBreak_result[OF Break2]
-      apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def
           split: if_split_asm option.split_asm)      
 *)
 
     show ?thesis
-      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Some R
+      using XS1 B1 XS2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Some R (*Breaks*)
+      using yulBreak_result[OF Break1] yulBreak_result[OF Break2]
+
+(*
+problem:
+- if we apply the update, we then need to compare unchanged function contexts
+in a reduced subsitution context \<rightarrow> this doesn't work
+
+- if we don't apply the update, we are comparing states in the wrong function context.
+  in other words, we need to calculate the function context that _will_ happen after
+  exiting the loop (this is what is calculated by cont_break)
+  but for the purposes of checking the actual functions we need to use the old one
+
+*)
 
         apply(auto simp add:)
         apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
-        apply(auto simp add: alpha_equiv_funs'_def )
+   
+(* we might have it here. alpha_equiv_stackEls'_subst_update_cont_break
+ * plus a stronger characterization of the results of YulBreak.
+ * idea: prefixes don't contain loop exit
+ * so (?) fsubstx = fsubst
+ * c1x is cont r1' (may need a lemma relating YulBreak and subst_update_cont_break)
+ * likewise for c2x.
+
+ * however, the problem is that fsubst' should not equal fsubst.
+ * since prefix c1pre may contain block exits.
+*)
+      sorry
 
     (* fsubst vs. fsubst'.
      * are we updating the substitution too early in the case of break? *)
