@@ -3126,6 +3126,200 @@ fun normal_control_flow :: "('g, 'v, 't) StackEl \<Rightarrow> bool" where
    | _ \<Rightarrow> True)" 
 | "normal_control_flow _ = True"
 
+(*
+list_all2 (alpha_equiv_expr' fsubst')
+     b1 b2 \<Longrightarrow>
+    alpha_equiv_stackEls' fsubst' c1t
+     c2t \<Longrightarrow>
+    alpha_equiv_stackEls' fsubst'
+     (map Expression (rev b1))
+     (map Expression (rev b2))
+*)
+
+lemma alpha_equiv_stackEls'_expression :
+  assumes "list_all2 (alpha_equiv_expr' fsubst) l1 l2"
+  shows "alpha_equiv_stackEls' fsubst (map Expression l1) (map Expression l2)"
+  using assms
+proof(induction l1 arbitrary: fsubst l2)
+  case Nil
+  then show ?case
+    by(cases l2; auto)
+next
+  case Cons1 : (Cons l1h l1t)
+
+  obtain l2h l2t where Cons2 :
+    "l2 = l2h # l2t"
+    using Cons1.prems
+    by(cases l2; auto)
+
+  show ?case using Cons1 Cons2
+    by(cases l1h; cases l2h; auto)
+qed
+
+lemma subst_update_cont_break_expression :
+  shows "subst_update_cont_break fsubst (map Expression l1) (map Expression l2) = None"
+proof(induction l1 arbitrary: fsubst l2)
+  case Nil1 : Nil
+  then show ?case
+    by(cases l2; auto)
+next
+  case Cons1 : (Cons l1h l1t)
+
+  show ?case
+  proof(cases l2)
+    case Nil2 : Nil
+    then show ?thesis using Cons1
+      by(auto)
+  next
+    case Cons2 : (Cons l2h l2t)
+    then show ?thesis 
+      using Cons1
+      by(auto)
+  qed
+qed
+
+lemma alpha_equiv_stackEls'_newsubst_expression :
+  assumes "length l1 = length l2"
+  shows "alpha_equiv_stackEls'_newsubst fsubst (map Expression l1) (map Expression l2) = Some fsubst"
+  using assms
+proof(induction l1 arbitrary: fsubst l2)
+  case Nil1 : Nil
+  then show ?case
+    by(auto)
+next
+  case Cons1 : (Cons l1h l1t)
+  then show ?case 
+    by(cases l2; auto)
+qed
+
+(* Probably we can prove a more general version of this theorem. *)
+(*
+lemma alpha_equiv_name_fun_ix :
+  assumes "alpha_equiv_name' fsubst n1 n2 "
+  assumes "list_all2 (alpha_equiv_fun fsubst) fs1 fs2"
+  assumes "ix < length fs1"
+  assumes "fs1 ! ix = (n1, sig1)"
+  assumes "map_of fs2 n2 = Some sig2 "
+  shows "fs2 ! ix = (n2, sig2)"
+  using assms
+(*
+proof(induction fsubst arbitrary: n1 n2 fs1 fs2 sig1 sig2 ix)
+  case Nil
+  then show ?case 
+    by(auto simp add: alpha_equiv_name'_def)
+next
+  case (Cons fsubsth fsubstt)
+
+  show ?case
+  proof(cases "map_of fsubsth n1")
+    case None
+    then show ?thesis using Cons.prems Cons.IH
+      apply(auto simp add: alpha_equiv_name'_def)
+  next
+    case (Some a)
+    then show ?thesis sorry
+  qed
+
+  have Lookup : "map_of fsubsth n1 = Some n2"
+    using Cons
+    apply(cases "map_of fsubsth n1 "; auto simp add: alpha_equiv_name'_def)
+
+  then show ?case
+    apply(auto simp add: alpha_equiv_name'_def)
+
+  then show ?case sorry
+qed
+*)
+proof(induction ix arbitrary: fsubst n1 n2 fs1 fs2 sig1 sig2)
+  case 0
+
+  have Eqv : "alpha_equiv_fun fsubst (fs1 ! 0) (fs2 ! 0)"
+    using list_all2_nthD[OF "0.prems"(2) "0.prems"(3)]
+    by(auto)
+
+  then show ?case using 0
+    unfolding alpha_equiv_fun_def
+    apply(auto simp add: alpha_equiv_fun_def alpha_equiv_name'_def alpha_equiv_function_sig'_scheme_def)
+next
+  case (Suc ix)
+  then show ?case sorry
+qed
+*)
+
+lemma map_of_earliest :
+  assumes "map_of m x = Some y"
+  shows "\<exists> idx . idx < length m \<and> m ! idx = (x, y) \<and>
+    (\<forall> idx' y' . m ! idx' = (x, y') \<longrightarrow> idx \<le> idx')"
+  using assms
+proof(induction m arbitrary: x y)
+  case Nil
+  then show ?case
+    by(auto)
+next
+  case (Cons mh mt)
+
+  obtain mh1 mh2 where Mh :
+    "mh = (mh1, mh2)"
+    by(cases mh; auto)
+
+  show ?case
+  proof(cases "x = mh1")
+    case True
+
+    have Conc' :
+      "0 < length (mh # mt) \<and> (mh # mt) ! 0 = (x, y) \<and> (\<forall>idx' y'. (mh # mt) ! idx' = (x, y') \<longrightarrow> 0 \<le> idx')"
+      using Cons.prems Mh True
+      by(auto)
+
+    then show ?thesis
+      by blast
+  next
+    case False
+
+    then have Get : "map_of mt x = Some y"
+      using Cons.prems  Mh
+      by(auto)
+
+    obtain idx where Idx :
+      "idx < length mt"
+      "mt ! idx = (x, y)"
+      "(\<And> idx' y'. mt ! idx' = (x, y') \<Longrightarrow> idx \<le> idx')"
+      using Cons.IH[OF Get]
+      by blast
+
+    have Conc'1 : "1 + idx < length (mh # mt)"
+      using Idx by auto
+
+    have Conc'2 :
+      "(mh # mt) ! (1 + idx) = (x, y)"
+      using Cons.prems Mh False Idx
+      by auto
+
+    have Conc'3 :
+       "\<And> idx' y' . (mh # mt) ! idx' = (x, y') \<Longrightarrow> (1 + idx) \<le> (idx')"
+    proof-
+      fix idx' y'
+      assume Idx' : "(mh # mt) ! idx' = (x, y')"
+
+      show "1 + idx \<le> idx'"
+      proof(cases idx')
+        case 0
+        then show ?thesis
+          using Cons.prems Mh Idx False Idx'
+          by(auto)
+      next
+        case (Suc idx't)
+        then show ?thesis using Cons.prems Mh Idx False Idx'
+          by(auto)
+      qed
+    qed
+    show ?thesis
+      using Conc'1 Conc'2 Conc'3
+      by blast
+  qed
+qed
+
+
 (* YOU ARE HERE. See if we still need the check_decls cases lemma. *)
 lemma alpha_equiv_step :
   assumes Hc1 : "cont r1 = (c1h#c1t)"
@@ -3655,16 +3849,6 @@ next
     proof(cases "f_sig_body e2")
       case YB2 : (YulBuiltin f2)
 
-(*
-      obtain fsubsth where Fsubst_Cons :
-        "fsubst = fsubsth # fsubst'"
-        using Hc1 Hc2 H1 H2 Hinit Hupd XF1 XF2 YB1 YB2
-        by(cases fsubst; auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def split: list.split_asm option.split_asm)
-
-      have Conc' : "alpha_equiv_funs' fsubst' (funs r1) (funs r2)"
-        sorry
-*)
-
       show ?thesis
         using Hc1 Hc2 H1 H2 Hinit Hupd XF1 XF2 YB1 YB2 
         by(auto simp add: alpha_equiv_results'_def alpha_equiv_fun_def
@@ -3673,12 +3857,7 @@ alpha_equiv_funs'_def alpha_equiv_function_sig'_scheme_def)
     next
 
       case YF2 : (YulFunction f2)
-(*
-      obtain fsubsth where Fsubst_Cons :
-        "fsubst = fsubsth # fsubst'"
-        using Hc1 Hc2 H1 H2 Hinit Hupd XF1 XF2 YB1 YF2
-        by(cases fsubst; auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def split: list.split_asm option.split_asm)
-*)
+
       have False
         using Hc1 Hc2 H1 H2 Hinit Hupd XF1 XF2 YB1 YF2 
         by(auto simp add: alpha_equiv_results'_def alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def split: list.split_asm option.split_asm)
@@ -3693,12 +3872,7 @@ alpha_equiv_funs'_def alpha_equiv_function_sig'_scheme_def)
     show ?thesis
     proof(cases "f_sig_body e2")
       case YB2 : (YulBuiltin f2)
-(*
-      obtain fsubsth where Fsubst_Cons :
-        "fsubst = fsubsth # fsubst'"
-        using Hc1 Hc2 H1 H2 Hinit Hupd XF1 XF2 YF1 YB2
-        by(cases fsubst; auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def split: list.split_asm option.split_asm)
-*)
+
       have False
         using Hc1 Hc2 H1 H2 Hinit Hupd XF1 XF2 YF1 YB2
         by(auto simp add: alpha_equiv_results'_def alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def split: list.split_asm option.split_asm)
@@ -3708,21 +3882,12 @@ alpha_equiv_funs'_def alpha_equiv_function_sig'_scheme_def)
     next
 
       case YF2 : (YulFunction f2)
-(*
-      obtain fsubsth where Fsubst_Cons :
-        "fsubst = fsubsth # fsubst'"
-        using Hc1 Hc2 H1 H2 Hinit Hupd XF1 XF2 YF1 YF2
-        by(cases fsubst; auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def split: list.split_asm option.split_asm)
-
-      have Conc' : "alpha_equiv_funs' fsubst' (funs r1) (funs r2)"
-        sorry
-*)
       show ?thesis
         using Hc1 Hc2 H1 H2 Hinit Hupd XF1 XF2 YF1 YF2
 
         by(cases "vals r1"; auto simp add: alpha_equiv_results'_def alpha_equiv_fun_def
-alpha_equiv_funs'_def alpha_equiv_function_sig'_scheme_def 
-alpha_equiv_locals'_def split: option.splits)
+            alpha_equiv_funs'_def alpha_equiv_function_sig'_scheme_def 
+            alpha_equiv_locals'_def split: option.splits)
     qed
   qed
 
@@ -3750,16 +3915,6 @@ next
       "f2 = YulFunctionCall a2 b2"
       by(cases f2; auto)
 
-(*
-    have Cont : "alpha_equiv_stackEls' fsubst'
-        (map Expression (rev b1) @
-         EnterFunctionCall a1 x2a #
-         ExitFunctionCall a1 (vals r2) (locals r2) (funs r1) x2a # c1t)
-        (map Expression (rev b2) @
-         EnterFunctionCall a2 x2aa #
-         ExitFunctionCall a2 (vals r2) (locals r2) (funs r2) x2aa # c2t)"
-*)
-
     obtain sig1 where Sig1 :
       "map_of (funs r1) a1 = Some sig1"
       using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2
@@ -3779,47 +3934,122 @@ next
         EnterFunctionCall a2 sig2 #
         ExitFunctionCall a2 (vals r2) (locals r2) (funs r2) sig2 # c2t)"
     proof(rule alpha_equiv_stackEls'_split_None)
+
+      have "list_all2 (alpha_equiv_expr' fsubst') b1 b2"
+        using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2 Sig1 Sig2
+        by(auto simp add: alpha_equiv_results'_def)
+
+      then have Exprs : "list_all2 (alpha_equiv_expr' fsubst') (rev b1) (rev b2)"
+        unfolding list_all2_rev
+        by auto
+
       show "alpha_equiv_stackEls' fsubst' (map Expression (rev b1))
         (map Expression (rev b2))"
-      using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2 Sig1 Sig2
-      apply(auto simp add: alpha_equiv_results'_def)
-      sorry
-  (*
-      list_all2 (alpha_equiv_expr' fsubst') b1 b2 \<Longrightarrow>
-      alpha_equiv_stackEls' fsubst' c1t c2t \<Longrightarrow>
-      alpha_equiv_stackEls' fsubst' (map Expression (rev b1))
-       (map Expression (rev b2))
-  *)
+        using alpha_equiv_stackEls'_expression[OF Exprs]
+        by auto
     next
   
       show "subst_update_cont_break fsubst' (map Expression (rev b1))
        (map Expression (rev b2)) = None"
-  (* subst_update_cont_break_map - new lemma *)
-  
-        sorry
-    next
-  
-      show "alpha_equiv_stackEls'_newsubst fsubst' (map Expression (rev b1)) (map Expression (rev b2)) = Some fsubst'"
-        (* lemma about alpha_equiv_stackEls'_newsubst *)
-        sorry
+        using subst_update_cont_break_expression
+        by auto
     next
 
-(* cases on f_sig_body sig1; f_sig_body sig2 *)
+      have Exprs_all2 : "list_all2 (alpha_equiv_expr' fsubst') b1 b2"
+        using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2 Sig1 Sig2
+        by(auto simp add: alpha_equiv_results'_def)
+
+      have Exprs_len : "length (rev b1) = length (rev b2)"
+        using list_all2_lengthD[OF Exprs_all2]
+        by(auto)
+
+      show "alpha_equiv_stackEls'_newsubst fsubst' (map Expression (rev b1)) (map Expression (rev b2)) = Some fsubst'"
+        using alpha_equiv_stackEls'_newsubst_expression[OF Exprs_len]
+        by auto
+    next
+
+      obtain ix1 where Ix1 :
+        "funs r1 ! ix1 = (a1, sig1)" "ix1 < length (funs r1)"
+        "\<And> idx' sig1' . funs r1 ! idx' = (a1, sig1') \<Longrightarrow> ix1 \<le> idx'"
+        using map_of_earliest[OF Sig1]
+        unfolding List.in_set_conv_nth
+        by auto
+
+      have Lens : "length (funs r1) = length (funs r2)"
+        using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2 Sig1 Sig2
+        using list_all2_lengthD
+        by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
+
+      have Funs_all_eqv :
+        "list_all2 (alpha_equiv_fun fsubst') (funs r1) (funs r2)"
+        using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2 Sig1 Sig2
+        by(auto simp add: alpha_equiv_results'_def
+            alpha_equiv_funs'_def)
+
+      have Funs_eqv1 : "alpha_equiv_fun fsubst' (a1, sig1) (funs r2 ! ix1)"
+        using list_all2_nthD[OF Funs_all_eqv Ix1(2)] Ix1(1)
+        by auto
+
+      obtain sig2' where Sig2' : "funs r2 ! ix1 = (a2, sig2')"
+        using Funs_eqv1
+        using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2 Sig1 Sig2
+        by(cases "funs r2 ! ix1"; auto simp add: alpha_equiv_fun_def alpha_equiv_name'_def
+            alpha_equiv_results'_def)
+
+      obtain ix2 where Ix2 : "funs r2 ! ix2 = (a2, sig2)" "ix2 < length (funs r2)"
+        "\<And> idx' sig2' . funs r2 ! idx' = (a2, sig2') \<Longrightarrow> ix2 \<le> idx'"
+        using map_of_earliest[OF Sig2]
+        unfolding List.in_set_conv_nth
+        by auto
+
+      have Funs_eqv2 : "alpha_equiv_fun fsubst' (funs r1 ! ix2) (a2, sig2)"
+        using list_all2_nthD2[OF Funs_all_eqv Ix2(2)] Ix2(1)
+        by auto
+
+      obtain sig1' where Sig1' : "funs r1 ! ix2 = (a1, sig1')"
+        using Funs_eqv2
+        using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2 Sig1 Sig2
+        by(cases "funs r1 ! ix2"; auto simp add: alpha_equiv_fun_def alpha_equiv_name'_def
+            alpha_equiv_results'_def)
+
+      have Ix1_leq_Ix2 :
+        "ix1 \<le> ix2"
+        using Ix1(3)[OF Sig1']
+        by auto
+
+      have Ix2_leq_Ix1 :
+        "ix2 \<le> ix1"
+        using Ix2(3)[OF Sig2']
+        by auto
+
+      have Ix_eq : "ix1 = ix2"
+        using Ix1_leq_Ix2 Ix2_leq_Ix1
+        by auto
+
+      have Funs_eqv : "alpha_equiv_fun fsubst' (a1, sig1) (a2, sig2)"
+        using Funs_eqv1 Ix_eq Ix2(1)
+        by(auto)
+
+      have Conc'1 : "list_all2 (alpha_equiv_name' fsubst') (f_sig_visible sig1) (f_sig_visible sig2)"
+        using Funs_eqv
+        by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_fun_def)
+
+      have Conc'2 : "alpha_equiv_function_sig'_scheme fsubst' a1 sig1 a2 sig2"
+        using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2 Sig1 Sig2
+        using Funs_eqv
+        by(cases "f_sig_body sig1"; cases "f_sig_body sig2";
+            auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def)
+
       show "alpha_equiv_stackEls' fsubst'
        (EnterFunctionCall a1 sig1 # ExitFunctionCall a1 (vals r2) (locals r2) (funs r1) sig1 # c1t)
        (EnterFunctionCall a2 sig2 # ExitFunctionCall a2 (vals r2) (locals r2) (funs r2) sig2 # c2t)"
         using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2 Sig1 Sig2
-  
-        apply(auto simp add: alpha_equiv_fun_def alpha_equiv_name'_def
-alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_function_sig'_scheme_def)
-        sorry
+        using Conc'1 Conc'2
+
+        by(auto simp add: alpha_equiv_fun_def alpha_equiv_name'_def
+            alpha_equiv_results'_def alpha_equiv_funs'_def alpha_equiv_locals'_eq)
     qed
 
-(*
-    show "alpha_equiv_stackEls'_newsubst fsubst' (map Expression (rev b1))
-     (map Expression (rev b2)) =
-    Some ?fsubst'"
-*)
     show ?thesis 
       using E1 E2 Hc1 Hc2 Hinit H1 H2 Hupd FC1 FC2 YFC1 YFC2 Sig1 Sig2
       using Conc'
