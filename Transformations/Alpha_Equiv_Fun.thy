@@ -159,22 +159,6 @@ fun subst_updatex ::
   subst_updatex_exit_fun_call fsubst"
 | "subst_updatex fsubst _ _ = Some (fsubst)"
 
-
-(*
-definition alpha_equiv_check_decls ::
-  "('v, 't) YulStatement list \<Rightarrow> ('v, 't) YulStatement list \<Rightarrow>
-    ((YulIdentifier * YulIdentifier) list * (YulIdentifier * YulIdentifier) list) option"
-  where
-"alpha_equiv_check_decls body1 body2 =
-  (let vdecls1 = get_var_decls body1 in
-  (let fdecls1 = get_fun_decls body1 in
-  (let vdecls2 = get_var_decls body2 in
-  (let fdecls2 = get_fun_decls body2 in
-  (if (length vdecls1 = length vdecls2 \<and> length fdecls1 = length fdecls2)
-   then Some (zip vdecls1 vdecls2, zip fdecls1 fdecls2)
-   else None)))))"
-*)
-
 fun yul_statement_same_constructor ::
   "('v, 't) YulStatement \<Rightarrow> ('v, 't) YulStatement \<Rightarrow> bool" where
 "yul_statement_same_constructor
@@ -312,6 +296,10 @@ fun alpha_equiv_check_decls ::
     (if yul_statement_same_constructor h1 h2
      then alpha_equiv_check_decls t1 t2
      else None)"
+(* TODO: this was broken, needed the following case.
+ * now we need to see how badly this breaks existing proofs
+ *)
+| "alpha_equiv_check_decls [] [] = Some []"
 | "alpha_equiv_check_decls _ _ = None"
 
 definition alpha_equiv_name' :: "subst \<Rightarrow> YulIdentifier \<Rightarrow> YulIdentifier \<Rightarrow> bool" where
@@ -944,12 +932,13 @@ next
 
 qed
 
+(*
 lemma newsubst_subst_update_cont_break_tail :
   assumes "alpha_equiv_stackEls'_newsubst fsubst pre1 pre2 = Some fsubst'"
   assumes "alpha_equiv_stackEls'_newsubst fsubst' post1 post2 = Some fsubst''"
   shows "alpha_equiv_stackEls'_newsubst fsubst (pre1 @ post1) (pre2 @ post2) = Some fsubst''"
   sorry
-
+*)
 (* if cont_break is None, then we can just get the resulting substitution after doing prefix,
  * then continue with suffix
  * otherwise, we need to begin with the tail of the prefix given by cont_break,
@@ -1115,8 +1104,7 @@ next
 *)
     show ?thesis
       using XF1 XF2 Cons1.prems Cons1.IH Cons2
-      apply(auto)
-      sorry
+      by(auto)
 
   next
     case Exp1 : (Expression e1)
@@ -1386,7 +1374,7 @@ lemma check_decls_fun_decls :
 proof(induction st1 arbitrary: st2 funs_t)
   case Nil
   then show ?case 
-    by(auto)
+    by(cases st2; auto)
 next
   case Cons1 : (Cons st1h st1t)
 
@@ -1455,9 +1443,9 @@ qed
 
 lemma alpha_equiv_name_gather_functions :
 assumes Hg1 : "gatherYulFunctions'
-  (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1)) sts1 = Inl fs1"
+  (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1)) sts1 = Inl gather1"
 assumes Hg2 : "gatherYulFunctions'
-   (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r2)) sts2 = Inl fs2"
+   (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r2)) sts2 = Inl gather2"
 assumes Heqv :  "list_all2 (alpha_equiv_statement' ((pre @ funcs') # fsubst)) sts1 sts2"
 assumes Hcheck : "alpha_equiv_check_decls sts1 sts2 = Some (funcs')"
 assumes Hpre1 : "distinct (map fst (pre @ funcs'))"
@@ -1470,10 +1458,12 @@ shows "list_all2
             fsubst))
          (map fst gather1) (map fst gather2)"
   using assms
-proof(induction sts1 arbitrary: sts2 r1 fs1 r2 fs2 funcs' fsubst pre)
+  sorry
+(*
+proof(induction sts1 arbitrary: sts2 r1 r2 funcs' fsubst pre)
   case Nil
   then show ?case
-    by(auto)
+    apply(cases sts2; auto)
 next
   case Cons1 : (Cons sth1 stt1)
 
@@ -1630,7 +1620,7 @@ next
       by(cases sth2;auto)
   qed
 qed
-
+*)
 lemma subst_flip_flip :
   shows "subst_flip (subst_flip s) = s"
 proof(induction s)
@@ -1845,9 +1835,9 @@ next
     by auto
 qed
 
-(* list_all2 alpha_equiv_funs
- * as another premise?
- * (
+(* TODO: we need to fix this.
+ * we may also need to fix alpha_equiv_name_gather_functions,
+ * depending on whether it is needed to re-prove this theorem
  *)
 lemma alpha_equiv_gather_functions :
 assumes Hg1 : "gatherYulFunctions'
@@ -1868,7 +1858,7 @@ shows "list_all2 (alpha_equiv_fun ((pre @ zip (get_fun_decls sts1) (get_fun_decl
 proof(induction sts1 arbitrary: sts2 r1 fs1 r2 fs2 funcs' fsubst pre)
   case Nil
   then show ?case
-    by(auto)
+    apply(cases sts2; auto)
 next
   case Cons1 : (Cons sth1 stt1)
 
@@ -2046,6 +2036,7 @@ next
              (n1, n2) # zip (get_fun_decls stt1) (get_fun_decls stt2)) #
             fsubst))
          (map fst gather1) (map fst gather2)"
+          using Cons1.prems Cons2 X4 Y4 F1 F2
 
           using alpha_equiv_name_gather_functions[OF Cons1.prems]
           using Cons1.prems Cons2 X4 Y4 F1 F2
@@ -2104,7 +2095,7 @@ next
       by(cases sth2; auto)
   qed
 qed
-
+*)
 lemma check_decls_distinct :
   assumes "alpha_equiv_check_decls sts1 sts2 = Some funcs'"
   shows "distinct (map fst funcs') \<and> distinct (map snd funcs')"
@@ -2112,7 +2103,7 @@ lemma check_decls_distinct :
 proof(induction sts1 arbitrary: funcs' sts2)
   case Nil
   then show ?case
-    by(auto)
+    by(cases sts2; auto)
 next
   case Cons1 : (Cons sth1 stt1)
 
@@ -3471,7 +3462,8 @@ proof(cases c1h)
 
       then show ?thesis
         using ES1 L1 ES2 L2 Hinit H1 H2 Hc1 Hc2 Hupd Decls_pre Decls_body Decls_post
-        by(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
+        apply(auto simp add: alpha_equiv_results'_def alpha_equiv_locals'_def)
+        sorry
     next
 
       case Cons1 : (Cons pre1h pre1t)
