@@ -3849,6 +3849,9 @@ next
     by auto
 qed
 
+(* need distinctness? *)
+(* probably need some kind of fact about visible functions. *)
+(*
 lemma alpha_equiv_fun_suffix :
   assumes "alpha_equiv_fun ((pre @ post) # t) (n1, f1) (n2, f2)"
   assumes "n1 \<notin> set (map fst pre)"
@@ -3865,15 +3868,103 @@ next
   obtain preh1 preh2 where Preh : "preh = (preh1, preh2)"
     by(cases preh; auto)
 
+  have Name_eqv_full:
+    "alpha_equiv_name' ((([preh] @ (pret @ post))) # t) n1 n2"
+    using Cons.prems
+    by(auto simp add: alpha_equiv_fun_def)
+
+  have Name_eqv_t :
+    "alpha_equiv_name' (((pret) @ post) # t) n1 n2"
+    using alpha_equiv_name'_suffix[OF Name_eqv_full] Cons.prems
+    by auto
+
+  have Vis_eqv_full :
+    "list_all2 (alpha_equiv_name' ((preh#pret @ post) # t))
+     (f_sig_visible f1) (f_sig_visible f2)"
+    using Cons.prems
+    by(auto simp add: alpha_equiv_fun_def)
+
+  have Vis_len :
+    "length (f_sig_visible f1) = length (f_sig_visible f2)"
+    using list_all2_lengthD[OF Vis_eqv_full]
+    by auto
+
+  have Vis_eqv_t :
+    "list_all2 (alpha_equiv_name' ((pret @ post) # t))
+     (f_sig_visible f1) (f_sig_visible f2)"
+  proof(rule list_all2_all_nthI)
+    show "length (f_sig_visible f1) = length (f_sig_visible f2)"
+      using list_all2_lengthD[OF Vis_eqv_full]
+      by auto
+  next
+    fix ix
+    assume Ix : "ix < length (f_sig_visible f1)"
+
+    have Names_full : "(alpha_equiv_name' (([preh] @ (pret @ post)) # t)) 
+      (f_sig_visible f1 ! ix) (f_sig_visible f2 ! ix)"
+      using list_all2_nthD[OF Vis_eqv_full Ix]
+      by auto
+
+    show "alpha_equiv_name' ((pret @ post) # t)
+           (f_sig_visible f1 ! ix) (f_sig_visible f2 ! ix)"
+    proof(cases "f_sig_visible f1 ! ix = fst preh")
+      case True
+
+      have False using Cons.prems
+
+      then show ?thesis
+        using Names_full
+    next
+      case False
+
+      have Arg1 : "f_sig_visible f1 ! ix \<notin> set (map fst [preh])"
+        using False by auto
+
+      have Arg2 : "f_sig_visible f2 ! ix \<notin> set (map snd [preh])"
+        using Names_full False
+        by(cases preh; auto simp add: alpha_equiv_name'_def subst_flip_def
+            split: option.split_asm)
+
+      then show ?thesis 
+        using alpha_equiv_name'_suffix[OF Names_full Arg1 Arg2]
+        by auto
+    qed
+
+      using alpha_equiv_name'_suffix[OF Names_full]
+
+
+      then show ?thesis 
+        using Names_full
+        apply(cases preh; auto simp add: alpha_equiv_name'_def subst_flip_def
+split: option.splits)
+    next
+      case False
+      then show ?thesis sorry
+    qed
+
+      using Names_full
+      apply(auto simp add: alpha_equiv_name'_def)
+
+(*
+  have Sigs_eqv_t :
+"alpha_equiv_function_sig'_scheme ((pret @ post) # t) n1 f1 n2
+     f2"
+    using Cons.prems
+    apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def
+split: YulFunctionBody.splits option.splits)
+*)
   have Fun_eqv_t : "alpha_equiv_fun ((pret @ post) # t) (n1, f1) (n2, f2)"
     using Cons.prems Preh
-    apply(auto simp add: alpha_equiv_name'_def subst_flip_def alpha_equiv_fun_def)
+    using Name_eqv_t Vis_eqv_t Sigs_eqv_t
+    apply(auto simp add: alpha_equiv_fun_def)
+    apply(cases "(map_of post ++ map_of pret) n1"; auto)
 (* YOU ARE HERE *)
+    sorry
 
   then show ?case using Cons.prems Preh Cons.IH[OF Fun_eqv_t]
     by auto
 qed
-
+*)
 
 lemma alpha_equiv_gather_functions0 :
   fixes fs1 fs2 :: "(String.literal \<times> ('a, 'b, 'c) function_sig') list"
@@ -3885,7 +3976,7 @@ lemma alpha_equiv_gather_functions0 :
   assumes Hpre2 : "distinct (map snd (pre @ funcs'))" 
   shows "list_all2 (alpha_equiv_fun ((pre @ zip (get_fun_decls sts1) (get_fun_decls sts2)) # fsubst))
          (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst pre @ map fst fs1\<rparr>)) fs1)
-         (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst pre @ map fst fs2\<rparr>)) fs2)"
+         (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map snd pre @ map fst fs2\<rparr>)) fs2)"
   using assms
 proof(induction sts1 arbitrary: sts2 fs1 fs2 funcs' fsubst pre)
   case Nil
@@ -4013,7 +4104,7 @@ next
        (map (\<lambda>a. case a of
                   (n, fs) \<Rightarrow>
                     (n, function_sig'.extend fs
-                         \<lparr>f_sig_visible = map fst (pre @ [(a1, a2)]) @ map fst gather2t\<rparr>))
+                         \<lparr>f_sig_visible = map snd (pre @ [(a1, a2)]) @ map fst gather2t\<rparr>))
          gather2t)"
       using Cons1.IH[OF Gather1t Gather2t Equiv_sts_tl Check_tl Distinct1_tl Distinct2_tl]
       by auto
@@ -4061,7 +4152,7 @@ next
                     (n, fs) \<Rightarrow>
                       (n, function_sig'.extend fs
                            \<lparr>f_sig_visible =
-                              map fst (pre @ [(a1, a2)]) @
+                              map snd (pre @ [(a1, a2)]) @
                               map fst gather2t\<rparr>))
            gather2t ! ix)"
           using list_all2_nthD[OF Ind, of ix] Ix
@@ -4223,60 +4314,250 @@ next
         by(auto)
     qed
 
+    have Conc'_h1 : "alpha_equiv_name'
+     ((pre @ (a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) # fsubst) a1 a2"
+      using alpha_equiv_name_after[OF Distinct1_tl_pre Distinct2_tl_pre]
+      by auto
 
-    have Conc1_2 :
-    "list_all2 (alpha_equiv_name' (((a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) # fsubst))
-         (f_sig_visible
-           (function_sig'.extend \<lparr>f_sig_arguments = b2, f_sig_returns = c2, f_sig_body = YulFunction d1\<rparr>
-             \<lparr>f_sig_visible = a1 # map fst gather1t\<rparr>))
-         (f_sig_visible
-           (function_sig'.extend \<lparr>f_sig_arguments = b2, f_sig_returns = c2, f_sig_body = YulFunction d2\<rparr>
-             \<lparr>f_sig_visible = a2 # map fst gather2t\<rparr>))"
-(*      using Cons1.IH[OF Gather1t Gather2t Equiv_sts_tl Check_tl Distinct1_tl Distinct2_tl]*)
-      using Cons1.prems Cons2 FD1 FD2 F1 F2 Gather1t Gather2t Notin1 Notin2 Check_tl
-        Check_body Notin_t1 Notin_t2 Name_eq_h Name_eq_t
-      by(auto simp add: function_sig'.defs)
-(*
-    have Conc1_3 :
-    "alpha_equiv_function_sig'_scheme (((a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) # fsubst) a1
-         (function_sig'.extend \<lparr>f_sig_arguments = b2, f_sig_returns = c2, f_sig_body = YulFunction d1\<rparr>
-           \<lparr>f_sig_visible = a1 # map fst gather1t\<rparr>)
-         a2 (function_sig'.extend \<lparr>f_sig_arguments = b2, f_sig_returns = c2, f_sig_body = YulFunction d2\<rparr>
-              \<lparr>f_sig_visible = a2 # map fst gather2t\<rparr>)"
-      using Cons1.prems Cons2 FD1 FD2 F1 F2 Gather1t Gather2t Notin1 Notin2 Check_tl
-        Check_body Notin_t1 Notin_t2 Conc1_1
-      apply(auto simp add: alpha_equiv_function_sig'_scheme_def function_sig'.defs)
-      sorry
+    have Conc'_h2 : "list_all2
+     (alpha_equiv_name'
+       ((pre @ (a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) # fsubst))
+     (f_sig_visible
+       (function_sig'.extend
+         \<lparr>f_sig_arguments = b2, f_sig_returns = c2, f_sig_body = YulFunction d1\<rparr>
+         \<lparr>f_sig_visible = map fst pre @ a1 # map fst gather1t\<rparr>))
+     (f_sig_visible
+       (function_sig'.extend
+         \<lparr>f_sig_arguments = b2, f_sig_returns = c2, f_sig_body = YulFunction d2\<rparr>
+         \<lparr>f_sig_visible = map snd pre @ a2 # map fst gather2t\<rparr>))"
+    proof(rule list_all2_all_nthI)
+      show " length
+     (f_sig_visible
+       (function_sig'.extend
+         \<lparr>f_sig_arguments = b2, f_sig_returns = c2,
+            f_sig_body = YulFunction d1\<rparr>
+         \<lparr>f_sig_visible = map fst pre @ a1 # map fst gather1t\<rparr>)) =
+    length
+     (f_sig_visible
+       (function_sig'.extend
+         \<lparr>f_sig_arguments = b2, f_sig_returns = c2,
+            f_sig_body = YulFunction d2\<rparr>
+         \<lparr>f_sig_visible = map snd pre @ a2 # map fst gather2t\<rparr>))"
+        using Lens_t
+        by(simp add: function_sig'.defs)
+    next
+      fix n
 
+      assume N0: "n < length
+              (f_sig_visible
+                (function_sig'.extend
+                  \<lparr>f_sig_arguments = b2, f_sig_returns = c2,
+                     f_sig_body = YulFunction d1\<rparr>
+                  \<lparr>f_sig_visible = map fst pre @ a1 # map fst gather1t\<rparr>))"
 
-    have Conc1 : "alpha_equiv_fun
-     (((a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) # fsubst)
+      then have N: "n < length (map fst pre @ a1 # map fst gather1t)"
+        by(auto simp add: function_sig'.defs)
+
+      have Conc' : "alpha_equiv_name'
+       ((pre @ (a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) #
+        fsubst)
+       ((map fst pre @ a1 # map fst gather1t) ! n)
+       ((map snd pre @ a2 # map fst gather2t) ! n)"
+      proof(cases "n < length pre")
+        case True1 : True
+
+        then have Pre_id' : "pre = take n pre @ pre ! n # drop (Suc n) pre"
+          using id_take_nth_drop
+          by(auto)
+
+        then obtain p0 px p1 where Pre_id :
+           "pre = p0 @ px # p1"
+           "p0 = take n pre"
+           "px = pre ! n"
+           "p1 = drop (Suc n) pre"
+          by(auto)
+
+        have Dist1_pre' : "distinct (map fst pre)"
+          using Cons1.prems
+          by auto
+
+        then have Dist1_pre : "distinct (map fst (p0 @ [px]))"
+          using Pre_id(1)
+          by(auto)
+
+        have Dist2_pre' : "distinct (map snd pre)"
+          using Cons1.prems
+          by auto
+
+        then have Dist2_pre : "distinct (map snd (p0 @ [px]))"
+          using Pre_id(1)
+          by(auto)
+
+        have Conc'_after : "alpha_equiv_name'
+         ((take n pre @
+           pre ! n #
+           drop (Suc n) pre @ (a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) #
+          fsubst)
+         (fst (pre ! n)) (snd (pre ! n))"
+          using alpha_equiv_name_after[OF Dist1_pre Dist2_pre, of
+              "p1 @ (a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)"
+              "fsubst"]
+          using True1
+          unfolding Pre_id(2) Pre_id(3) Pre_id(4)
+          by(auto)
+
+        then have Conc' : "alpha_equiv_name'
+         (((take n pre @
+           pre ! n #
+           drop (Suc n) pre) @ (a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) #
+          fsubst)
+         (fst (pre ! n)) (snd (pre ! n))"
+          by auto
+
+        have Pref1 : "fst (pre ! n) = ((map fst pre @ a1 # map fst gather1t) ! n)"
+          using True1
+          unfolding nth_append
+          by(auto)
+
+        have Pref2 : "snd (pre ! n) = ((map snd pre @ a2 # map fst gather2t) ! n)"
+          using True1
+          unfolding nth_append
+          by(auto)
+
+        show ?thesis
+          using Conc'
+          unfolding sym[OF Pre_id'] Pref1 Pref2
+          by auto
+      next
+        case False1 : False
+
+        show ?thesis
+        proof(cases "n = length pre")
+          case True2 : True
+
+          have Got1 : "((map fst pre @ a1 # map fst gather1t) ! n) = a1"
+            using False1 True2
+            unfolding nth_append
+            by(auto)
+  
+          have Got2 : "((map snd pre @ a2 # map fst gather2t) ! n) = a2"
+            using False1 True2
+            unfolding nth_append
+            by(auto)
+
+          then show ?thesis
+            using alpha_equiv_name_after[OF Distinct1_tl_pre Distinct2_tl_pre,
+              of "zip (get_fun_decls sts1t) (get_fun_decls sts2t)" fsubst]
+            unfolding Got1 Got2
+            by auto
+        next
+          case False2 : False
+
+          then have In_suffix : "n > length (map fst pre)"
+            using False1
+            by auto
+
+          have N_alt : "n < length (map fst pre) + 1 + length (map fst gather1t)"
+            using N
+            by(auto)
+
+          then obtain n' where N' :
+            "n' = n - (length (map fst pre) + 1)"
+            "n' + length (map fst pre) + 1 = n"
+            using In_suffix
+            by(auto)
+
+          have N'_leq : "n' < length (map fst gather1t)"
+            using N_alt N'
+            by(auto)
+
+          have Conc' : "alpha_equiv_name'
+           (((pre @ [(a1, a2)]) @ zip (get_fun_decls sts1t) (get_fun_decls sts2t)) #
+            fsubst)
+           (map fst gather1t ! n') (map fst gather2t ! n')"
+            using list_all2_nthD[OF Ind_name N'_leq]
+            by auto
+
+          have Suf1 : "((map fst pre @ a1 # map fst gather1t) ! n) = map fst gather1t ! n'"
+            using N' N_alt
+            unfolding nth_append
+            by(auto)
+
+          have Suf2 : "((map snd pre @ a2 # map fst gather2t) ! n) = map fst gather2t ! n'"
+            using N' N_alt
+            unfolding nth_append
+            by(auto)
+
+          then show ?thesis 
+            using Conc'
+            unfolding Suf1 Suf2
+            by auto
+        qed
+      qed
+
+      show "alpha_equiv_name'
+          ((pre @ (a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) #
+           fsubst)
+          (f_sig_visible
+            (function_sig'.extend
+              \<lparr>f_sig_arguments = b2, f_sig_returns = c2,
+                 f_sig_body = YulFunction d1\<rparr>
+              \<lparr>f_sig_visible = map fst pre @ a1 # map fst gather1t\<rparr>) !
+           n)
+          (f_sig_visible
+            (function_sig'.extend
+              \<lparr>f_sig_arguments = b2, f_sig_returns = c2,
+                 f_sig_body = YulFunction d2\<rparr>
+              \<lparr>f_sig_visible = map snd pre @ a2 # map fst gather2t\<rparr>) !
+           n)"
+        using Conc'
+        by(simp add: function_sig'.defs)
+    qed
+
+    have Eqv_bodies' : "list_all2 (alpha_equiv_statement' (funcs'b # (pre @ (a1, a2) # funcs't) # fsubst)) d1 d2"
+      using Cons1.prems Cons2 FD1 F1 FD2 F2 Gather1t Gather2t Notin1 Notin2 Check_tl Check_body Notin_t1 Notin_t2
+      by(auto)
+
+    have Eqv_bodies :
+    "list_all2
+         (alpha_equiv_statement'
+           (funcs'b #
+            (pre @ (a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) # fsubst))
+         d1 d2"
+      using Eqv_bodies' unfolding Getfun_eqv
+      by auto
+
+    have Conc'_h3 : "alpha_equiv_function_sig'_scheme
+     ((pre @ (a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) # fsubst) a1
+     (function_sig'.extend
+       \<lparr>f_sig_arguments = b2, f_sig_returns = c2, f_sig_body = YulFunction d1\<rparr>
+       \<lparr>f_sig_visible = map fst pre @ a1 # map fst gather1t\<rparr>)
+     a2 (function_sig'.extend
+          \<lparr>f_sig_arguments = b2, f_sig_returns = c2, f_sig_body = YulFunction d2\<rparr>
+          \<lparr>f_sig_visible = map snd pre @ a2 # map fst gather2t\<rparr>)"
+      using Eqv_bodies
+      by(auto simp add: alpha_equiv_function_sig'_scheme_def
+        function_sig'.defs Check_body
+        split: YulFunctionBody.splits)
+
+    have Conc'_h : "alpha_equiv_fun
+     ((pre @ (a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) # fsubst)
      (a1,
       function_sig'.extend
        \<lparr>f_sig_arguments = b2, f_sig_returns = c2, f_sig_body = YulFunction d1\<rparr>
-       \<lparr>f_sig_visible =  a1 # map fst gather1t\<rparr>)
+       \<lparr>f_sig_visible = map fst pre @ a1 # map fst gather1t\<rparr>)
      (a2,
       function_sig'.extend
        \<lparr>f_sig_arguments = b2, f_sig_returns = c2, f_sig_body = YulFunction d2\<rparr>
-       \<lparr>f_sig_visible =  a2 # map fst gather2t\<rparr>)"
-      using Cons1 Cons2 FD1 FD2 F1 F2 Gather1t Gather2t Notin1 Notin2 Check_tl
-        Check_body Notin_t1 Notin_t2
-      using Conc1_1 Conc1_2 Conc1_3
+       \<lparr>f_sig_visible = map snd pre @ a2 # map fst gather2t\<rparr>)"
+      using Conc'_h1 Conc'_h2 Conc'_h3
       by(auto simp add: alpha_equiv_fun_def)
 
-
-*)
-    have Conc2 : "list_all2 (alpha_equiv_fun (((a1, a2) # zip (get_fun_decls sts1t) (get_fun_decls sts2t)) # fsubst))
-     (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = a1 # map fst gather1t\<rparr>)) gather1t)
-     (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = a2 # map fst gather2t\<rparr>)) gather2t)"
-      using Cons1.IH[OF Gather1t Gather2t _ Check_tl] 
-
-
-    show ?thesis 
-      using Cons1 Cons2 FD1 FD2 F1 F2 Gather1t Gather2t Notin1 Notin2 Check_tl
+    show ?thesis
+      using Cons1.prems Cons2 FD1 FD2 F1 F2 Gather1t Gather2t Notin1 Notin2 Check_tl
         Check_body Notin_t1 Notin_t2
-      apply(auto)
-      apply(simp add: alpha_equiv_fun_def)
+      using Ind Conc'_h
+      by(auto)
   next
     case (YulIf x51 x52)
     then show ?thesis 
