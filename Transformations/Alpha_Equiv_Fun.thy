@@ -4737,6 +4737,7 @@ qed
 (* see if we need this (need a version that doesn't have nil as first argument to gatherYulFunctions'
  * or if it's easier to just do this "inline" in the main theorem
  *)
+(*
 lemma alpha_equiv_gather_functions :
   fixes fs1 fs2 :: "(String.literal \<times> ('a, 'b, 'c) function_sig') list"
   assumes Hg1 : "gatherYulFunctions' ([] :: (String.literal \<times> ('a, 'b, 'c) function_sig') list) sts1 = Inl fs1"
@@ -4750,7 +4751,163 @@ lemma alpha_equiv_gather_functions :
          (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map snd pre @ map fst fs2\<rparr>)) fs2)"
   using assms
   sorry
+*)
 
+lemma alpha_equiv_name'_empty_head :
+  assumes "alpha_equiv_name' ([]#t) n1 n2"
+  shows "alpha_equiv_name' t n1 n2"
+  using assms
+  by(cases t; auto simp add: alpha_equiv_name'_def subst_flip_def split: option.splits)
+
+(* TODO we actually want the converse of this. *)
+lemma alpha_equiv_name'_suffix_scope :
+  assumes Hname : "alpha_equiv_name' (h#t) n1 n2"
+  assumes Hnotin1 : "n1 \<notin> set (map fst h)"
+  assumes Hnotin2 : "n2 \<notin> set (map snd h)"
+  shows "alpha_equiv_name' t n1 n2"
+proof-
+  have Hname' : "alpha_equiv_name' ((h@[])#t) n1 n2"
+    using Hname
+    by auto
+
+  have Conc' :
+    "alpha_equiv_name' ([]#t) n1 n2"
+    using alpha_equiv_name'_suffix[OF Hname' Hnotin1 Hnotin2]
+    by auto
+
+  show "alpha_equiv_name' t n1 n2"
+    using alpha_equiv_name'_empty_head[OF Conc']
+    by auto
+qed
+
+lemma alpha_equiv_name'_cons :
+  assumes Hname : "alpha_equiv_name' (t) n1 n2"
+  assumes Hnotin1 : "n1 \<notin> set (map fst h)"
+  assumes Hnotin2 : "n2 \<notin> set (map snd h)"
+  shows "alpha_equiv_name' (h#t) n1 n2"
+proof-
+
+  have None1 : "map_of h n1 = None"
+    using Hnotin1
+    unfolding map_of_eq_None_iff
+    by(auto)
+
+  have None2 : "map_of (map (\<lambda>p. case p of (x, y) \<Rightarrow> (y, x)) h) n2 = None"
+    using Hnotin2
+    unfolding map_of_eq_None_iff
+    by(auto; force)
+
+  show "alpha_equiv_name' (h # t) n1 n2"
+    using Hname None1 None2
+    by(auto simp add: alpha_equiv_name'_def subst_flip_def)
+qed
+
+
+(* next, we need a fact about gatherYulFunctions
+ * preventing shadowing *)
+
+
+lemma gatherYulFunctions_In_original :
+  assumes "gatherYulFunctions' (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1)) sts1 = Inl fs1"
+  assumes "gatherYulFunctions' [] sts1 = Inl fs1'"
+  assumes "fs1 = fs1' @ (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1))"
+  assumes "map_of (funs r1) n = Some r"
+  shows "map_of fs1' n = None"  
+  using assms
+proof(induction sts1 arbitrary: r1 fs1 fs1' n)
+  case Nil
+  then show ?case
+    by(auto)
+next
+  case (Cons sts1h sts1t)
+
+  show ?case
+  proof(cases sts1h)
+    case (YulFunctionCallStatement x1)
+    then show ?thesis
+      using Cons
+      by(auto)
+  next
+    case (YulAssignmentStatement x2)
+    then show ?thesis
+      using Cons
+      by(auto)
+  next
+    case (YulVariableDeclarationStatement x3)
+    then show ?thesis
+      using Cons
+      by(auto)
+  next
+    case FD : (YulFunctionDefinitionStatement fd)
+
+    then obtain a b c d where F: "fd = YulFunctionDefinition a b c d"
+      by(cases fd; auto)
+
+    have In1 : "(n, r) \<in> set (funs r1)"
+      using map_of_SomeD Cons.prems
+      by auto
+
+    have In2 : "(n, function_sig'.truncate r) \<in> set (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1))"
+      using imageI[OF In1, of "(\<lambda>(n, fs). (n, function_sig'.truncate fs))"]
+      by(auto)
+
+    have In2_fst : "n \<in> fst ` set (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1))"
+      using imageI[OF In2, of fst]
+      by auto
+
+    show ?thesis
+    proof(cases "map_of (map (\<lambda>(n, fs). (n, function_sig'.truncate fs)) (funs r1)) n")
+      case None
+
+      then have False using In2_fst
+        unfolding map_of_eq_None_iff
+        by auto
+
+      then show ?thesis
+        by auto
+    next
+      case (Some r')
+      then show ?thesis
+        using Cons FD F
+        by(auto split: sum.split_asm option.split_asm)
+    qed
+  next
+    case (YulIf x51 x52)
+    then show ?thesis
+      using Cons
+      by(auto)
+  next
+    case (YulSwitch x61 x62)
+    then show ?thesis
+      using Cons
+      by(auto)
+  next
+    case (YulForLoop x71 x72 x73 x74)
+    then show ?thesis
+      using Cons
+      by(auto)
+  next
+    case YulBreak
+    then show ?thesis
+      using Cons
+      by(auto)
+  next
+    case YulContinue
+    then show ?thesis
+      using Cons
+      by(auto)
+  next
+    case YulLeave
+    then show ?thesis
+      using Cons
+      by(auto)
+  next
+    case (YulBlock x11)
+    then show ?thesis
+      using Cons
+      by(auto)
+  qed
+qed
 
 (* YOU ARE HERE. *)
 lemma alpha_equiv_step :
@@ -5016,6 +5173,16 @@ proof(cases c1h)
       using alpha_equiv_check_decls_fun_decls[OF Decls]
       by auto
 
+    have Decls_eq_alt :
+      "funcs' = zip (map fst fs1') (map fst fs2')"
+      using gatherYulFunctions'_check_decls[OF Fs1'(1) Fs2'(1) Decls]
+      by auto
+
+    have Funs_equiv_old :
+      "list_all2 (alpha_equiv_fun fsubst) (funs r1) (funs r2)"
+      using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Distinct1 Distinct2
+      by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
+
     have Conc1' :
       "list_all2 (alpha_equiv_fun (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
         (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1'\<rparr>)) fs1')
@@ -5023,6 +5190,11 @@ proof(cases c1h)
       using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Distinct1 Distinct2
       using alpha_equiv_gather_functions0[OF Fs1'(1) Fs2'(1) _ Decls, of "[]" fsubst]
       by(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
+
+    have Funs_lengths : "length (funs r1) = length (funs r2)"
+      using list_all2_lengthD[OF Funs_equiv_old]
+      by auto
+
 
 (* YOU ARE HERE
  * one remaining issue: mismatch in visible field. 
@@ -5043,12 +5215,113 @@ proof(cases c1h)
 
     proof(rule combine_keep_equiv)
       show "list_all2
-     (alpha_equiv_fun
-       (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
-     (funs r1) (funs r2)"
-      using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Distinct1 Distinct2
-      apply(auto simp add: alpha_equiv_results'_def alpha_equiv_funs'_def)
+       (alpha_equiv_fun
+         (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+       (funs r1) (funs r2)"
+      proof(rule list_all2_all_nthI)
+        show "length (funs r1) = length (funs r2)"
+          using list_all2_lengthD[OF Funs_equiv_old]
+          by auto
+      next
+        fix ix
+        assume Ix : "ix < length (funs r1)"
 
+        obtain n1 f1 where Fx1 : "funs r1 ! ix = (n1, f1)"
+          by(cases "funs r1 ! ix"; auto)
+
+        obtain n2 f2 where Fx2 : "funs r2 ! ix = (n2, f2)"
+          by(cases "funs r2 ! ix"; auto)
+
+        have Fun_equiv_old :
+          "alpha_equiv_fun
+           fsubst (funs r1 ! ix) (funs r2 ! ix)"
+          using list_all2_nthD[OF Funs_equiv_old Ix]
+          by auto
+
+        then have Fun_equiv_old1 :
+          "alpha_equiv_name'
+           fsubst n1 n2"
+          unfolding Fx1 Fx2
+          by(auto simp add: alpha_equiv_fun_def)
+
+        have Fx1_In : "(n1, f1) \<in> set (funs r1)"
+          using List.nth_mem[OF Ix] Fx1
+          by auto
+
+        have Fx2_In : "(n2, f2) \<in> set (funs r2)"
+          using List.nth_mem[OF Ix[unfolded Funs_lengths]] Fx2
+          by auto
+
+        obtain r1x where R1x : "map_of (funs r1) n1 = Some r1x"
+          using Ix Fx1 weak_map_of_SomeI[OF Fx1_In]
+          by(auto)
+
+        obtain r2x where R2x : "map_of (funs r2) n2 = Some r2x"
+          using Ix Fx2 weak_map_of_SomeI[OF Fx2_In]
+          by(auto)
+
+        have F1x_Notin' : "map_of fs1' n1 = None"
+          using gatherYulFunctions_In_original[OF Fs1 Fs1' R1x]
+          by auto
+
+        then have F1x_Notin : "n1 \<notin> set (map fst fs1')"
+          unfolding map_of_eq_None_iff
+          by auto
+
+        have F2x_Notin' : "map_of fs2' n2 = None"
+          using gatherYulFunctions_In_original[OF Fs2 Fs2' R2x]
+          by auto
+
+        then have F2x_Notin : "n2 \<notin> set (map fst fs2')"
+          unfolding map_of_eq_None_iff
+          by auto
+
+(* TODO, should be easy lemma *)
+        have Fs1'_Fs2'_length : "length fs1' = length fs2'"
+          sorry
+
+        then have Fs1'_Fs2'_fst_length :
+          "length (map fst fs1') = length (map fst fs2')"
+          by auto
+
+        have Notin_new_decls1 : "n1 \<notin> set (map fst (zip (map fst fs1') (map fst fs2')))"
+          using F1x_Notin Decls_eq Decls_eq_alt
+          using map_fst_zip[OF Fs1'_Fs2'_fst_length]
+          by(auto)
+
+        have Notin_new_decls2 : "n2 \<notin> set (map snd (zip (map fst fs1') (map fst fs2')))"
+          using F2x_Notin Decls_eq Decls_eq_alt
+          using map_snd_zip[OF Fs1'_Fs2'_fst_length]
+          by(auto)
+
+        have Conc1 : "alpha_equiv_name'
+         (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst) (fst (funs r1 ! ix)) (fst (funs r2 ! ix))"
+          using alpha_equiv_name'_cons[OF Fun_equiv_old1 Notin_new_decls1 Notin_new_decls2]
+          unfolding Fx1 Fx2
+          unfolding Decls_eq Decls_eq_alt
+          by auto
+
+(* do we know anything about visible functions here? *)
+        have Conc2 : "list_all2
+        (alpha_equiv_name'
+          (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+        (f_sig_visible f1) (f_sig_visible f2)"
+          using Fun_equiv_old
+      using ES1 B1 ES2 B2 Hinit H1 H2 Hc1 Hc2 Hupd Fs1 Fs2 Decls Distinct1 Distinct2
+
+          apply(auto simp add: alpha_equiv_fun_def alpha_equiv_results'_def)
+
+        show "alpha_equiv_fun (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst) (funs r1 ! ix)
+          (funs r2 ! ix)"
+          using Conc1
+          apply(auto simp add: alpha_equiv_fun_def alpha_equiv_function_sig'_scheme_def)
+
+    show "list_all2
+     (alpha_equiv_fun (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
+     (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs1\<rparr>)) fs1)
+     (map (\<lambda>(n, fs). (n, function_sig'.extend fs \<lparr>f_sig_visible = map fst fs2\<rparr>)) fs2)"
+  next
+(*
     proof(rule list_all2_all_nthI)
       show "length
        (combine_keep (funs r1)
@@ -5088,6 +5361,7 @@ proof(cases c1h)
         unfolding Fs1'
         apply(clarsimp)
         sorry
+*)
 (*
     have Conc1 : "list_all2
        (alpha_equiv_fun (zip (get_fun_decls sts1) (get_fun_decls sts2) # fsubst))
