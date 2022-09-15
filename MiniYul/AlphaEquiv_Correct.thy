@@ -885,6 +885,778 @@ next
   qed
 qed
 
+(*
+lemma alpha_equiv_varmap_push :
+  assumes "alpha_equiv_varmap subst vm1 vm2"
+  shows "alpha_equiv_varmap (Oalist.empty # subst) (Oalist.empty # vm1)  (Oalist.empty # vm2)"
+  using assms
+proof(induction ns1 arbitrary: subst vm1 vm2 ns2)
+  case Nil
+  then show ?case 
+    apply(auto)
+    sorry
+next
+  case (Cons ns1h ns1t)
+  then show ?case 
+    apply(auto)
+*)
+
+lemma alpha_equiv_varmap'_empty :
+  shows "alpha_equiv_varmap' Oalist.empty Oalist.empty Oalist.empty"
+  by(transfer; auto)
+
+lemma get_to_oalist :
+  fixes l :: "('k :: linorder * 'v) list"
+  assumes "distinct (map fst l)"
+  shows "get (to_oalist l) k = map_of l k"
+  using assms
+proof(induction l arbitrary: k)
+  case Nil
+  then show ?case using empty_get
+    by(auto)
+next
+  case (Cons h t)
+
+  obtain hk hv where H : "h = (hk, hv)"
+    by(cases h; auto)
+
+  show ?case
+  proof(cases "k = hk")
+    case True
+    then show ?thesis using Cons H oalist_update_get_eq[of hk hv "to_oalist t"]
+      by(auto)
+  next
+    case False
+    then show ?thesis using Cons H oalist_update_get_neq[of hk k hv]
+      by(auto)
+  qed
+qed
+
+lemma varmap_insert_swap :
+  assumes H : "k1 \<noteq> k2"
+  shows "varmap_insert (varmap_insert vm k1 v1) k2 v2 =
+    varmap_insert (varmap_insert vm k2 v2) k1 v1"
+proof(cases vm)
+  case Nil
+  then show ?thesis
+    using H
+    by(auto)
+next
+  case (Cons vmh vmt)
+
+  have H' : "k2 \<noteq> k1"
+    using H by auto
+
+  show ?thesis
+    using Cons H oalist_update_swap[OF H', of v2 v1]
+    by(auto)
+qed
+
+lemma varmap_extend_insert_swap :
+  assumes "nh \<notin> set nt"
+  assumes "distinct nt"
+  shows "varmap_extend (varmap_insert vm nh 0) nt = 
+         varmap_insert (varmap_extend vm nt) nh 0"
+  using assms
+proof(induction nt arbitrary: vm nh)
+  case Nil
+  then show ?case
+    by(auto)
+next
+  case (Cons nh' nt)
+  then show ?case  using varmap_insert_swap
+    by(auto)
+qed
+
+(* alternative version of varmap_extend that leads to cleaner
+ * inductive proof *)
+(*
+fun varmap_extend_alt :: "varmap \<Rightarrow> name list \<Rightarrow> varmap" where
+"varmap_extend_alt vm [] = vm"
+| "varmap_extend_alt vm (nh # nt) =
+   varmap_insert (varmap_extend vm nt) nh 0"
+
+lemma varmap_extend_alt_spec : 
+  assumes "distinct ns"
+  shows "varmap_extend vm ns = varmap_extend_alt vm ns"
+  using assms
+proof(induction ns arbitrary: vm)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons nh nt)
+  show ?case using Cons.prems
+    apply(auto)
+    using sym[OF Cons.IH[of "varmap_insert vm nh 0"]] Cons.IH[of vm]
+    apply(auto)
+
+qed
+*)
+
+(*
+lemma alpha_equiv_varmap'_update_fresh_present :
+  assumes "alpha_equiv_varmap' subst' vm1' vm2'"
+  assumes "oalist_one_one subst'"
+  assumes "oalist_keys subst' = oalist_keys vm1'"
+  assumes "oalist_keys (oalist_flip subst') = oalist_keys vm2'"
+  assumes "n1 \<in> set (oalist_keys vm1')"
+  assumes "n2 \<in> set (oalist_keys vm2')"  
+  shows "alpha_equiv_varmap' (update n1 n2 subst') vm1' vm2'"
+  using assms
+proof(transfer)
+  fix subst'
+  show "\<And> vm1' vm2' n1 n2. strict_order (map fst subst') \<Longrightarrow>
+       strict_order (map fst vm1') \<Longrightarrow>
+       strict_order (map fst vm2') \<Longrightarrow>
+       alpha_equiv_varmap'l subst' vm1' vm2' \<Longrightarrow>
+       distinct (map snd subst') \<Longrightarrow>
+       map fst subst' = map fst vm1' \<Longrightarrow>
+       map fst (oalist_flip' subst') = map fst vm2' \<Longrightarrow> n1 \<in> set (map fst vm1') \<Longrightarrow> n2 \<in> set (map fst vm2') \<Longrightarrow> alpha_equiv_varmap'l (str_ord_update n1 n2 subst') vm1' vm2'"
+  proof(induction subst')
+    case Nil
+    then show ?case
+      by(auto)
+  next
+    case (Cons subst'h subst't)
+
+    obtain hn1 hn2 where Subst'h :
+      "subst'h = (hn1, hn2)"
+      by(cases subst'h; auto)
+
+    obtain val where Val :
+      "map_of vm1' hn1 = Some val" "map_of vm2' hn2 = Some val"
+      "alpha_equiv_varmap'l subst't vm1' vm2'"
+      using Cons.prems Subst'h
+      by(auto split: option.splits)
+
+    obtain val1 where Val1 : "(n1, val1) \<in> set vm1'"
+      using Cons.prems
+      by(auto)
+
+    then have Val1' : "map_of vm1' n1 = Some val1"
+      using Some_eq_map_of_iff[of vm1'] strict_order_distinct[OF Cons.prems(2)]
+      by auto
+
+    obtain val2 where Val2 : "(n2, val2) \<in> set vm2'"
+      using Cons.prems
+      by(auto)
+
+    then have Val2' : "map_of vm2' n2 = Some val2"
+      using Some_eq_map_of_iff[of vm2'] strict_order_distinct[OF Cons.prems(3)]
+      by(auto)
+
+    show ?case
+    proof(cases "n1 = hn1")
+      case True1 : True
+
+
+      show ?thesis using Cons.prems Subst'h
+          True1 Val Val2'
+        apply(auto)
+    next
+      case False1 : False
+      show ?thesis
+      proof(cases "n2 = hn2")
+        case True2 : True
+
+      using Cons.prems Subst'h Val Val1' Val2'
+      apply(auto)
+
+  qed
+*)
+lemma alpha_equiv_varmap'_update_fresh :
+  assumes "alpha_equiv_varmap' subst' vm1' vm2'"
+  assumes "oalist_one_one subst'"
+  assumes "oalist_keys subst' = oalist_keys vm1'"
+  assumes "oalist_keys (oalist_flip subst') = oalist_keys vm2'"
+  assumes "n2 \<notin> set (oalist_keys vm2')"
+  shows "alpha_equiv_varmap' (update n1 n2 subst') (update n1 v vm1') (update n2 v vm2')"
+  using assms
+proof(transfer)
+  fix subst' 
+  show "\<And>n1 n2 v vm1' vm2'.
+       strict_order (map fst subst') \<Longrightarrow>
+       strict_order (map fst vm1') \<Longrightarrow>
+       strict_order (map fst vm2') \<Longrightarrow>
+       alpha_equiv_varmap'l subst' vm1' vm2' \<Longrightarrow>
+       distinct (map snd subst') \<Longrightarrow>
+       map fst subst' = map fst vm1' \<Longrightarrow>
+       map fst (oalist_flip' subst') = map fst vm2' \<Longrightarrow>
+       n2 \<notin> set (map fst vm2') \<Longrightarrow>
+       alpha_equiv_varmap'l (str_ord_update n1 n2 subst')
+        (str_ord_update n1 v vm1') (str_ord_update n2 v vm2')"
+  proof(induction subst')
+    case Nil
+
+    have Get1_n1 : "map_of (str_ord_update n1 v vm1') n1 = Some v"
+      using str_ord_update_get_eq Nil
+      by(auto)
+
+    have Get2_n2 : "map_of (str_ord_update n2 v vm2') n2 = Some v"
+      using str_ord_update_get_eq Nil
+      by(auto)
+
+    show ?case using Nil Get1_n1 Get2_n2
+      by(auto)
+  next
+    case (Cons subst'h subst't)
+
+    obtain hn1 hn2 where Subst'h :
+      "subst'h = (hn1, hn2)"
+      by(cases subst'h; auto)
+
+    have Get1_hn1 : "map_of (str_ord_update hn1 v vm1') hn1 = Some v"
+      using str_ord_update_get_eq[OF Cons.prems(2)]
+      by(auto)
+
+    have Get2_n2 : "map_of (str_ord_update n2 v vm2') n2 = Some v"
+      using str_ord_update_get_eq[OF Cons.prems(3)]
+      by(auto)
+
+    have Get1_n1 : "map_of (str_ord_update n1 v vm1') n1 = Some v"
+      using str_ord_update_get_eq[OF Cons.prems(2)]
+      by(auto)
+
+    have Ord_tl : "strict_order (map fst subst't)"
+      using Cons.prems strict_order_tl
+      by auto
+
+    obtain val where Val :
+      "map_of vm1' hn1 = Some val" "map_of vm2' hn2 = Some val"
+      "alpha_equiv_varmap'l subst't vm1' vm2'"
+      using Cons.prems Subst'h
+      by(auto split: option.splits)
+
+    show ?case
+    proof(cases "n1 = hn1")
+      case True1 : True
+
+      have Notin1: "n1 \<notin> fst ` set subst't"
+        using strict_order_distinct[OF Cons.prems(1)] Subst'h True1
+        by(auto)
+
+      show ?thesis using Cons.prems Subst'h
+          Get1_hn1 Get2_n2 True1 Val Ord_tl Val
+        using alpha_equiv_varmap'_update_miss[of vm1' vm2' subst't n1] Notin1
+        apply(auto)
+    next
+      case False1 : False
+      show ?thesis
+      proof(cases "n2 = hn2")
+        case True2 : True
+
+        have Notin2: "hn2 \<notin> fst ` set vm2'"
+          using Cons.prems Subst'h
+            Get1_hn1 Get2_n2 False1 True2 Val Ord_tl Val
+          by(auto)
+
+        have Vm2 : "map fst (str_ord_update hn2 hn1 (oalist_flip' subst't)) = map fst vm2'"
+          using Cons.prems Subst'h
+            Get1_hn1 Get2_n2 Val Ord_tl Val
+          by(auto)
+
+        have Vm2' : "fst ` set (str_ord_update hn2 hn1 (oalist_flip' subst't)) = fst ` set vm2'"
+          unfolding sym[OF set_map]
+          using Vm2
+          by(auto)
+
+        have Vm2'_set : "set (str_ord_update hn2 hn1 (oalist_flip' subst't)) =
+          set (oalist_flip' subst't) - { x . fst x = hn2 } \<union> {(hn2, hn1)}"
+          using str_ord_update_set[OF oalist_flip'_correct[OF Ord_tl]]
+          by auto
+
+        have Bad : "(hn2) \<in>  fst ` set vm2'"
+          using Vm2'_set unfolding sym[OF Vm2']
+          by(auto)
+
+        show ?thesis using Bad Notin2
+          by auto
+      next
+        case False2 : False
+
+        have Get2_miss : "map_of (str_ord_update n2 v vm2') hn2 = Some val"
+          using str_ord_update_get_neq[OF Cons.prems(3) False2, of v] Val
+          by(auto)
+
+        show ?thesis
+        proof(cases "n1 < hn1")
+          case True3 : True
+
+          have Notin1 : "n1 \<notin> fst ` set vm1'"
+            using Cons.prems Subst'h False1 strict_order_distinct[OF Cons.prems(1)]
+            by(auto)
+
+          have Keys1_alt : "fst ` set (subst'h # subst't) = fst ` set vm1'"
+            using Cons.prems
+            unfolding sym[OF set_map]
+            by auto
+
+          have Notin1_alt : "n1 \<notin> fst ` set (subst'h # subst't)"
+            using Notin1
+            unfolding Keys1_alt
+            by(auto)
+
+          have Notin1_alt_tl : "n1 \<notin> fst ` set (subst't)"
+            using Notin1_alt
+            by auto
+
+          have Notin2 : "n2 \<notin> fst ` set vm2'"
+            using Cons.prems Subst'h False1
+            by(auto)
+
+          have Keys2_alt : "fst ` set ((oalist_flip' (subst'h # subst't))) = fst ` (set vm2')"
+            using Cons.prems
+            unfolding sym[OF set_map]
+            by auto
+
+          have Notin2_alt : "n2 \<notin> fst ` set ((oalist_flip' (subst'h # subst't))) "
+            using Notin2
+            unfolding Keys2_alt
+            by(auto)
+
+          hence Notin2_alt2 : "n2 \<notin> fst ` (\<lambda>(x, y). (y, x)) ` set (subst'h # subst't)"
+            using oalist_flip'_set[OF Cons.prems(1)] Cons.prems
+            by(auto)
+
+          have Fst_flip : "fst o (\<lambda>(x, y). (y, x)) = snd"
+          proof
+            fix w
+            show "(fst \<circ> (\<lambda>(x, y). (y, x))) w = snd w"
+              by(cases w; auto)
+          qed
+
+          have Notin2_alt3 : "n2 \<notin> snd ` set (subst'h # subst't)"
+            using Notin2_alt2
+            unfolding image_comp Fst_flip
+            by(auto)
+
+          have Notin2_alt_tl : "n2 \<notin> snd ` set (subst't)"
+            using Notin2_alt3
+            by auto
+
+          show ?thesis using Cons.prems Subst'h False1 False2 True3
+              Get1_hn1 Get2_n2 False1 False2 Val Get2_miss
+            using alpha_equiv_varmap'_update_miss[OF Cons.prems(2) Cons.prems(3) Ord_tl _ Notin1_alt_tl Notin2_alt_tl]
+            by(auto)
+        next
+          case False3 : False
+
+          have Lt : "hn1 < n1"
+            using False1 False2 False3
+            by(auto)
+
+          have Notin1 : "n1 \<notin> set (map fst vm1')"
+            using Cons.prems Subst'h False1 strict_order_distinct[OF Cons.prems(1)]
+            by(auto)
+
+          have Notin2 : "n2 \<notin> set (map fst vm2')"
+            using Cons.prems Subst'h False1 strict_order_distinct[OF Cons.prems(1)]
+            by(auto)
+
+          obtain vm1'hk vm1'hv vm1't where Vm1'_cons : "vm1' = (vm1'hk, vm1'hv) # vm1't"
+            using Cons.prems
+            by(cases vm1'; auto)
+
+          have Vm_tl' : "alpha_equiv_varmap'l subst't ((vm1'hk, val) # vm1't) vm2'"
+            using Cons.prems Subst'h False1 False2 False3
+              Get1_hn1 Get2_n2 Get2_miss Val Lt Vm1'_cons
+            by(auto)
+
+          show ?thesis using Cons.prems Subst'h False1 False2 False3
+              Get1_hn1 Get2_n2 Get2_miss Val Lt Vm1'_cons
+            apply(auto)
+        qed
+
+        show ?thesis using Cons.prems Subst'h
+            Get1_hn1 Get2_n2 False1 False2 Val Get2_miss
+          apply(auto)
+          sorry
+      qed
+    qed
+  qed
+qed
+
+
+lemma alpha_equiv_varmap'_update_fresh :
+  assumes "alpha_equiv_varmap' subst' vm1' vm2'"
+  assumes "oalist_one_one subst'"
+  assumes "oalist_keys subst' = oalist_keys vm1'"
+  assumes "oalist_keys (oalist_flip subst') = oalist_keys vm2'"
+  assumes "n1 \<notin> set (oalist_keys vm1')"
+  assumes "n2 \<notin> set (oalist_keys vm2')"
+  shows "alpha_equiv_varmap' (update n1 n2 subst') (update n1 v vm1') (update n2 v vm2')"
+  using assms
+proof(transfer)
+  fix subst' 
+  show "\<And>n1 n2 v vm1' vm2'.
+       strict_order (map fst subst') \<Longrightarrow>
+       strict_order (map fst vm1') \<Longrightarrow>
+       strict_order (map fst vm2') \<Longrightarrow>
+       alpha_equiv_varmap'l subst' vm1' vm2' \<Longrightarrow>
+       distinct (map snd subst') \<Longrightarrow>
+       map fst subst' = map fst vm1' \<Longrightarrow>
+       map fst (oalist_flip' subst') = map fst vm2' \<Longrightarrow>
+       n1 \<notin> set (map fst vm1') \<Longrightarrow>
+       n2 \<notin> set (map fst vm2') \<Longrightarrow>
+       alpha_equiv_varmap'l (str_ord_update n1 n2 subst')
+        (str_ord_update n1 v vm1') (str_ord_update n2 v vm2')"
+  proof(induction subst')
+    case Nil
+    then show ?case 
+      by(auto)
+  next
+    case (Cons subst'h subst't)
+
+    obtain hn1 hn2 where Subst'h :
+      "subst'h = (hn1, hn2)"
+      by(cases subst'h; auto)
+
+    have Get1_hn1 : "map_of (str_ord_update hn1 v vm1') hn1 = Some v"
+      using str_ord_update_get_eq[OF Cons.prems(2)]
+      by(auto)
+
+    have Get2_n2 : "map_of (str_ord_update n2 v vm2') n2 = Some v"
+      using str_ord_update_get_eq[OF Cons.prems(3)]
+      by(auto)
+
+    have Get1_n1 : "map_of (str_ord_update n1 v vm1') n1 = Some v"
+      using str_ord_update_get_eq[OF Cons.prems(2)]
+      by(auto)
+
+    have Ord_tl : "strict_order (map fst subst't)"
+      using Cons.prems strict_order_tl
+      by auto
+
+    obtain val where Val :
+      "map_of vm1' hn1 = Some val" "map_of vm2' hn2 = Some val"
+      "alpha_equiv_varmap'l subst't vm1' vm2'"
+      using Cons.prems Subst'h
+      by(auto split: option.splits)
+
+
+    show ?case
+    proof(cases "n1 = hn1")
+      case True1 : True
+
+      show ?thesis using Cons.prems Subst'h
+          Get1_hn1 Get2_n2 True1 Val Ord_tl Val
+        by(auto)
+    next
+      case False1 : False
+      show ?thesis
+      proof(cases "n2 = hn2")
+        case True2 : True
+
+        have Notin2: "hn2 \<notin> fst ` set vm2'"
+          using Cons.prems Subst'h
+            Get1_hn1 Get2_n2 False1 True2 Val Ord_tl Val
+          by(auto)
+
+        have Vm2 : "map fst (str_ord_update hn2 hn1 (oalist_flip' subst't)) = map fst vm2'"
+          using Cons.prems Subst'h
+            Get1_hn1 Get2_n2 Val Ord_tl Val
+          by(auto)
+
+        have Vm2' : "fst ` set (str_ord_update hn2 hn1 (oalist_flip' subst't)) = fst ` set vm2'"
+          unfolding sym[OF set_map]
+          using Vm2
+          by(auto)
+
+        have Vm2'_set : "set (str_ord_update hn2 hn1 (oalist_flip' subst't)) =
+          set (oalist_flip' subst't) - { x . fst x = hn2 } \<union> {(hn2, hn1)}"
+          using str_ord_update_set[OF oalist_flip'_correct[OF Ord_tl]]
+          by auto
+
+        have Bad : "(hn2) \<in>  fst ` set vm2'"
+          using Vm2'_set unfolding sym[OF Vm2']
+          by(auto)
+
+        show ?thesis using Bad Notin2
+          by auto
+      next
+        case False2 : False
+
+        have Get2_miss : "map_of (str_ord_update n2 v vm2') hn2 = Some val"
+          using str_ord_update_get_neq[OF Cons.prems(3) False2, of v] Val
+          by(auto)
+
+        show ?thesis
+        proof(cases "n1 < hn1")
+          case True3 : True
+
+          have Notin1 : "n1 \<notin> fst ` set vm1'"
+            using Cons.prems Subst'h False1 strict_order_distinct[OF Cons.prems(1)]
+            by(auto)
+
+          have Keys1_alt : "fst ` set (subst'h # subst't) = fst ` set vm1'"
+            using Cons.prems
+            unfolding sym[OF set_map]
+            by auto
+
+          have Notin1_alt : "n1 \<notin> fst ` set (subst'h # subst't)"
+            using Notin1
+            unfolding Keys1_alt
+            by(auto)
+
+          have Notin1_alt_tl : "n1 \<notin> fst ` set (subst't)"
+            using Notin1_alt
+            by auto
+
+          have Notin2 : "n2 \<notin> fst ` set vm2'"
+            using Cons.prems Subst'h False1
+            by(auto)
+
+          have Keys2_alt : "fst ` set ((oalist_flip' (subst'h # subst't))) = fst ` (set vm2')"
+            using Cons.prems
+            unfolding sym[OF set_map]
+            by auto
+
+          have Notin2_alt : "n2 \<notin> fst ` set ((oalist_flip' (subst'h # subst't))) "
+            using Notin2
+            unfolding Keys2_alt
+            by(auto)
+
+          hence Notin2_alt2 : "n2 \<notin> fst ` (\<lambda>(x, y). (y, x)) ` set (subst'h # subst't)"
+            using oalist_flip'_set[OF Cons.prems(1)] Cons.prems
+            by(auto)
+
+          have Fst_flip : "fst o (\<lambda>(x, y). (y, x)) = snd"
+          proof
+            fix w
+            show "(fst \<circ> (\<lambda>(x, y). (y, x))) w = snd w"
+              by(cases w; auto)
+          qed
+
+          have Notin2_alt3 : "n2 \<notin> snd ` set (subst'h # subst't)"
+            using Notin2_alt2
+            unfolding image_comp Fst_flip
+            by(auto)
+
+          have Notin2_alt_tl : "n2 \<notin> snd ` set (subst't)"
+            using Notin2_alt3
+            by auto
+
+          show ?thesis using Cons.prems Subst'h False1 False2 True3
+              Get1_hn1 Get2_n2 False1 False2 Val Get2_miss
+            using alpha_equiv_varmap'_update_miss[OF Cons.prems(2) Cons.prems(3) Ord_tl _ Notin1_alt_tl Notin2_alt_tl]
+            by(auto)
+        next
+          case False3 : False
+
+          have Lt : "hn1 < n1"
+            using False1 False2 False3
+            by(auto)
+
+          have Notin1 : "n1 \<notin> set (map fst vm1')"
+            using Cons.prems Subst'h False1 strict_order_distinct[OF Cons.prems(1)]
+            by(auto)
+
+          have Notin2 : "n2 \<notin> set (map fst vm2')"
+            using Cons.prems Subst'h False1 strict_order_distinct[OF Cons.prems(1)]
+            by(auto)
+
+          obtain vm1'hk vm1'hv vm1't where Vm1'_cons : "vm1' = (vm1'hk, vm1'hv) # vm1't"
+            using Cons.prems
+            by(cases vm1'; auto)
+
+          have Vm_tl' : "alpha_equiv_varmap'l subst't ((vm1'hk, val) # vm1't) vm2'"
+            using Cons.prems Subst'h False1 False2 False3
+              Get1_hn1 Get2_n2 Get2_miss Val Lt Vm1'_cons
+            by(auto)
+
+          show ?thesis using Cons.prems Subst'h False1 False2 False3
+              Get1_hn1 Get2_n2 Get2_miss Val Lt Vm1'_cons
+              Cons.IH
+            apply(auto)
+        qed
+
+        show ?thesis using Cons.prems Subst'h
+            Get1_hn1 Get2_n2 False1 False2 Val Get2_miss
+          apply(auto)
+          sorry
+      qed
+    qed
+  qed
+qed
+
+
+(* need assumptions about n1 and n2 not being present in substh? 
+ * no, I think we need them to not be present in vm1h *)
+lemma alpha_equiv_varmap_insert :
+  assumes "alpha_equiv_varmap (substh # substt) vm1 vm2"
+  shows "alpha_equiv_varmap (update n1 n2 substh # substt)
+     (varmap_insert vm1 n1 v)
+     (varmap_insert vm2 n2 v)"
+  using assms
+proof(induction substt arbitrary: substh vm1 vm2 n1 n2 v)
+  case Nil
+  then show ?case
+    apply(cases vm1; cases vm2; auto)
+    sorry
+next
+  case Cons_s : (Cons sh' st')
+
+  obtain vm1h vm1t where Cons1 : "vm1 = vm1h # vm1t"
+    using Cons_s.prems
+    by(cases vm1; auto)
+
+  obtain vm2h vm2t where Cons2 : "vm2 = vm2h # vm2t"
+    using Cons_s.prems
+    by(cases vm2; auto)
+
+  show ?case
+    using Cons_s.prems Cons1 Cons2
+    using Cons_s.IH[of sh' vm1t vm2t]
+    apply(auto)
+
+  have Eq_h : "alpha_equiv_varmap' substh vm1 vm2"
+    using Cons1.prems Cons2
+    by auto
+
+  have Conc1 : "alpha_equiv_varmap' (update n1 n2 substh) (update n1 v vm1h) (update n2 v vm2h)"
+    using alpha_equiv_varmap'_update[of "update n1 n2 substh"] (* this won't work *)
+    sorry
+
+  have Conc2 : "oalist_keys (update n1 n2 substh) = oalist_keys (update n1 v vm1h)"
+    sorry
+
+  have Conc3 : "oalist_one_one (update n1 n2 substh)"
+    sorry
+
+  have Conc4 : "oalist_keys (oalist_flip (update n1 n2 substh)) = oalist_keys (update n2 v vm2h)"
+    sorry
+
+  show ?case
+    using Cons1 Cons2 Conc1 Conc2 Conc3 Conc4
+    by(auto)
+qed
+
+lemma alpha_equiv_varmap_insert_mini :
+  assumes "length ns1 = length ns2"
+  assumes "alpha_equiv_varmap (to_oalist (zip ns1 ns2) # subst)
+     (varmap_extend (Oalist.empty # vm1) ns1)
+     (varmap_extend (Oalist.empty # vm2) ns2)"
+  shows "alpha_equiv_varmap (update n1 n2 (to_oalist (zip ns1 ns2)) # subst)
+     (varmap_insert (varmap_extend (Oalist.empty # vm1) ns1) n1 0)
+     (varmap_insert (varmap_extend (Oalist.empty # vm2) ns2) n2 0)"
+  using assms
+proof(induction ns1 arbitrary: subst vm1 vm2 n1 n2 ns2)
+  case Nil
+  then show ?case
+    apply(auto)
+    sorry
+    
+next
+  case Cons1 : (Cons ns1h ns1t)
+
+  obtain ns2h ns2t where Cons2 : "ns2 = ns2h # ns2t"
+    using Cons1.prems
+    by(cases ns2; auto)
+
+(*
+  have Eq_h : "alpha_equiv_varmap' substh vm1h vm2h"
+    using Cons1.prems Cons2
+    by auto
+
+  have Conc1 : "alpha_equiv_varmap' (update n1 n2 substh) (update n1 v vm1h) (update n2 v vm2h)"
+    using alpha_equiv_varmap'_update[of "update n1 n2 substh"] (* this won't work *)
+    sorry
+
+  have Conc2 : "oalist_keys (update n1 n2 substh) = oalist_keys (update n1 v vm1h)"
+    sorry
+
+  have Conc3 : "oalist_one_one (update n1 n2 substh)"
+    sorry
+
+  have Conc4 : "oalist_keys (oalist_flip (update n1 n2 substh)) = oalist_keys (update n2 v vm2h)"
+    sorry
+*)
+
+  show ?case
+    using Cons1 Cons2 
+    apply(auto)
+qed
+
+lemma alpha_equiv_varmap_extend :
+  assumes "alpha_equiv_varmap subst vm1 vm2"
+  assumes "length ns1 = length ns2"
+  assumes "distinct ns1"
+  assumes "distinct ns2"
+  shows "alpha_equiv_varmap (to_oalist (zip ns1 ns2) # subst)
+           (varmap_extend (Oalist.empty # vm1) ns1)
+           (varmap_extend (Oalist.empty # vm2) ns2)"
+  using assms
+proof(induction ns1 arbitrary: subst vm1 vm2 ns2)
+  case Nil
+
+  have Keys : "oalist_keys Oalist.empty = oalist_keys Oalist.empty"
+    by(transfer; auto)
+
+  have One_one : "oalist_one_one Oalist.empty"
+    by(transfer; auto)
+
+  have Keys_flip : "oalist_keys (oalist_flip Oalist.empty) = oalist_keys Oalist.empty"
+    by(transfer; auto)
+
+  show ?case using Nil
+    using alpha_equiv_varmap'_empty Keys One_one Keys_flip
+    by(auto)
+next
+  case Cons1 : (Cons ns1h ns1t)
+
+  then obtain ns2h ns2t where Cons2 : "ns2 = ns2h # ns2t"
+    by(cases ns2; auto)
+
+  have Vm_tl : "alpha_equiv_varmap (to_oalist (zip ns1t ns2t) # subst) (varmap_extend (Oalist.empty # vm1) ns1t) (varmap_extend (Oalist.empty # vm2) ns2t)"
+    using Cons1.prems Cons2 Cons1.IH[OF Cons1.prems(1), of ns2t]
+    by(auto)
+
+  have Notin1 : "ns1h \<notin> set ns1t" "distinct ns1t"
+    using Cons1.prems
+    by auto
+
+  have Notin2 : "ns2h \<notin> set ns2t" "distinct ns2t"
+    using Cons1.prems Cons2
+    by auto
+
+(* need an alternate version of alpha_equiv_varmap_update
+ * dealing with values not present? *)
+  show ?case using Vm_tl Cons1.prems Cons2 Vm_tl
+    using varmap_extend_insert_swap[OF Notin1(1) Notin1(2)]
+    using varmap_extend_insert_swap[OF Notin2(1) Notin2(2)]
+    apply(auto simp del: varmap_insert.simps)
+    sorry
+(*
+(* need an assumption about one-one ness of ns1 and ns2? *)
+  show ?case
+  proof(cases "get (to_oalist (zip ns1t ns2t)) ns1h")
+    case None1 : None
+
+    show ?thesis
+    proof(cases "get (oalist_flip (to_oalist (zip ns1t ns2t))) ns2h")
+      case None2 : None
+      then show ?thesis 
+        using Cons1.prems Cons2 None1
+        using alpha_equiv_varmap_update[OF _ Vm_tl, of ns1h ns2h]
+    apply(auto)
+        apply(auto)
+
+    next
+      case (Some a)
+      then show ?thesis sorry
+    qed
+      using None1 alpha_equiv_varmap_update[OF _ Vm_tl, of ns1h ns2h]
+      apply(auto)
+
+
+  show ?case using alpha_equiv_varmap_update[OF _ Vm_tl, of ns1h ns2h]
+    apply(auto)
+
+  then show ?case 
+    apply(auto)
+*)
+qed
+
 lemma alpha_equiv_eval_correct:
   shows "(\<forall> subst fsubst vm1 vm2 
           (ctx1 :: 'g fctx) (ctx2 :: 'g fctx) .
@@ -1002,11 +1774,23 @@ next
         using Heqv SB1 SB2
         by(auto)
 
+      have Ns_lengths : "length ns1 = length ns2"
+        using Heqv SB1 SB2
+        by(auto)
+
+      have Ns_distinct1 : "distinct ns1"
+        using Heqv SB1 SB2
+        by(auto)
+
+      have Ns_distinct2 : "distinct ns2"
+        using Heqv SB1 SB2
+        by(auto)
+
       have Vm_extend : "alpha_equiv_varmap (to_oalist (zip ns1 ns2) # subst)
            (varmap_extend (Oalist.empty # vm1) ns1)
            (varmap_extend (Oalist.empty # vm2) ns2)"
-        using Hvm
-        sorry
+        using alpha_equiv_varmap_extend[OF Hvm Ns_lengths Ns_distinct1 Ns_distinct2]
+        by auto
 
       show ?thesis
       proof(cases "eval_statements n' ctx1 body1
@@ -1046,6 +1830,8 @@ next
             by(cases res2_p; auto)
 
           have Pop : "alpha_equiv_varmap subst (varmap_pop res1_vm) (varmap_pop res2_vm)"
+            using SB1 SB2 Heqv Some1 Some2 Ok1 Ok2 Res1 Res2 Hvm
+            apply(auto)
             sorry (* lemma *)
 
           show ?thesis 
