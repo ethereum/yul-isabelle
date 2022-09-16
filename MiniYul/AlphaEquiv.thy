@@ -163,7 +163,7 @@ fun alpha_equiv_fctx' ::
            length rets1 = length rets2 \<and>
            distinct (args1 @ rets1) \<and>
            distinct (args2 @ rets2) \<and>
-           alpha_equiv_stmt fsubst0 [to_oalist (zip (args1 @ rets) (args2 @ rets2))] ctx1 ctx2 body1 body2 \<and>
+           alpha_equiv_stmt fsubst0 [to_oalist (zip (args1 @ rets1) (args2 @ rets2))] ctx1 ctx2 body1 body2 \<and>
            alpha_equiv_fctx' t fsubst0 ctx1 ctx2)
         | (Inr bh1, Inr bh2) \<Rightarrow>
           \<comment> \<open>(bh1 = bh2)\<close> alpha_equiv_fctx' t fsubst0 ctx1 ctx2
