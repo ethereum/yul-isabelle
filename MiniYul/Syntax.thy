@@ -12,14 +12,75 @@ datatype expr =
   | EPrim name "expr1 list"
   | EFun name "expr1 list"
 
-(* how to handle multiple returns?
- * expr1 vs expr? *)
+(* enforce distinctness on name lists here? *)
 datatype statement =
   SBlock "(name list)" "statement list"
   | SAssn "name list" expr
   | SIf expr1 statement statement
   | SWhile expr1 statement
   | SSkip
+
+
+lemma statement_induct_strong :
+  fixes P1 :: "statement \<Rightarrow> bool"
+  fixes P2 :: "statement list \<Rightarrow> bool"
+
+  assumes LB : "\<And> x1 x2 .
+    P2 x2 \<Longrightarrow> P1 (SBlock x1 x2)"
+  assumes LA : "\<And> x1 x2 . P1 (SAssn x1 x2)"
+  assumes LI : "\<And> x1 x2 x3 .
+    P1 x2 \<Longrightarrow> P1 x3 \<Longrightarrow> P1 (SIf x1 x2 x3)"
+  assumes LW : "\<And> x1 x2 .
+    P1 x2 \<Longrightarrow> P1 (SWhile x1 x2)"
+  assumes LS : "P1 SSkip"
+
+  assumes LNil : "P2 []"
+  assumes LCons : "\<And> h t .
+    P1 h \<Longrightarrow> P2 t \<Longrightarrow> P2 (h#t)"
+
+  shows "P1 stm \<and> P2 stms"
+  using assms
+proof-
+  {
+    fix stm
+    have "P1 stm \<and> (\<forall> x1 x2 . stm = SBlock x1 x2 \<longrightarrow> P2 x2)"
+    proof(induction stm)
+      case (SBlock x1 x2)
+      then show ?case using LB LA LI LW LS LNil LCons
+      proof(induction x2)
+        case Nil
+        then show ?case 
+          by(auto)
+      next
+        case (Cons h t)
+
+        then show ?case 
+          by(auto intro: LB LA LI LW LS LNil LCons)
+      qed
+    next
+      case (SAssn x1 x2)
+      then show ?case using LA
+        by auto
+    next
+      case (SIf x1 stm1 stm2)
+      then show ?case 
+        using LI
+        by(auto)
+    next
+      case (SWhile x1 stm)
+      then show ?case 
+        using LW
+        by(auto)
+    next
+      case SSkip
+      then show ?case 
+        using LS
+        by(auto)
+    qed
+  } 
+  then show ?thesis
+    by auto
+qed
 
 datatype fundec =
   Decl "name list" "name list" "statement"

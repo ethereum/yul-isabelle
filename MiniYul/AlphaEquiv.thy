@@ -161,10 +161,12 @@ fun alpha_equiv_fctx' ::
         (Inl (Decl args1 rets1 body1), Inl (Decl args2 rets2 body2)) \<Rightarrow>
           (length args1 = length args2 \<and>
            length rets1 = length rets2 \<and>
-           alpha_equiv_stmt fsubst0 [to_oalist (zip args1 args2 @ zip rets1 rets2)] ctx1 ctx2 body1 body2 \<and>
+           distinct (args1 @ rets1) \<and>
+           distinct (args2 @ rets2) \<and>
+           alpha_equiv_stmt fsubst0 [to_oalist (zip (args1 @ rets) (args2 @ rets2))] ctx1 ctx2 body1 body2 \<and>
            alpha_equiv_fctx' t fsubst0 ctx1 ctx2)
         | (Inr bh1, Inr bh2) \<Rightarrow>
-          \<comment> \<open>(bh1 = bh2)\<close> True
+          \<comment> \<open>(bh1 = bh2)\<close> alpha_equiv_fctx' t fsubst0 ctx1 ctx2
         | (_, _) \<Rightarrow> False)))"
 
 definition alpha_equiv_fctx ::

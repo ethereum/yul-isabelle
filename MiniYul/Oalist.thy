@@ -1662,6 +1662,1081 @@ instance proof
 qed
 end
 
+fun oacons' :: "'k \<Rightarrow> 'v \<Rightarrow> ('k :: linorder * 'v) list \<Rightarrow> ('k * 'v) list option" where
+"oacons' k v [] = Some [(k, v)]"
+| "oacons' k v ((kh, vh) # t) =
+   (if k < kh then Some ((k, v) # (kh, vh) # t)
+    else None)"
+
+lemma oacons'_correct :
+  fixes l :: "(('k :: linorder) * 'v) list"
+  assumes Ord : "strict_order (map fst l)"
+  assumes Cons' : "oacons' k v l = Some l'"
+  shows "strict_order (map fst l')"
+proof(cases l)
+  case Nil
+  then show ?thesis using Ord Cons' strict_order_singleton[of k]
+    by(auto simp add: pred_option_def)
+next
+  case (Cons h t)
+
+  obtain kh vh where H : "h = (kh, vh)"
+    by(cases h; auto)
+
+  have Lt : "k < kh"
+    using Ord Cons' Cons H
+    by(cases "k < kh"; auto)
+
+  have Ord' : "strict_order (kh # map fst t)"
+    using Ord Cons' Cons H
+    by(auto)
+
+  then show ?thesis
+    using Cons' Cons H Lt strict_order_cons[OF Lt Ord']
+    by(auto)
+qed
+
+lemma oacons'_destruct :
+  fixes l :: "(('k :: linorder) * 'v) list"
+  assumes Ord : "strict_order (map fst ((kh, vh) # lt))"
+  shows "oacons' kh vh lt = Some ((kh, vh) # lt)"
+proof(cases lt)
+  case Nil
+  then show ?thesis 
+    by auto
+next
+  case (Cons h2 t2)
+
+  obtain kh2 vh2 where H2 : "h2 = (kh2, vh2)"
+    by(cases h2; auto)
+
+  have Lt : "kh < kh2"
+    using strict_order_unfold[OF Ord, of 1 0] Cons H2
+    by(auto)
+
+  then show ?thesis using Cons Ord H2
+    by(auto)
+qed
+
+lift_definition oacons :: "'k :: linorder \<Rightarrow> 'v \<Rightarrow> ('k, 'v) oalist \<Rightarrow> ('k, 'v) oalist option"
+is oacons'
+proof-
+  fix k :: "'k :: linorder"
+  fix v :: "'v"
+  fix l :: "('k * 'v) list"
+  assume Ord : "strict_order (map fst l)"
+  show "pred_option
+        (\<lambda>xs. strict_order
+                (map fst xs))
+        (oacons' k v l)"
+  proof(cases "oacons' k v l")
+    case None
+    then show ?thesis
+      by(auto simp add: pred_option_def)
+  next
+    case (Some l')
+    show ?thesis
+      using oacons'_correct[OF Ord Some] Some Ord
+      by(auto simp add: pred_option_def)
+  qed
+qed
+
+lemma oalist_cases :
+  shows "(oal :: ('k :: linorder, 'v) oalist) = empty \<or>
+     (\<exists> hk hv oalt .
+      oacons hk hv oalt = Some oal)"
+proof(transfer)
+  fix oal :: "('k * 'v) list"
+  assume Ord : "strict_order (map fst oal)"
+  show "oal = [] \<or>
+       (\<exists>hk hv.
+           \<exists>oalt\<in>{xs. strict_order (map fst xs)}.
+              oacons' hk hv oalt = Some oal)"
+  proof(cases oal)
+    case Nil
+    then show ?thesis by auto
+  next
+    case (Cons h t)
+
+    obtain hk hv where H : "h = (hk, hv)"
+      by(cases h; auto)
+
+    have Conc1 : "strict_order (map fst t)"
+      using strict_order_tl Ord Cons
+      by(auto)
+
+    have Conc2 : "oacons' hk hv t = Some ((hk, hv) # t)"
+    proof(cases t)
+      case Nil' : Nil
+      then show ?thesis 
+        by(auto)
+    next
+      case Cons' : (Cons h' t')
+
+      obtain h'k h'v where H' : "h' = (h'k, h'v)"
+        by(cases h'; auto)
+
+      have Lt : "hk < h'k"
+        using Cons Cons' H H' strict_order_unfold[OF Ord, of 1 0]
+        by(auto)
+
+      show ?thesis 
+        using Cons Cons' H H' Ord Lt
+        by(auto)
+    qed
+
+    show ?thesis using Cons H Conc1 Conc2
+      by blast
+  qed
+qed
+
+lemma oalist_ind_list :
+  fixes P :: "('k :: linorder, 'v) oalist \<Rightarrow> bool"
+  assumes PE : "P (empty :: ('k :: linorder, 'v) oalist)"
+  assumes PC :
+    "\<And> kh vh (l :: ('k, 'v) oalist) l' . 
+      oacons kh vh l = Some l' \<Longrightarrow>
+      P l \<Longrightarrow>
+      P l'"
+  shows "P (l :: ('k, 'v) oalist)"
+  using assms
+proof-
+  fix P :: "('k :: linorder, 'v) oalist \<Rightarrow> bool"
+  fix x
+  show "P Oalist.empty \<Longrightarrow>
+           (\<And>kh vh l l'.
+               oacons kh vh l = Some l' \<Longrightarrow> P l \<Longrightarrow> P l') \<Longrightarrow>
+           P x"
+  proof(transfer; transfer)
+    fix P :: "('k :: linorder * 'v) list \<Rightarrow> bool"
+    fix x
+    show "strict_order (map fst x) \<Longrightarrow>
+           P [] \<Longrightarrow>
+           (\<And>kh vh l l'.
+               strict_order (map fst l) \<Longrightarrow>
+               strict_order (map fst l') \<Longrightarrow>
+               oacons' kh vh l = Some l' \<Longrightarrow> P l \<Longrightarrow> P l') \<Longrightarrow>
+           P x"
+    proof(induction x)
+      case Nil
+      then show ?case 
+        by auto
+    next
+      case (Cons h t)
+
+      obtain hk hv where H : "h = (hk, hv)"
+        by(cases h; auto)
+
+      have Ord_t : "strict_order (map fst t)"
+        using strict_order_tl Cons.prems
+        by(auto)
+
+      have Pt : "P t"
+        using Cons.prems Cons.IH[OF Ord_t Cons.prems(2)]
+        by(auto)
+
+      have Oacons : "oacons' hk hv t = Some (h # t)"
+        using oacons'_destruct Cons.prems(1) H
+        by(fastforce)
+
+      show ?case using Cons.prems(3)[OF Ord_t Cons.prems(1) Oacons Pt]
+        by(auto)
+    qed
+  qed
+qed
+
+lift_definition oalist_keys :: "('k :: linorder, 'v) oalist \<Rightarrow> 'k list"
+is "map fst"
+  .
+
+lift_definition oalist_vals :: "('k :: linorder, 'v) oalist \<Rightarrow> 'v list"
+is "map snd"
+  .
+
+lemma oalist_keys_update_hit :
+  fixes l :: "('k :: linorder, 'v) oalist"
+  assumes "get l k = Some v"
+  shows "oalist_keys (update k v' l) = oalist_keys l"
+  using assms
+proof(transfer)
+  fix l :: "('k * 'v) list"
+  show "\<And> k v v'.
+       strict_order (map fst l) \<Longrightarrow>
+       map_of l k = Some v \<Longrightarrow>
+       map fst (str_ord_update k v' l) = map fst l"
+  proof(induction l)
+    case Nil
+    then show ?case
+      by(auto)
+  next
+    case (Cons h t)
+
+    obtain hk hv where H: "h = (hk, hv)"
+      by(cases h; auto)
+
+    have Ord_tl : "strict_order (map fst t)"
+      using Cons.prems strict_order_tl
+      by auto
+
+    show ?case
+    proof(cases "k = hk")
+      case Eq : True
+      then show ?thesis using Cons H
+        by(auto)
+    next
+      case False
+
+      show ?thesis
+      proof(cases "hk < k")
+        case Lt : True
+        then show ?thesis 
+          using Cons.prems H Cons.IH[OF Ord_tl]
+          by(auto)
+      next
+        case Bad : False
+
+        have Map_tl : "map_of (t) k = Some v"
+          using Cons.prems False H
+          by(auto)
+
+        then have "(k, v) \<in> set t"
+          using map_of_SomeD[OF Map_tl]
+          by auto
+
+        then obtain ix where Ix :
+          "t ! ix = (k, v)" "ix < length t"
+          unfolding in_set_conv_nth
+          by auto
+
+        then show ?thesis
+          using False Bad H strict_order_unfold[OF Cons.prems(1), of "1 + ix" 0]
+          by(auto)
+      qed
+    qed
+  qed
+qed
+
+fun oalist_flip' ::
+  "('k :: linorder * 'k) list \<Rightarrow> ('k * 'k) list" where
+"oalist_flip' [] = []"
+| "oalist_flip' ((hl, hr)#t) =
+   str_ord_update hr hl (oalist_flip' t)"
+
+lemma oalist_flip'_correct :
+  fixes l :: "('k :: linorder * 'k) list"
+  assumes "strict_order (map fst l)"
+  shows "strict_order (map fst (oalist_flip' l))"
+  using assms
+proof(induction l)
+  case Nil
+  then show ?case
+    by auto
+next
+  case (Cons h t)
+
+  obtain h1 h2 where H : "h = (h1, h2)"
+    by(cases h; auto)
+
+  have Ord_tl :
+    "strict_order (map fst t)"
+    using strict_order_tl Cons.prems
+    by auto
+
+  have Flip_tl : "strict_order (map fst (oalist_flip' t))"
+    using Cons.IH[OF Ord_tl]
+    by auto
+
+  then show ?case using
+    str_ord_update_correct [OF Flip_tl] H
+    by(auto)
+qed
+
+lift_definition oalist_flip :: "('k :: linorder, 'k) oalist \<Rightarrow> ('k, 'k) oalist"
+is oalist_flip'
+  using oalist_flip'_correct
+  by auto
+
+lemma str_ord_update_get_eq :
+  assumes "strict_order (map fst l)"
+  shows "map_of (str_ord_update k v l) k = Some v"
+  using assms
+proof(induction l arbitrary: k v)
+  case Nil
+  then show ?case
+    by(auto)
+next
+  case (Cons h t)
+
+  obtain hk hv where H : "h = (hk, hv)"
+    by(cases h; auto)
+
+  show ?case using Cons H strict_order_tl
+    by(auto)
+qed
+
+lemma oalist_update_get_eq :
+  fixes l :: "('k :: linorder, 'v) oalist"
+  shows "get (update k v l) k = Some v"
+proof(transfer)
+  fix k v
+  fix l :: "('k * 'v) list"
+  assume H : "strict_order (map fst l)"
+  show "map_of (str_ord_update k v l)
+        k =
+       Some v"
+    using str_ord_update_get_eq[OF H]
+    by auto
+qed
+
+lemma str_ord_update_get_neq :
+  assumes "strict_order (map fst l)"
+  assumes "k1 \<noteq> k"
+  shows "map_of (str_ord_update k1 v l) k =
+         map_of l k"
+  using assms
+proof(induction l arbitrary: k v)
+  case Nil
+  then show ?case
+    by(auto)
+next
+  case (Cons h t)
+
+  obtain hk hv where H : "h = (hk, hv)"
+    by(cases h; auto)
+
+  show ?case using Cons H strict_order_tl
+    by(auto)
+qed
+
+lemma oalist_update_get_neq :
+  fixes l :: "('k :: linorder, 'v) oalist"
+  assumes "k1 \<noteq> k"
+  shows "get (update k1 v l) k = get l k"
+  using assms
+proof(transfer)
+  fix k1 k :: 'k
+  fix v
+  fix l :: "('k * 'v) list"
+  assume Neq : "k1 \<noteq> k"
+  assume H : "strict_order (map fst l)"
+  show "map_of (str_ord_update k1 v l)
+        k =
+       map_of l k"
+    using str_ord_update_get_neq[OF H Neq]
+    by auto
+qed
+
+(*
+abbreviation oalist'_one_one :: "('k :: linorder * 'v) list \<Rightarrow> bool" where
+"oalist'_one_one l \<equiv>
+  distinct (map snd l)"
+*)
+lemma oalist'_one_one_tl :
+  assumes "distinct (map snd (h#t))"
+  shows "distinct (map snd t)"
+  using assms
+  by(auto)
+
+lift_definition oalist_one_one :: "('k :: linorder, 'v) oalist \<Rightarrow> bool"
+is "\<lambda> l . distinct (map snd l)"
+  .
+
+lemma oalist_flip'_get :
+  fixes l :: "('k :: linorder * 'k) list"
+  assumes "strict_order (map fst l)"
+  assumes "distinct (map snd l)"
+  assumes "map_of l k = Some v"
+  shows "map_of (oalist_flip' l) v = Some k"
+  using assms
+proof-
+  fix l :: "('k * 'k) list"
+  show "\<And> k v.
+       strict_order (map fst l) \<Longrightarrow>
+       distinct (map snd l) \<Longrightarrow>
+       map_of l k = Some v \<Longrightarrow>
+       map_of (oalist_flip' l) v = Some k"
+  proof(induction l)
+    case Nil
+    then show ?case by auto
+  next
+    case (Cons h t)
+
+    obtain hk hv where H : "h = (hk, hv)"
+      by(cases h; auto)
+
+    have Ord_tl : "strict_order (map fst t)"
+      using Cons.prems H strict_order_tl
+      by auto
+
+    have Ord_flip : "strict_order (map fst (oalist_flip' t))"
+      using Ord_tl oalist_flip'_correct
+      by auto
+
+    show ?case
+    proof(cases "k = hk")
+      case True
+
+      then show ?thesis
+        using Cons.prems Cons.IH H str_ord_update_get_eq[OF Ord_flip, of v hk]
+        by(auto)
+    next
+      case False
+
+      have Map_tl : "map_of t k = Some v"
+        using Cons.prems H False
+        by(auto)
+
+      have Vin : "v \<in> snd ` set t"
+        using imageI[OF map_of_SomeD[OF Map_tl], of snd]
+        by(auto)
+
+      have Hv_notin : "hv \<notin> snd ` set t"
+        using Cons.prems False H
+        by(auto)
+
+      have Neq : "hv \<noteq> v"
+        using Vin Hv_notin
+        by auto
+
+      show ?thesis
+        using Cons.prems Cons.IH[OF Ord_tl, of k v] H str_ord_update_get_neq[OF Ord_flip Neq] False
+        by(auto)
+    qed
+  qed
+qed
+
+lemma oalist_flip_get :
+  fixes l :: "('k :: linorder, 'k) oalist"
+  assumes "oalist_one_one l"
+  assumes "get l k = Some v"
+  shows "get (oalist_flip l) v = Some k"
+  using assms
+proof(transfer)
+  fix l :: "('k * 'k) list"
+  show "\<And> k v.
+       strict_order (map fst l) \<Longrightarrow>
+       distinct (map snd l) \<Longrightarrow>
+       map_of l k = Some v \<Longrightarrow>
+       map_of (oalist_flip' l) v = Some k"
+    using oalist_flip'_get
+    by auto
+qed
+
+lemma strict_order_update_swap :
+  assumes "strict_order (map fst l)"
+  assumes "k1 \<noteq> k2"
+  shows "str_ord_update k1 v1 (str_ord_update k2 v2 l) =
+         str_ord_update k2 v2 (str_ord_update k1 v1 l)"
+  using assms
+proof(induction l arbitrary: k1 v1 k2 v2)
+  case Nil
+  then show ?case
+    using less_linear[of k1 k2]
+    by(auto)
+next
+  case (Cons h t)
+
+  obtain hk hv where H : "h = (hk, hv)"
+    by(cases h; auto)
+
+  have Ord_tl : "strict_order (map fst t)"
+    using strict_order_tl Cons.prems
+    by fastforce
+
+  show ?case using Cons.prems Cons.IH[OF Ord_tl] H
+    by(auto)
+qed
+
+lemma oalist_update_swap :
+  fixes l :: "('k :: linorder, 'v) oalist"
+  assumes "k1 \<noteq> k2"
+  shows "update k1 v1 (update k2 v2 l) =
+    update k2 v2 (update k1 v1 l)"
+  using assms
+proof(transfer)
+  fix k1 k2 :: 'k
+  fix v1 v2 
+  fix l :: "('k * 'v) list"
+  assume Neq : 
+    "k1 \<noteq> k2"
+  assume Ord :
+    "strict_order (map fst l)"
+
+  show "str_ord_update k1 v1 (str_ord_update k2 v2 l) =
+       str_ord_update k2 v2 (str_ord_update k1 v1 l)"
+    using strict_order_update_swap[OF Ord Neq]
+    by auto
+qed
+
+lemma oalist_flip'_update :
+  assumes H : "strict_order (map fst l)"
+  assumes Hdist : "distinct (map snd l)"
+  assumes "k \<notin> fst ` set l"
+  assumes "v \<notin> snd ` set l"
+  shows "oalist_flip' (str_ord_update k v l) =
+         str_ord_update v k (oalist_flip' l)"
+  using assms
+proof(induction l arbitrary: k v)
+  case Nil
+  then show ?case
+    by auto
+next
+  case (Cons h t)
+
+  obtain hk hv where H : "h = (hk, hv)"
+    by(cases h; auto)
+
+  have Ord_tl : "strict_order (map fst t)"
+    using strict_order_tl Cons.prems
+    by fastforce
+
+  show ?case
+  proof(cases "k = hk")
+    case True
+
+    show ?thesis
+      using Cons.prems H True
+      by(auto)
+  next
+    case False
+    then show ?thesis 
+      using Cons.prems H Cons.IH[OF Ord_tl, of k]
+      using strict_order_update_swap[OF oalist_flip'_correct[OF Ord_tl]]
+      by(auto)
+  qed
+qed
+
+lemma str_ord_update_set :
+  fixes l :: "('k :: linorder * 'k) list"
+  assumes "strict_order (map fst l)"
+  shows "set (str_ord_update k v l) =
+    ((set l - {x . fst x = k}) \<union> {(k, v)})"
+  using assms
+proof(induction l arbitrary: k v)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons h t)
+
+  obtain hk hv where H: "h = (hk, hv)"
+    by(cases h; auto)
+
+  have Ord_tl : "strict_order (map fst t)"
+    using Cons.prems H strict_order_tl
+    by auto
+
+  show ?case
+  proof(cases "hk = k")
+    case True
+
+    then show ?thesis
+      using Cons.prems Cons.IH[OF Ord_tl] H
+      using strict_order_distinct[OF Cons.prems(1)]
+      by(auto)
+  next
+    case False1 : False
+
+    show ?thesis
+    proof(cases "hk < k")
+      case True2 : True
+
+      then show ?thesis
+        using Cons.prems Cons.IH[OF Ord_tl] H
+        using strict_order_distinct[OF Cons.prems(1)]
+        by(auto)
+
+    next
+
+      case False2 : False
+
+      have Lt : "k < hk"
+        using False1 False2
+        by auto
+
+      show ?thesis
+      proof
+        show "set (str_ord_update k v (h # t))
+          \<subseteq> set (h # t) - {x. fst x = k} \<union> {(k, v)}"
+        proof
+          fix x
+
+          assume X : "x \<in> set (str_ord_update k v (h # t))"
+
+          obtain xk xv where Xkv : "x = (xk, xv)"
+            by(cases x; auto)
+
+          show "x \<in> set (h # t) - {x. fst x = k} \<union> {(k, v)}"
+          proof(cases "xk = k")
+            case True3 : True
+
+            show ?thesis
+            proof(cases "(k, xv) \<in> set t")
+              case True4 : True
+
+              then obtain ix where Ix : "t ! ix = (k, xv)" "ix < length t"
+                unfolding in_set_conv_nth
+                by auto
+
+              have False
+                using strict_order_unfold[OF Cons.prems(1), of "1 + ix" "0"]
+                using H Lt X Xkv Ix
+                by(auto)
+
+              then show ?thesis by auto
+            next
+              case False4 : False
+              then show ?thesis
+                using Cons.prems Cons.IH[OF Ord_tl] H Lt X Xkv
+                using strict_order_distinct[OF Cons.prems(1)]
+                by(auto)
+            qed
+          next
+            case False3 : False
+            then show ?thesis
+              using Cons.prems Cons.IH[OF Ord_tl] H Lt X Xkv
+              using strict_order_distinct[OF Cons.prems(1)]
+              by(auto)
+          qed
+        qed
+      next
+        show "set (h # t) - {x. fst x = k} \<union> {(k, v)}
+          \<subseteq> set (str_ord_update k v (h # t))"
+        using Cons.prems Cons.IH[OF Ord_tl] H
+        using strict_order_distinct[OF Cons.prems(1)]
+          by(auto)
+      qed
+    qed
+  qed
+qed
+
+lemma oalist_flip'_set :
+  fixes l :: "('k :: linorder * 'k) list"
+  assumes "strict_order (map fst l)"
+  assumes "distinct (map snd l)"
+  shows "set (oalist_flip' l) = (\<lambda> (x, y) . (y, x)) ` set l"
+  using assms
+proof(induction l)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons h t )
+
+  obtain hk hv where H: "h = (hk, hv)"
+    by(cases h; auto)
+
+  have Ord_tl : "strict_order (map fst t)"
+    using Cons.prems H strict_order_tl
+    by auto
+
+  show ?case
+  proof
+    show "set (oalist_flip' (h # t)) \<subseteq> (\<lambda>a. case a of (x, y) \<Rightarrow> (y, x)) ` set (h # t)"
+    proof
+      fix x
+      assume Hx : "x \<in> set (oalist_flip' (h # t)) "
+
+      obtain xk xv where Xkv : "x = (xv, xk)"
+        by(cases x; auto)
+
+      have In_upd : "(xv, xk) \<in> set (str_ord_update hv hk (oalist_flip' t))"
+        using Cons.prems Cons.IH[OF Ord_tl] H Hx Xkv
+        by(auto)
+
+      have In_upd' : "(xv, xk) \<in> set (oalist_flip' (t)) - {x. fst x = hv} \<union> {(hv, hk)}"
+        using In_upd
+        unfolding Xkv str_ord_update_set[OF oalist_flip'_correct[OF Ord_tl], of hv hk]
+          In_upd Xkv
+        by simp
+
+      show "x \<in> (\<lambda>a. case a of (x, y) \<Rightarrow> (y, x)) ` set (h # t)"
+      proof(cases "hv \<in> snd ` set t")
+        case True
+        then show ?thesis
+          using Cons.prems Cons.IH[OF Ord_tl] H Hx Xkv
+          using str_ord_update_get_eq[OF oalist_flip'_correct[OF Ord_tl]]
+          by(auto)
+      next
+        case False
+        then show ?thesis 
+          using Cons.prems Cons.IH[OF Ord_tl] H Hx Xkv In_upd'
+          by(auto)
+      qed
+    qed
+  next
+    show "(\<lambda>a. case a of (x, y) \<Rightarrow> (y, x)) ` set (h # t) \<subseteq> set (oalist_flip' (h # t))"
+    proof
+      fix x
+      assume Hx : "x \<in> (\<lambda>a. case a of (x, y) \<Rightarrow> (y, x)) ` set (h # t)"
+
+      obtain xk xv where Xkv : "x = (xv, xk)"
+        by(cases x; auto)
+
+      show "x \<in> set (oalist_flip' (h # t))"
+      proof(cases "xk = hk")
+        case True
+
+        show ?thesis
+          using Cons.prems H  Hx Xkv True Cons.IH[OF Ord_tl]
+          using str_ord_update_set[OF oalist_flip'_correct[OF Ord_tl]]
+          by(auto)
+      next
+        case False
+        show ?thesis
+        proof(cases "xv = hv")
+          case True2 : True
+
+          have In_t' : "(xk, hv) \<in> set t"
+            using Cons.prems H  Hx Xkv False True2 Cons.IH[OF Ord_tl]
+            using str_ord_update_set[OF oalist_flip'_correct[OF Ord_tl]]
+            by(auto)
+
+          have "hv \<in> snd ` set t"
+            using imageI[OF In_t', of snd]
+            by auto
+
+          then show ?thesis
+            using Cons.prems H  Hx Xkv False True2 Cons.IH[OF Ord_tl]
+            using str_ord_update_set[OF oalist_flip'_correct[OF Ord_tl]]
+            by(auto)
+        next
+          case False2 : False
+          show ?thesis
+            using Cons.prems H  Hx Xkv False False2 Cons.IH[OF Ord_tl]
+            using str_ord_update_set[OF oalist_flip'_correct[OF Ord_tl]]
+            by(auto)
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma str_ord_update_concat :
+  fixes l :: "('k :: linorder * 'v) list"
+  assumes "strict_order (map fst l)"
+  assumes "k \<notin> fst ` set l"
+  shows "\<exists> pre post .
+    str_ord_update k v l =
+      pre @ [(k, v)] @ post \<and>
+    l = pre @ post"
+  using assms
+proof(induction l arbitrary: k v)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons h t )
+
+  obtain hk hv where H: "h = (hk, hv)"
+    by(cases h; auto)
+
+  have Ord_tl : "strict_order (map fst t)"
+    using Cons.prems H strict_order_tl
+    by auto
+
+  show ?case
+  proof(cases "hk < k")
+    case True
+
+    have Notin' : "k \<notin> fst ` set t"
+      using Cons.prems
+      by auto
+
+    obtain pre0 post0 where Ind :
+      "str_ord_update k v t = pre0 @ (k, v) # post0" "t = pre0 @ post0"
+      using Cons.prems H Cons.IH[OF Ord_tl Notin', of v]
+      by auto
+
+    have Conc' : "str_ord_update k v (h # t) = (h # pre0) @ [(k, v)] @ post0 \<and> h # t = (h # pre0) @ post0"
+      using Ind H True
+      by(auto)
+
+    then show ?thesis
+      by blast
+  next
+    case False
+    then show ?thesis
+      using Cons.prems H
+      by(auto)
+  qed
+qed
+
+lemma oalist_flip'_map_snd :
+  fixes l :: "('k :: linorder * 'k) list"
+  assumes "strict_order (map fst l)"
+  assumes "distinct (map snd l)"
+  shows "distinct (map snd (oalist_flip' l))"
+  using assms
+proof(induction l)
+  case Nil
+  then show ?case by auto
+next
+  case (Cons h t )
+
+  obtain hk hv where H: "h = (hk, hv)"
+    by(cases h; auto)
+
+  have Ord_tl : "strict_order (map fst t)"
+    using Cons.prems H strict_order_tl
+    by auto
+
+  have Dist_tl : "distinct (map snd t)"
+    using Cons.prems H
+    by auto
+
+  have Hk_notin : "hk \<notin> fst ` set t"
+    using strict_order_distinct[OF Cons.prems(1)] H
+    by(auto)
+
+  have Hv_notin : "hv \<notin> fst ` set (oalist_flip' t)"
+    using oalist_flip'_set[OF Ord_tl Dist_tl] H Cons.prems
+    apply(auto)
+    apply(drule_tac f = snd in imageI)
+    apply(auto)
+    done
+
+  have Hk_notin' : "hk \<notin> snd ` set (oalist_flip' t)"
+    using oalist_flip'_set[OF Ord_tl Dist_tl] H Cons.prems Hk_notin
+    apply(auto)
+    apply(drule_tac f = fst in imageI)
+    apply(auto)
+    done
+
+  obtain pre post where Split : 
+    "(str_ord_update hv hk (oalist_flip' t)) =
+     pre @ [(hv, hk)] @ post" "oalist_flip' t = pre @ post"
+    using str_ord_update_concat[OF oalist_flip'_correct[OF Ord_tl] Hv_notin]
+    by blast
+
+  have Conc' : "distinct (map snd (pre @ [(hv, hk)] @ post))"
+    unfolding map_append distinct_append 
+    using Cons.prems Split(2) Cons.IH[OF Ord_tl Dist_tl] H
+    using oalist_flip'_set[OF Ord_tl Dist_tl] Hk_notin'
+    by(auto)
+
+  have Conc'' : "distinct
+     (map snd
+       (str_ord_update hv hk (oalist_flip' t)))"
+    using Conc'
+    unfolding Split(1)
+    by auto
+
+  show ?case
+    using Cons.prems Cons.IH[OF Ord_tl] H
+    using str_ord_update_set[OF oalist_flip'_correct[OF Ord_tl], of hv hk]
+    using Conc''
+    by(auto)
+qed
+
+(*
+lemma oalist_flip'_flip' :
+  fixes l :: "('k :: linorder * 'k) list"
+  assumes "strict_order (map fst l)"
+  assumes "distinct (map snd l)"
+  shows "oalist_flip' (oalist_flip' l) = l"
+  using assms
+proof(induction l)
+  case Nil
+  then show ?case
+    by auto
+next
+  case (Cons h t)
+
+  obtain hk hv where H: "h = (hk, hv)"
+    by(cases h; auto)
+
+  have Ord_tl : "strict_order (map fst t)"
+    using Cons.prems H strict_order_tl
+    by auto
+
+  show ?case
+    using Cons.prems Cons.IH[OF Ord_tl] H
+    using oalist_flip'_update[OF oalist_flip'_correct[OF Ord_tl]]
+    apply(auto)
+  qed
+*)
+(*
+lemma str_ord_update_map_snd : 
+  assumes "strict_order l"
+  assumes "distinct (map snd l)"
+  assumes "v \<notin>
+*)
+
+(*
+lemma oalist_flip_get_conv :
+  fixes l :: "('k :: linorder, 'k) oalist"
+  assumes "oalist_one_one l"
+  assumes "get (oalist_flip l) v = Some k"
+  shows "get l k = Some v"
+  using assms
+proof(transfer)
+  fix l :: "('k * 'k) list"
+  show "\<And> v k. strict_order (map fst l) \<Longrightarrow> distinct (map snd l) \<Longrightarrow> map_of (oalist_flip' l) v = Some k \<Longrightarrow> map_of l k = Some v"
+  proof(induction l)
+    case Nil
+    then show ?case by auto
+  next
+    case (Cons h t)
+    obtain hk hv where H : "h = (hk, hv)"
+      by(cases h; auto)
+
+    have Ord_tl : "strict_order (map fst t)"
+      using Cons.prems H strict_order_tl
+      by auto
+
+    have Dist_tl : "distinct (map snd (t))"
+      using Cons.prems
+      by auto
+
+    show ?case
+    proof(cases "k = hk")
+      case True
+
+      have Map_alt : "map_of (str_ord_update hv hk (oalist_flip' t)) hv = Some hk"
+        using str_ord_update_get_eq[OF oalist_flip'_correct[OF Ord_tl]] Cons.prems H
+        by fastforce
+
+      have Map1 : "map_of (str_ord_update hv hk (oalist_flip' t)) v = Some hk"
+        using Cons.prems H True
+        by auto
+
+      have Upd_ord : "strict_order (map fst (str_ord_update hv hk (oalist_flip' t)))"
+        using str_ord_update_correct[OF oalist_flip'_correct[OF Ord_tl]]
+        by auto
+
+      hence Upd_dist : "distinct (map fst (str_ord_update hv hk (oalist_flip' t)))"
+        using strict_order_distinct
+        by auto
+
+      have Upd_dist2 : "distinct (map snd (str_ord_update hv hk (oalist_flip' t)))"
+        using oalist_flip'_map_snd
+        by auto
 
 
+      have Conc' : "hv = v"
+        using map_of_SomeD[OF Map1] map_of_SomeD[OF Map_alt] Upd_dist2
+        apply(auto)
+        sorry
+
+      show ?thesis using True Conc'
+        using Cons.prems Cons.IH[OF Ord_tl Dist_tl] H 
+        by(auto)
+    next
+      case False
+      then show ?thesis sorry
+    qed
+      using Cons.prems Cons.IH[OF Ord_tl Dist_tl] H
+      apply(auto)
+
+    qed
+*)
+(* TODO: this can be weakened (I think) to remove the assumption that l is one-one *)
+(*
+lemma oalist_flip_one_one :
+  fixes l :: "('k :: linorder, 'k) oalist"
+  assumes "oalist_one_one l"
+  shows "oalist_one_one (oalist_flip l)"
+  using assms
+proof(transfer)
+  fix l :: "('k * 'k) list"
+  show "strict_order (map fst l) \<Longrightarrow> distinct (map snd l) \<Longrightarrow> distinct (map snd (oalist_flip' l))"
+  proof(induction l)
+    case Nil
+    then show ?case by auto
+  next
+    case (Cons h t)
+
+    obtain hk hv where H : "h = (hk, hv)"
+      by(cases h; auto)
+
+    have Ord_tl : "strict_order (map fst t)"
+      using Cons.prems H strict_order_tl
+      by auto
+
+    have Hk_notin : "hk \<notin> set (map fst t)"
+      using strict_order_distinct[OF Cons.prems(1)] H
+      by(auto)
+
+    show ?case using Cons.IH[OF Ord_tl] Cons.prems H
+      apply(auto)
+
+  qed
+*)
+(*
+lemma oalist_flip'_update :
+  assumes H : "strict_order (map fst l)"
+  assumes Hdist : "distinct (map snd l)"
+  shows "oalist_flip' (str_ord_update k v l) =
+         str_ord_update v k (oalist_flip' l)"
+  using assms
+proof(induction l arbitrary: k v)
+  case Nil
+  then show ?case
+    by auto
+next
+  case (Cons h t)
+
+  obtain hk hv where H : "h = (hk, hv)"
+    by(cases h; auto)
+
+  have Ord_tl : "strict_order (map fst t)"
+    using strict_order_tl Cons.prems
+    by fastforce
+
+  show ?case
+  proof(cases "k = hk")
+    case True
+
+(*
+    have Eq1 : "str_ord_update v hk (str_ord_update hv hk (oalist_flip' t)) = 
+                str_ord_update v hk (oalist_flip' (str_ord_update hv hk t))"
+      using Cons.prems H True
+      using sym[OF Cons.IH[OF Ord_tl, of hv hk]] 
+      (*using str_ord_update_str_ord_update[OF oalist_flip'_correct[OF Ord_tl]]*)
+      apply(auto)
+*)
+
+    show ?thesis
+      using Cons.prems H True
+      using sym[OF Cons.IH[OF Ord_tl, of hv hk]] 
+      (*using str_ord_update_str_ord_update[OF oalist_flip'_correct[OF Ord_tl]]*)
+      apply(auto)
+  next
+    case False
+    then show ?thesis sorry
+  qed
+    using Cons.IH[OF Ord_tl] Cons.prems H
+    apply(auto)
+qed
+
+
+lemma oalist_flip_flip : 
+  fixes l :: "('k :: linorder, 'k) oalist"
+  shows "oalist_flip (oalist_flip l) = l"
+proof(transfer)
+  fix l :: "('k * 'k) list"
+  show "strict_order (map fst l) \<Longrightarrow>
+         oalist_flip' (oalist_flip' l) = l"
+  proof(induction l)
+    case Nil
+    then show ?case
+      by(auto)
+  next
+    case (Cons lh lt)
+
+    obtain lhk lhv where Lh : "lh = (lhk, lhv)"
+      by(cases lh; auto)
+
+    have Ord_tl : "strict_order (map fst lt)"
+      using strict_order_tl Cons.prems
+      by fastforce
+
+    show ?case using Cons.IH[OF Ord_tl] Cons.prems Lh
+      apply(auto)
+  qed
+qed
+*)
+
+(*
+lemma oalist_flip_get_Some :
+  assumes "
+*)
 end
