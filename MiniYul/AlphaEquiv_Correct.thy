@@ -968,6 +968,27 @@ next
     by(auto)
 qed
 
+lemma varmap_insert_inserts_swap :
+  assumes "nh \<notin> set (map fst nt)"
+  assumes "distinct (map fst nt)"
+  shows "varmap_inserts (varmap_insert vm nh v) nt = 
+         varmap_insert (varmap_inserts vm nt) nh v"
+  using assms
+proof(induction nt arbitrary: vm nh v)
+  case Nil
+  then show ?case
+    by(auto)
+next
+  case (Cons nh' nt)
+
+  obtain nh'k nh'v where Nh' : "nh' = (nh'k, nh'v)"
+    by(cases nh'; auto)
+
+  show ?case using Cons Nh'
+    using varmap_insert_swap
+    by(auto)
+qed
+
 (* strengthen the theorem to talk about subsets of keys? *)
 lemma alpha_equiv_varmap'_update_fresh :
   assumes "alpha_equiv_varmap' subst' vm1' vm2'"
@@ -1627,6 +1648,40 @@ next
     by(simp)
 qed
 
+lemma varmap_inserts_keys :
+  assumes "length ns = length vals"
+  shows 
+    "\<exists> vmh' . ((varmap_inserts (vmh # vm) (zip ns vals)) = vmh' # vm \<and>
+      set (oalist_keys vmh') = set (oalist_keys vmh) \<union> set ns)"
+  using assms
+proof(induction ns arbitrary: vmh vm vals)
+  case Nil
+  then show ?case 
+    by(auto)
+next
+  case (Cons nh nt)
+
+
+  obtain valsh valst where Cons_vals : "vals = valsh # valst"
+    using Cons.prems
+    by(cases vals; auto)
+
+  obtain vmh' where Vmh' : "varmap_inserts (update nh valsh vmh # vm) (zip nt valst) = vmh' # vm"
+    "set (oalist_keys vmh') = set (oalist_keys (update nh valsh vmh)) \<union> set nt"
+    using Cons.IH[of valst "update nh valsh vmh" vm] Cons_vals Cons.prems
+    by(auto)
+
+  have Conc' : "set (oalist_keys (update nh valsh vmh)) \<union> set nt =
+    insert nh (set (oalist_keys vmh) \<union> set nt)"
+    using Vmh'(2) 
+    unfolding oalist_keys_update_set[of nh valsh vmh]
+    by auto
+
+  show ?case using Cons.prems Vmh' Conc' Cons_vals
+    by(simp)
+qed
+
+
 lemma oalist_keys_empty :
   "(oalist_keys (Oalist.empty :: (name, int) oalist)) = []"
   by (transfer; auto)
@@ -2217,140 +2272,152 @@ fix maps 1 and 2, assume they are alpha equiv
                   (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2))"
 *)
 
-lemma alpha_equiv_varmap_inserts :
-  assumes "alpha_equiv_varmap subst vm1 vm2"
-  assumes "length ns1 = length ns2"
-  assumes "distinct ns1"
-  assumes "distinct ns2"
-  shows "alpha_equiv_varmap (to_oalist (zip ns1 ns2) # subst)
-           (varmap_inserts (Oalist.empty # vm1) ns1)
-           (varmap_extend (Oalist.empty # vm2) ns2)"
+lemma alpha_equiv_varmap_empty : 
+  shows "alpha_equiv_varmap [(empty :: (name, name) oalist)] [empty :: (name, int) oalist] [empty :: (name, int) oalist]"
+proof-
+  show ?thesis
+    using alpha_equiv_varmap'_empty oalist_keys_empty oalist_keys_empty_nm oalist_one_one_empty oalist_flip_empty
+    by(auto)
+qed
+
+lemma alpha_equiv_varmap_inserts_funcall :
+  assumes "alpha_equiv_varmap [to_oalist (zip f1_rets f2_rets)] (varmap_extend [Oalist.empty] f1_rets)
+    (varmap_extend [Oalist.empty] f2_rets)"
+  assumes "length f1_args = length res2"
+  assumes "length f1_args = length f2_args"
+  assumes "length f1_rets = length f2_rets"
+  assumes "distinct (f1_args @ f1_rets)"
+  assumes "distinct (f2_args @ f2_rets)"
+  shows "alpha_equiv_varmap [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))]
+     (varmap_inserts (varmap_extend [Oalist.empty] f1_rets) (zip f1_args res2))
+     (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2))"
   using assms
-proof(induction ns1 arbitrary: subst vm1 vm2 ns2)
+proof(induction f1_args arbitrary: f1_rets f2_args f2_rets res2)
   case Nil
 
-  have Keys : "oalist_keys Oalist.empty = oalist_keys Oalist.empty"
-    by(transfer; auto)
-
-  have One_one : "oalist_one_one Oalist.empty"
-    by(transfer; auto)
-
-  have Keys_flip : "oalist_keys (oalist_flip Oalist.empty) = oalist_keys Oalist.empty"
-    by(transfer; auto)
-
-  show ?case using Nil
-    using alpha_equiv_varmap'_empty Keys One_one Keys_flip
+  then show ?case
     by(auto)
 next
-  case Cons1 : (Cons ns1h ns1t)
+  case Cons1 : (Cons f1_argsh f1_argst)
 
-  then obtain ns2h ns2t where Cons2 : "ns2 = ns2h # ns2t"
-    by(cases ns2; auto)
+  obtain f2_argsh f2_argst where Cons2 :
+    "f2_args = f2_argsh # f2_argst"
+    using Cons1.prems by (cases f2_args; auto)
 
-  have Vm_tl : "alpha_equiv_varmap (to_oalist (zip ns1t ns2t) # subst) (varmap_extend (Oalist.empty # vm1) ns1t) (varmap_extend (Oalist.empty # vm2) ns2t)"
-    using Cons1.prems Cons2 Cons1.IH[OF Cons1.prems(1), of ns2t]
+  obtain res2h res2t where Cons_res :
+    "res2 = res2h # res2t"
+    using Cons1.prems by (cases res2; auto)
+
+  have Ind : "alpha_equiv_varmap [to_oalist (zip f1_argst f2_argst @ zip f1_rets f2_rets)]
+     (varmap_inserts (varmap_extend [Oalist.empty] f1_rets) (zip f1_argst res2t))
+     (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_argst res2t))"
+    using Cons1.prems Cons1.IH[OF Cons1.prems(1), of res2t] Cons2 Cons_res
     by(auto)
 
-  have Notin1 : "ns1h \<notin> set ns1t" "distinct ns1t"
-    using Cons1.prems
-    by auto
-
-  have Notin2 : "ns2h \<notin> set ns2t" "distinct ns2t"
-    using Cons1.prems Cons2
-    by auto
-
   have "\<exists>vmh'.
-     varmap_extend (Oalist.empty # vm1) ns1t = vmh' # vm1 \<and>
-     set (oalist_keys vmh') = set (oalist_keys (Oalist.empty :: (name, int) oalist)) \<union> set ns1t"
-    using varmap_extend_keys[of empty vm1 ns1t]
+     (varmap_extend [Oalist.empty] f1_rets) = [vmh'] \<and>
+     set (oalist_keys vmh') = set (oalist_keys (Oalist.empty :: (name, int) oalist)) \<union> set f1_rets"
+    using varmap_extend_keys[of empty "[]" f1_rets ]
     by auto
 
   then obtain xh1 where Xh1 :
-    "(varmap_extend (Oalist.empty # vm1) ns1t) = xh1 # vm1"
-    "set (oalist_keys xh1) = set (oalist_keys (Oalist.empty :: (name, int) oalist)) \<union> set ns1t"
+    "(varmap_extend [Oalist.empty] f1_rets) = [xh1]"
+    "set (oalist_keys xh1) = set (oalist_keys (Oalist.empty :: (name, int) oalist)) \<union> set f1_rets"
     by auto
 
   have "\<exists>vmh'.
-     varmap_extend (Oalist.empty # vm2) ns2t = vmh' # vm2 \<and>
-     set (oalist_keys vmh') = set (oalist_keys (Oalist.empty :: (name, int) oalist)) \<union> set ns2t"
-    using varmap_extend_keys[of empty vm2 ns2t]
+     (varmap_extend [Oalist.empty] f2_rets) = [vmh'] \<and>
+     set (oalist_keys vmh') = set (oalist_keys (Oalist.empty :: (name, int) oalist)) \<union> set f2_rets"
+    using varmap_extend_keys[of empty "[]" f2_rets ]
     by auto
 
   then obtain xh2 where Xh2 :
-    "(varmap_extend (Oalist.empty # vm2) ns2t) = xh2 # vm2"
-    "set (oalist_keys xh2) = set (oalist_keys (Oalist.empty :: (name, int) oalist)) \<union> set ns2t"
+    "(varmap_extend [Oalist.empty] f2_rets) = [xh2]"
+    "set (oalist_keys xh2) = set (oalist_keys (Oalist.empty :: (name, int) oalist)) \<union> set f2_rets"
     by auto
 
-  have Vm_tl' :
-    "alpha_equiv_varmap (to_oalist (zip ns1t ns2t) # subst)
-     (xh1 # vm1)
-     (xh2 # vm2)"
-    using Vm_tl
-    unfolding Xh1(1) Xh2(1)
+(* (varmap_inserts [xh1] (zip f1_argst res2t)) *)
+  have "\<exists>vmh'.
+     varmap_inserts [xh1] (zip f1_argst res2t) = [vmh'] \<and>
+     set (oalist_keys vmh') = set (oalist_keys xh1) \<union> set f1_argst"
+    using varmap_inserts_keys[of "f1_argst" res2t xh1 "[]"]
+      Cons1.prems Cons2 Cons_res
+    by(auto)
+
+  then obtain yh1 where Yh1 :
+    "varmap_inserts [xh1] (zip f1_argst res2t) = [yh1]"
+    "set (oalist_keys yh1) = set (oalist_keys xh1) \<union> set f1_argst"
     by auto
 
-  have Zip1 : "ns1t = map fst (zip ns1t ns2t)"
-    using map_fst_zip Cons1.prems Cons2
+  have "\<exists>vmh'.
+     varmap_inserts [xh2] (zip f2_argst res2t) = [vmh'] \<and>
+     set (oalist_keys vmh') = set (oalist_keys xh2) \<union> set f2_argst"
+    using varmap_inserts_keys[of "f2_argst" res2t xh2 "[]"]
+      Cons1.prems Cons2 Cons_res
     by(auto)
 
-  have Zip2 : "ns2t = map snd (zip ns1t ns2t)"
-    using map_fst_zip Cons1.prems Cons2
-    by(auto)
-
-  have One_one' : "oalist_one_one (to_oalist (zip ns1t ns2t))"
-    using to_oalist_one_one[of "(zip ns1t ns2t)"] Cons1.prems Cons2 Zip1 Zip2
-    by(auto)
-
-  have Keys1' : "set (oalist_keys (to_oalist (zip ns1t ns2t))) = set (map fst (zip ns1t ns2t))"
-    using oalist_keys_to_oalist[of "(zip ns1t ns2t)"] Zip1 Notin1
-    by(auto)
-
-  have Keys1x : "set (oalist_keys xh1) = set (map fst (zip ns1t ns2t))"
-    using Xh1 oalist_keys_empty Zip1
-    by(auto)
-
-  have Keys1x_eq_set : "set (oalist_keys (to_oalist (zip ns1t ns2t))) = set (oalist_keys xh1)"
-    using Keys1' Keys1x
+  then obtain yh2 where Yh2 :
+    "varmap_inserts [xh2] (zip f2_argst res2t) = [yh2]"
+    "set (oalist_keys yh2) = set (oalist_keys xh2) \<union> set f2_argst"
     by auto
 
-  have Keys1_eq : "(oalist_keys (to_oalist (zip ns1t ns2t))) = (oalist_keys xh1)"
-    using strict_order_unique_set[OF _ _ Keys1x_eq_set]
-    using strict_order_oalist_keys[of "(to_oalist (zip ns1t ns2t))"]
-    using strict_order_oalist_keys[of "xh1"]
-    by auto
+  have Post_inserts : "alpha_equiv_varmap [update f1_argsh f2_argsh (to_oalist (zip f1_argst f2_argst @ zip f1_rets f2_rets))]
+     (varmap_insert (varmap_inserts [xh1] (zip f1_argst res2t)) f1_argsh res2h)
+     (varmap_insert (varmap_inserts [xh2] (zip f2_argst res2t)) f2_argsh res2h)"
+    unfolding Xh1 Xh2 Yh1 Yh2
+  proof(rule alpha_equiv_varmap_insert)
+    show "alpha_equiv_varmap [to_oalist (zip f1_argst f2_argst @ zip f1_rets f2_rets)] [yh1] [yh2]"
+      using Ind
+      unfolding Xh1 Xh2 Yh1 Yh2
+      by auto
+  next
+    show "oalist_one_one (to_oalist (zip f1_argst f2_argst @ zip f1_rets f2_rets))"
+    proof(rule to_oalist_one_one)
+      show "distinct (map fst (zip f1_argst f2_argst @ zip f1_rets f2_rets))"
+        using Cons1.prems Cons2
+        by(auto)
+    next
+      show "distinct (map snd (zip f1_argst f2_argst @ zip f1_rets f2_rets))"
+        using Cons1.prems Cons2
+        by(auto)
+    qed
+  next
 
-  have Keys2' : "set (oalist_keys (oalist_flip (to_oalist (zip ns1t ns2t)))) = (set (map snd (zip ns1t ns2t)))"
-    using oalist_keys_to_oalist_flip[of "(zip ns1t ns2t)"] Zip1 Zip2 Notin1 Notin2
+    have Conc' : "set (oalist_keys (to_oalist (zip f1_argst f2_argst @ zip f1_rets f2_rets))) = set (oalist_keys yh1)"
+      using Xh1 Xh2 Yh1 Yh2
+      using oalist_keys_to_oalist[of "(zip f1_argst f2_argst @ zip f1_rets f2_rets)"] Cons1.prems Cons2
+      using oalist_keys_empty
+      by(fastforce)
+
+    show "oalist_keys (to_oalist (zip f1_argst f2_argst @ zip f1_rets f2_rets)) = oalist_keys yh1"
+      using strict_order_unique_set[OF strict_order_oalist_keys strict_order_oalist_keys Conc']
+      by auto
+  next
+
+    have Conc' : "set (oalist_keys (oalist_flip (to_oalist (zip f1_argst f2_argst @ zip f1_rets f2_rets)))) = set (oalist_keys yh2)"
+      using Xh2 Yh2
+      using oalist_keys_to_oalist_flip[of "(zip f1_argst f2_argst @ zip f1_rets f2_rets)"] Cons1.prems Cons2
+      using oalist_keys_empty
+      by(fastforce)
+
+    show "oalist_keys (oalist_flip (to_oalist (zip f1_argst f2_argst @ zip f1_rets f2_rets))) = oalist_keys yh2"
+      using strict_order_unique_set[OF strict_order_oalist_keys strict_order_oalist_keys Conc']
+      by auto
+  next
+    show "f1_argsh \<notin> set (oalist_keys yh1)"
+      using Cons1.prems Cons2 Yh1 Xh1 oalist_keys_empty
+      by(auto)
+  next
+    show "f2_argsh \<notin> set (oalist_keys yh2)"
+      using Cons1.prems Cons2 Yh2 Xh2 oalist_keys_empty
+      by(auto)
+  qed
+
+  show ?case
+    using Post_inserts Cons1.prems Cons2 Cons_res Xh1 Xh2 Yh1 Yh2
+    using varmap_insert_inserts_swap[of f1_argsh "(zip f1_argst res2t)" "[xh1]" res2h]
+    using varmap_insert_inserts_swap[of f2_argsh "(zip f2_argst res2t)" "[xh2]" res2h]
     by(auto)
-
-  have Keys2x : "set (oalist_keys xh2) = set (map snd (zip ns1t ns2t))"
-    using Xh2 oalist_keys_empty Zip2
-    by(auto)
-
-  have Keys2x_eq_set : "set (oalist_keys (oalist_flip (to_oalist (zip ns1t ns2t)))) = set (oalist_keys xh2)"
-    using Keys2' Keys2x
-    by auto
-
-  have Keys2_eq : "(oalist_keys (oalist_flip (to_oalist (zip ns1t ns2t)))) = (oalist_keys xh2)"
-    using strict_order_unique_set[OF _ _ Keys2x_eq_set]
-    using strict_order_oalist_keys[of "(oalist_flip (to_oalist (zip ns1t ns2t)))"]
-    using strict_order_oalist_keys[of "xh2"]
-    by auto
-
-  have Notin1' : "ns1h \<notin> set (oalist_keys xh1)"
-    using Xh1(2) Notin1 oalist_keys_empty
-    by(auto)
-
-  have Notin2' : "ns2h \<notin> set (oalist_keys xh2)"
-    using Xh2(2) Notin2 oalist_keys_empty
-    by(auto)
-
-  show ?case using Vm_tl Cons1.prems Cons2 Vm_tl
-    using varmap_extend_insert_swap[OF Notin1(1) Notin1(2)]
-    using varmap_extend_insert_swap[OF Notin2(1) Notin2(2)]
-    using Xh1(1) Xh2(1)
-    using alpha_equiv_varmap_insert[OF Vm_tl' One_one' Keys1_eq Keys2_eq Notin1' Notin2', of 0]
-    by(auto simp del: varmap_insert.simps)
 qed
 
 lemma alpha_equiv_varmap_pop :
@@ -3267,228 +3334,243 @@ next
                     EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
                   by(auto)
 
-                have Vm_eq_pre_call : "alpha_equiv_varmap [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))] (varmap_inserts (varmap_extend [Oalist.empty] f1_rets) (zip f1_args res2))
-                  (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2))"
-                  apply(simp)
-                  (* alpha_equiv_varmap_updates, applied to a varmap with only args and rets *)
-                  sorry
-
-                have Bodies : "alpha_equiv_stmt (to_oalist (impl_of fsubst)) [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))] ctx1 ctx2 f1_body f2_body"
-                  using alpha_equiv_fctx_name[OF Hfctx Fname] Some_get_ctx1 Some_get_ctx2 Inl1 Inl2 Decl1 Decl2
-                  by(auto)
-
-                hence Bodies' : "alpha_equiv_stmt fsubst [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))] ctx1 ctx2 f1_body f2_body"
-                  using to_oalist_impl_of[of "impl_of fsubst" fsubst]
-                  by(auto)
-
-                have Body_results :
-                  "alpha_equiv_results [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))]
-                    (eval_statement n' ctx1 f1_body (varmap_inserts (varmap_extend [Oalist.empty] f1_rets) (zip f1_args res2)) g)
-                    (eval_statement n' ctx2 f2_body (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2)) g)"
-                  using IH1[OF Vm_eq_pre_call Hfctx Bodies']
-                  by auto
-
                 show ?thesis
-                proof(cases "eval_statement n' ctx1 f1_body (varmap_inserts (varmap_extend [Oalist.empty] f1_rets) (zip f1_args res2)) g")
-                  case None_eval_body1 : None
+                proof(cases "length f1_args = length res2")
+                  case Arity_bad : False
 
-                  show ?thesis
-                  proof(cases "(eval_statement n' ctx2 f2_body (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2)) g)")
-                    case None_eval_body2 : None
-                    then show ?thesis 
-                      using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 None_eval_body1 Args_len_eq
-                      by(auto)
-                  next
-                    case Some_eval_body2 : (Some bres2)
-                    then show ?thesis 
-                      using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 None_eval_body1 Args_len_eq
-                      using Body_results
-                      by(auto)
-                  qed
+                  show ?thesis using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Arity_bad Args_len_eq
+                    by(auto split: option.splits)
                 next
-                  case Some_eval_body1 : (Some bres1)
-
+                  case Arity_good : True
+  
+                  have Vm_eq_pre_call_rets : "alpha_equiv_varmap [to_oalist (zip f1_rets f2_rets)] (varmap_extend [Oalist.empty] f1_rets)
+                   (varmap_extend [Oalist.empty] f2_rets)"
+                    using alpha_equiv_varmap_extend[of "[]" "[]" "[]" f1_rets f2_rets]
+                    using Rets_len_eq Args_rets_dist1 Args_rets_dist2
+                    by(auto)
+  
+                  have Vm_eq_pre_call : "alpha_equiv_varmap [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))] (varmap_inserts (varmap_extend [Oalist.empty] f1_rets) (zip f1_args res2))
+                    (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2))"
+                    using alpha_equiv_varmap_inserts_funcall[OF Vm_eq_pre_call_rets Arity_good Args_len_eq Rets_len_eq Args_rets_dist1 Args_rets_dist2]
+                    by(simp)
+  
+                  have Bodies : "alpha_equiv_stmt (to_oalist (impl_of fsubst)) [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))] ctx1 ctx2 f1_body f2_body"
+                    using alpha_equiv_fctx_name[OF Hfctx Fname] Some_get_ctx1 Some_get_ctx2 Inl1 Inl2 Decl1 Decl2
+                    by(auto)
+  
+                  hence Bodies' : "alpha_equiv_stmt fsubst [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))] ctx1 ctx2 f1_body f2_body"
+                    using to_oalist_impl_of[of "impl_of fsubst" fsubst]
+                    by(auto)
+  
+                  have Body_results :
+                    "alpha_equiv_results [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))]
+                      (eval_statement n' ctx1 f1_body (varmap_inserts (varmap_extend [Oalist.empty] f1_rets) (zip f1_args res2)) g)
+                      (eval_statement n' ctx2 f2_body (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2)) g)"
+                    using IH1[OF Vm_eq_pre_call Hfctx Bodies']
+                    by auto
+  
                   show ?thesis
-                  proof(cases bres1)
-                    case Ok_eval_body1 : (Ok bres1')
-
-                    obtain vmfinal1 gfinal1 where Bres1' : "bres1' = (vmfinal1, gfinal1)"
-                      by(cases bres1'; auto)
-
+                  proof(cases "eval_statement n' ctx1 f1_body (varmap_inserts (varmap_extend [Oalist.empty] f1_rets) (zip f1_args res2)) g")
+                    case None_eval_body1 : None
+  
                     show ?thesis
                     proof(cases "(eval_statement n' ctx2 f2_body (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2)) g)")
                       case None_eval_body2 : None
-                      then show ?thesis
-                        using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Args_len_eq
-                        using Body_results
+                      then show ?thesis 
+                        using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 None_eval_body1 Args_len_eq
                         by(auto)
                     next
                       case Some_eval_body2 : (Some bres2)
-    
+                      then show ?thesis 
+                        using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 None_eval_body1 Args_len_eq
+                        using Body_results
+                        by(auto)
+                    qed
+                  next
+                    case Some_eval_body1 : (Some bres1)
+  
+                    show ?thesis
+                    proof(cases bres1)
+                      case Ok_eval_body1 : (Ok bres1')
+  
+                      obtain vmfinal1 gfinal1 where Bres1' : "bres1' = (vmfinal1, gfinal1)"
+                        by(cases bres1'; auto)
+  
                       show ?thesis
-                      proof(cases bres2)
-                        case Ok_eval_body2 : (Ok bres2')
-    
-                        obtain vmfinal2 gfinal2 where Bres2' : "bres2' = (vmfinal2, gfinal2)"
-                          by(cases bres2'; auto)
-
-                        have Vm_eq_post_call : 
-                          "alpha_equiv_varmap [to_oalist (zip f1_args f2_args @ zip f1_rets f2_rets)] vmfinal1
-                               vmfinal2"
-                          using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2  Ok_eval_body2 Bres2'
-                          using Body_results Args_len_eq
+                      proof(cases "(eval_statement n' ctx2 f2_body (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2)) g)")
+                        case None_eval_body2 : None
+                        then show ?thesis
+                          using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Args_len_eq
+                          using Body_results
                           by(auto)
-
-                        have Rets_names : "list_all2 (alpha_equiv_name [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))]) f1_rets f2_rets"
-                        proof(rule list_all2_all_nthI)
-                          show "length f1_rets = length f2_rets"
-                            using Rets_len_eq
-                            by auto
-                        next
-                          fix n
-                          assume N : "n < length f1_rets"
-
-                          have Dist1 : "distinct (map fst (zip f1_args f2_args @ zip f1_rets f2_rets))"
-                            using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2  Ok_eval_body2 Bres2'
-                            using alpha_equiv_fctx_name[OF Hfctx Fname]
-                            by(auto)
-
-                          have Dist2 : "distinct (map fst (zip f2_args f1_args @ zip f2_rets f1_rets))"
-                            using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2  Ok_eval_body2 Bres2'
-                            using alpha_equiv_fctx_name[OF Hfctx Fname]
-                            by(auto)
-
-                          have Get1 : "get (to_oalist (zip f1_args f2_args @ zip f1_rets f2_rets)) (f1_rets ! n) = map_of (zip f1_args f2_args @ zip f1_rets f2_rets) (f1_rets ! n)"
-                            using get_to_oalist[OF Dist1]
-                            by auto
-
-                          have Get1' : "map_of (zip f1_args f2_args @ zip f1_rets f2_rets) (f1_rets ! n) = Some (f2_rets ! n)"
-                            using Args_len_eq Rets_len_eq Dist1
-                            (* via sledgehammer *)
-                            by (auto; smt (z3) N dom_map_of_zip map_add_comm map_add_find_right map_of_zip_nth)
-
-                          have Flip : "(oalist_flip (to_oalist (zip f1_args f2_args @ zip f1_rets f2_rets))) =
-                            to_oalist (zip f2_args f1_args @ zip f2_rets f1_rets)"
-                            using to_oalist_flip_zip[OF Args_rets_dist1 Args_rets_dist2] Args_len_eq Rets_len_eq
-                            by(auto)
-
-                          have Get2 : "get (oalist_flip (to_oalist (zip f1_args f2_args @ zip f1_rets f2_rets))) (f2_rets ! n) = 
-                                       map_of (zip f2_args f1_args @ zip f2_rets f1_rets) (f2_rets ! n)"
-                            using Flip get_to_oalist[OF Dist2]
-                            by(auto)
-
-                          have Get2' : "map_of (zip f2_args f1_args @ zip f2_rets f1_rets) (f2_rets ! n) = Some (f1_rets ! n)"
-                            using Args_len_eq Rets_len_eq Dist2
-                            (* via sledgehammer *)
-                            by (auto; smt (z3) N dom_map_of_zip map_add_comm map_add_find_right map_of_zip_nth)
-
-                          show "alpha_equiv_name
-                            [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))]
-                            (f1_rets ! n) (f2_rets ! n)"
-                            using alpha_equiv_fctx_name[OF Hfctx Fname] Some_get_ctx1 Some_get_ctx2 Inl1 Inl2 Decl1 Decl2
-                            using Get1 Get1' Get2 Get2'
-                            by(auto)
-                        qed
-
+                      next
+                        case Some_eval_body2 : (Some bres2)
+      
                         show ?thesis
-                        proof(cases "varmap_gets vmfinal1 f1_rets")
-                          case None_returns1 : None
-                          then show ?thesis 
+                        proof(cases bres2)
+                          case Ok_eval_body2 : (Ok bres2')
+      
+                          obtain vmfinal2 gfinal2 where Bres2' : "bres2' = (vmfinal2, gfinal2)"
+                            by(cases bres2'; auto)
+  
+                          have Vm_eq_post_call : 
+                            "alpha_equiv_varmap [to_oalist (zip f1_args f2_args @ zip f1_rets f2_rets)] vmfinal1
+                                 vmfinal2"
                             using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2  Ok_eval_body2 Bres2'
                             using Body_results Args_len_eq
-                            using alpha_equiv_varmap_gets_names[OF Vm_eq_post_call, of f1_rets f2_rets ] Rets_names
                             by(auto)
-
-                        next
-                          case Some_returns1 : (Some retvals1)
+  
+                          have Rets_names : "list_all2 (alpha_equiv_name [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))]) f1_rets f2_rets"
+                          proof(rule list_all2_all_nthI)
+                            show "length f1_rets = length f2_rets"
+                              using Rets_len_eq
+                              by auto
+                          next
+                            fix n
+                            assume N : "n < length f1_rets"
+  
+                            have Dist1 : "distinct (map fst (zip f1_args f2_args @ zip f1_rets f2_rets))"
+                              using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2  Ok_eval_body2 Bres2'
+                              using alpha_equiv_fctx_name[OF Hfctx Fname]
+                              by(auto)
+  
+                            have Dist2 : "distinct (map fst (zip f2_args f1_args @ zip f2_rets f1_rets))"
+                              using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2  Ok_eval_body2 Bres2'
+                              using alpha_equiv_fctx_name[OF Hfctx Fname]
+                              by(auto)
+  
+                            have Get1 : "get (to_oalist (zip f1_args f2_args @ zip f1_rets f2_rets)) (f1_rets ! n) = map_of (zip f1_args f2_args @ zip f1_rets f2_rets) (f1_rets ! n)"
+                              using get_to_oalist[OF Dist1]
+                              by auto
+  
+                            have Get1' : "map_of (zip f1_args f2_args @ zip f1_rets f2_rets) (f1_rets ! n) = Some (f2_rets ! n)"
+                              using Args_len_eq Rets_len_eq Dist1
+                              (* via sledgehammer *)
+                              by (auto; smt (z3) N dom_map_of_zip map_add_comm map_add_find_right map_of_zip_nth)
+  
+                            have Flip : "(oalist_flip (to_oalist (zip f1_args f2_args @ zip f1_rets f2_rets))) =
+                              to_oalist (zip f2_args f1_args @ zip f2_rets f1_rets)"
+                              using to_oalist_flip_zip[OF Args_rets_dist1 Args_rets_dist2] Args_len_eq Rets_len_eq
+                              by(auto)
+  
+                            have Get2 : "get (oalist_flip (to_oalist (zip f1_args f2_args @ zip f1_rets f2_rets))) (f2_rets ! n) = 
+                                         map_of (zip f2_args f1_args @ zip f2_rets f1_rets) (f2_rets ! n)"
+                              using Flip get_to_oalist[OF Dist2]
+                              by(auto)
+  
+                            have Get2' : "map_of (zip f2_args f1_args @ zip f2_rets f1_rets) (f2_rets ! n) = Some (f1_rets ! n)"
+                              using Args_len_eq Rets_len_eq Dist2
+                              (* via sledgehammer *)
+                              by (auto; smt (z3) N dom_map_of_zip map_add_comm map_add_find_right map_of_zip_nth)
+  
+                            show "alpha_equiv_name
+                              [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))]
+                              (f1_rets ! n) (f2_rets ! n)"
+                              using alpha_equiv_fctx_name[OF Hfctx Fname] Some_get_ctx1 Some_get_ctx2 Inl1 Inl2 Decl1 Decl2
+                              using Get1 Get1' Get2 Get2'
+                              by(auto)
+                          qed
+  
                           show ?thesis
-                          proof(cases "varmap_gets vmfinal2 f2_rets")
-                            case None_returns2 : None
-
-                            then show ?thesis
+                          proof(cases "varmap_gets vmfinal1 f1_rets")
+                            case None_returns1 : None
+                            then show ?thesis 
                               using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2  Ok_eval_body2 Bres2'
                               using Body_results Args_len_eq
                               using alpha_equiv_varmap_gets_names[OF Vm_eq_post_call, of f1_rets f2_rets ] Rets_names
                               by(auto)
-
+  
                           next
-                            case Some_returns2 : (Some retvals2)
-
-                            have Fname : "alpha_equiv_name' fsubst f1 f2"
-                              using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
-                                Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2 Ok_eval_body2 Bres2' Some_returns1 Some_returns2
-                              by(auto)
-
-                            have Rets_len_eq1 : "length retvals1 = length f1_rets"
-                              using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
-                              Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2 Ok_eval_body2 Bres2' Some_returns1 Some_returns2
-                              using varmap_gets_length
-                              by(auto)
-
-                            have Rets_len_eq2 : "length retvals2 = length f2_rets"
-                              using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
-                              Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2 Ok_eval_body2 Bres2' Some_returns1 Some_returns2
-                              using varmap_gets_length
-
-                              by(auto)
-
-                            have Retvals_eq : "retvals1 = retvals2"
-                              using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
-                                Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2 Ok_eval_body2 Bres2' Some_returns1 Some_returns2
-                              using Body_results Args_len_eq
-                              using alpha_equiv_varmap_gets_names[OF Vm_eq_post_call , of f1_rets f2_rets] Rets_names
-                              by(auto)
-
+                            case Some_returns1 : (Some retvals1)
                             show ?thesis
-                              using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
+                            proof(cases "varmap_gets vmfinal2 f2_rets")
+                              case None_returns2 : None
+  
+                              then show ?thesis
+                                using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2  Ok_eval_body2 Bres2'
+                                using Body_results Args_len_eq
+                                using alpha_equiv_varmap_gets_names[OF Vm_eq_post_call, of f1_rets f2_rets ] Rets_names
+                                by(auto)
+  
+                            next
+                              case Some_returns2 : (Some retvals2)
+  
+                              have Fname : "alpha_equiv_name' fsubst f1 f2"
+                                using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
+                                  Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2 Ok_eval_body2 Bres2' Some_returns1 Some_returns2
+                                by(auto)
+  
+                              have Rets_len_eq1 : "length retvals1 = length f1_rets"
+                                using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
                                 Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2 Ok_eval_body2 Bres2' Some_returns1 Some_returns2
-                              using Body_results Args_len_eq Rets_len_eq1 Rets_len_eq2 Retvals_eq
-                              by(auto)
+                                using varmap_gets_length
+                                by(auto)
+  
+                              have Rets_len_eq2 : "length retvals2 = length f2_rets"
+                                using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
+                                Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2 Ok_eval_body2 Bres2' Some_returns1 Some_returns2
+                                using varmap_gets_length
+  
+                                by(auto)
+  
+                              have Retvals_eq : "retvals1 = retvals2"
+                                using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
+                                  Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2 Ok_eval_body2 Bres2' Some_returns1 Some_returns2
+                                using Body_results Args_len_eq
+                                using alpha_equiv_varmap_gets_names[OF Vm_eq_post_call , of f1_rets f2_rets] Rets_names
+                                by(auto)
+  
+                              show ?thesis
+                                using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
+                                  Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2 Ok_eval_body2 Bres2' Some_returns1 Some_returns2
+                                using Body_results Args_len_eq Rets_len_eq1 Rets_len_eq2 Retvals_eq
+                                by(auto)
+                            qed
                           qed
+                        next
+                          case Error_eval_body2 : (Error err2)
+  
+                          then show ?thesis
+                            using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
+                              Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2
+                            using Body_results
+                            by(auto)
                         qed
-                      next
-                        case Error_eval_body2 : (Error err2)
-
-                        then show ?thesis
-                          using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
-                            Some_eval_body1 Ok_eval_body1 Bres1' Some_eval_body2
-                          using Body_results
-                          by(auto)
                       qed
-                    qed
-                  next
-                    case Error_eval_body1 : (Error err1)
-
-                    show ?thesis
-                    proof(cases "(eval_statement n' ctx2 f2_body (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2)) g)")
-                      case None_eval_body2 : None
-                      then show ?thesis
-                        using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Args_len_eq
-                        using Body_results
-                        by(auto)
                     next
-                      case Some_eval_body2 : (Some bres2)
-    
+                      case Error_eval_body1 : (Error err1)
+  
                       show ?thesis
-                      proof(cases bres2)
-                        case Ok_eval_body2 : (Ok bres2')
-    
-                        obtain vmfinal2 gfinal2 where Bres2' : "bres2' = (vmfinal2, gfinal2)"
-                          by(cases bres2'; auto)
-
-                        show ?thesis
+                      proof(cases "(eval_statement n' ctx2 f2_body (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2)) g)")
+                        case None_eval_body2 : None
+                        then show ?thesis
                           using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Args_len_eq
-                          using Error_eval_body1 Some_eval_body2 Ok_eval_body2
                           using Body_results
                           by(auto)
                       next
-                        case Error_eval_body2 : (Error err2)
-
+                        case Some_eval_body2 : (Some bres2)
+      
                         show ?thesis
-                          using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Args_len_eq
-                          using Error_eval_body1 Some_eval_body2 Error_eval_body2
-                          using Body_results
-                          by(auto)
+                        proof(cases bres2)
+                          case Ok_eval_body2 : (Ok bres2')
+      
+                          obtain vmfinal2 gfinal2 where Bres2' : "bres2' = (vmfinal2, gfinal2)"
+                            by(cases bres2'; auto)
+  
+                          show ?thesis
+                            using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Args_len_eq
+                            using Error_eval_body1 Some_eval_body2 Ok_eval_body2
+                            using Body_results
+                            by(auto)
+                        next
+                          case Error_eval_body2 : (Error err2)
+  
+                          show ?thesis
+                            using EFun1 EFun2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2 Some_eval_body1 Args_len_eq
+                            using Error_eval_body1 Some_eval_body2 Error_eval_body2
+                            using Body_results
+                            by(auto)
+                        qed
                       qed
                     qed
                   qed
