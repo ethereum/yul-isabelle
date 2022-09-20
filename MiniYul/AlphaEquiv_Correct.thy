@@ -885,22 +885,6 @@ next
   qed
 qed
 
-(*
-lemma alpha_equiv_varmap_push :
-  assumes "alpha_equiv_varmap subst vm1 vm2"
-  shows "alpha_equiv_varmap (Oalist.empty # subst) (Oalist.empty # vm1)  (Oalist.empty # vm2)"
-  using assms
-proof(induction ns1 arbitrary: subst vm1 vm2 ns2)
-  case Nil
-  then show ?case 
-    apply(auto)
-    sorry
-next
-  case (Cons ns1h ns1t)
-  then show ?case 
-    apply(auto)
-*)
-
 lemma alpha_equiv_varmap'_empty :
   shows "alpha_equiv_varmap' Oalist.empty Oalist.empty Oalist.empty"
   by(transfer; auto)
@@ -2728,6 +2712,8 @@ lemma alpha_equiv_eval_correct:
           (ctx1 :: 'g fctx) (ctx2 :: 'g fctx) .
           alpha_equiv_varmap subst vm1 vm2 \<longrightarrow>
           alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<longrightarrow>
+          fctx_prims_ok fsubst ctx1 ctx2 \<longrightarrow>
+          ctx_proper ctx1 \<longrightarrow> ctx_proper ctx2 \<longrightarrow>
           ((\<forall> stm1 stm2 g .
              alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2 \<longrightarrow>
              alpha_equiv_results subst
@@ -2755,6 +2741,9 @@ next
 " \<And> subst fsubst vm1 vm2 (ctx1 :: 'g fctx) (ctx2 :: 'g fctx) stm1 stm2 g.
      alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
      alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
+     fctx_prims_ok fsubst ctx1 ctx2 \<Longrightarrow>
+     ctx_proper ctx1 \<Longrightarrow>
+     ctx_proper ctx2 \<Longrightarrow>
          alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2 \<Longrightarrow>
          alpha_equiv_results subst
               (eval_statement n' ctx1 stm1 vm1 g)
@@ -2766,6 +2755,9 @@ next
     
     show "alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
        alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
+       fctx_prims_ok fsubst ctx1 ctx2 \<Longrightarrow>
+       ctx_proper ctx1 \<Longrightarrow>
+       ctx_proper ctx2 \<Longrightarrow>
        alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2 \<Longrightarrow>
        alpha_equiv_results subst (eval_statement n' ctx1 stm1 vm1 g)
         (eval_statement n' ctx2 stm2 vm2 g)"
@@ -2777,6 +2769,9 @@ next
 " \<And> subst fsubst vm1 vm2 (ctx1 :: 'g fctx) (ctx2 :: 'g fctx) expr1 expr2 g.
      alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
      alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
+     fctx_prims_ok fsubst ctx1 ctx2 \<Longrightarrow>
+     ctx_proper ctx1 \<Longrightarrow>
+     ctx_proper ctx2 \<Longrightarrow>
          alpha_equiv_expr fsubst subst expr1 expr2 \<Longrightarrow>
          alpha_equiv_expr_results (eval_expression n' ctx1 expr1 vm1 g) (eval_expression n' ctx2 expr2 vm2 g)"
   proof-
@@ -2786,6 +2781,9 @@ next
 
     show "alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
        alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
+       fctx_prims_ok fsubst ctx1 ctx2 \<Longrightarrow>
+       ctx_proper ctx1 \<Longrightarrow>
+       ctx_proper ctx2 \<Longrightarrow>
        alpha_equiv_expr fsubst subst expr1 expr2 \<Longrightarrow>
        alpha_equiv_expr_results (eval_expression n' ctx1 expr1 vm1 g)
         (eval_expression n' ctx2 expr2 vm2 g)"
@@ -2797,6 +2795,9 @@ next
 " \<And> subst fsubst vm1 vm2 (ctx1 :: 'g fctx) (ctx2 :: 'g fctx) stms1 stms2 g.
      alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
      alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
+     fctx_prims_ok fsubst ctx1 ctx2 \<Longrightarrow>
+     ctx_proper ctx1 \<Longrightarrow>
+     ctx_proper ctx2 \<Longrightarrow>
        list_all2 (alpha_equiv_stmt fsubst subst ctx1 ctx2) stms1 stms2 \<Longrightarrow>
        alpha_equiv_results subst (eval_statements n' ctx1 stms1 vm1 g) (eval_statements n' ctx2 stms2 vm2 g)"
   proof-
@@ -2806,6 +2807,9 @@ next
 
     show "alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
        alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
+       fctx_prims_ok fsubst ctx1 ctx2 \<Longrightarrow>
+       ctx_proper ctx1 \<Longrightarrow>
+       ctx_proper ctx2 \<Longrightarrow>
        list_all2 (alpha_equiv_stmt fsubst subst ctx1 ctx2)
         stms1 stms2 \<Longrightarrow>
        alpha_equiv_results subst (eval_statements n' ctx1 stms1 vm1 g) (eval_statements n' ctx2 stms2 vm2 g)"
@@ -2817,6 +2821,9 @@ next
 " \<And> subst fsubst vm1 vm2 (ctx1 :: 'g fctx) (ctx2 :: 'g fctx) stm1 stm2 g.
      alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
      alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
+     fctx_prims_ok fsubst ctx1 ctx2 \<Longrightarrow>
+     ctx_proper ctx1 \<Longrightarrow>
+     ctx_proper ctx2 \<Longrightarrow>
          alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2 \<Longrightarrow>
          alpha_equiv_results subst (eval_statement (Suc n') ctx1 stm1 vm1 g) (eval_statement (Suc n') ctx2 stm2 vm2 g)"
   proof-
@@ -2826,6 +2833,9 @@ next
 
     assume Hvm : "alpha_equiv_varmap subst vm1 vm2"
     assume Hfctx : "alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2"
+    assume Hfctx_ok : "fctx_prims_ok fsubst ctx1 ctx2"
+    assume Hproper1 : "ctx_proper ctx1"
+    assume Hproper2 : "ctx_proper ctx2"
     assume Heqv : "alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2"
     show "alpha_equiv_results subst (eval_statement (Suc n') ctx1 stm1 vm1 g) (eval_statement (Suc n') ctx2 stm2 vm2 g)"
     proof(cases stm1)
@@ -2865,7 +2875,7 @@ next
 
         then have None2 :
           "(eval_statements n' ctx2 body2 (varmap_extend (Oalist.empty # vm2) ns2) g) = None"
-          using SB1 SB2 Hvm IH3[OF Vm_extend Hfctx Bodies, of g]
+          using SB1 SB2 Hvm IH3[OF Vm_extend Hfctx Hfctx_ok Hproper1 Hproper2 Bodies, of g]
           by(cases "(eval_statements n' ctx2 body2 (varmap_extend (Oalist.empty # vm2) ns2) g)"; auto)
 
         show ?thesis
@@ -2876,7 +2886,7 @@ next
 
         then obtain res2 where Some2 :
           "(eval_statements n' ctx2 body2 (varmap_extend (Oalist.empty # vm2) ns2) g) = Some res2"
-          using SB1 SB2 Hvm IH3[OF Vm_extend Hfctx Bodies, of g]
+          using SB1 SB2 Hvm IH3[OF Vm_extend Hfctx Hfctx_ok Hproper1 Hproper2 Bodies, of g]
           by(cases "(eval_statements n' ctx2 body2 (varmap_extend (Oalist.empty # vm2) ns2) g)"; auto)
 
         show ?thesis
@@ -2888,7 +2898,7 @@ next
             by(cases res1_p; auto)
 
           then obtain res2_p where Ok2 : "res2 = Ok res2_p"
-            using SB1 SB2 Heqv Some1 Some2 Ok1 IH3[OF Vm_extend Hfctx Bodies, of g]
+            using SB1 SB2 Heqv Some1 Some2 Ok1 IH3[OF Vm_extend Hfctx Hfctx_ok Hproper1 Hproper2 Bodies, of g]
             by(cases res2; auto)
 
           obtain res2_vm res2_g where Res2 :
@@ -2896,7 +2906,7 @@ next
             by(cases res2_p; auto)
 
           have Vmeq_result : "alpha_equiv_varmap (to_oalist (zip ns1 ns2) # subst) res1_vm res2_vm"
-            using SB1 SB2 Hvm IH3[OF Vm_extend Hfctx Bodies, of g] Some1 Ok1 Res1 Some2 Ok2 Res2
+            using SB1 SB2 Hvm IH3[OF Vm_extend Hfctx Hfctx_ok Hproper1 Hproper2 Bodies, of g] Some1 Ok1 Res1 Some2 Ok2 Res2
             by(auto)
 
           have Pop : "alpha_equiv_varmap subst (varmap_pop res1_vm) (varmap_pop res2_vm)"
@@ -2904,14 +2914,14 @@ next
             by(auto)
 
           show ?thesis 
-            using SB1 SB2 Heqv Some1 Some2 Ok1 Res1 Ok2 Res2 IH3[OF Vm_extend Hfctx Bodies, of g]
+            using SB1 SB2 Heqv Some1 Some2 Ok1 Res1 Ok2 Res2 IH3[OF Vm_extend Hfctx Hfctx_ok Hproper1 Hproper2 Bodies, of g]
             using Pop
             by(auto)
         next
           case Error1 : (Error err1)
 
           then obtain err2 where Error2 : "res2 = Error err2"
-            using SB1 SB2 Heqv Some1 Some2 Error1 IH3[OF Vm_extend Hfctx Bodies, of g]
+            using SB1 SB2 Heqv Some1 Some2 Error1 IH3[OF Vm_extend Hfctx Hfctx_ok Hproper1 Hproper2 Bodies, of g]
             by(cases res2; auto)
 
           then show ?thesis 
@@ -2939,7 +2949,7 @@ next
         case None1 : None
 
         then have None2 : "eval_expression n' ctx2 exp2 vm2 g = None"
-          using Heqv IH2[OF Hvm Hfctx Exps_eqv, of g]
+          using Heqv IH2[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Exps_eqv, of g]
           by(cases "eval_expression n' ctx2 exp2 vm2 g"; auto)
 
         show ?thesis using None1 None2 SA1 SA2
@@ -2948,7 +2958,7 @@ next
         case Some1 : (Some res1)
 
         then obtain res2 where Some2 : "eval_expression n' ctx2 exp2 vm2 g = Some res2"
-          using Heqv IH2[OF Hvm Hfctx Exps_eqv, of g]
+          using Heqv IH2[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Exps_eqv, of g]
           by(cases "eval_expression n' ctx2 exp2 vm2 g"; auto)
 
         show ?thesis
@@ -2957,7 +2967,7 @@ next
 
           then obtain res2' where Ok2 : "res2 = Ok res2'"
             using Heqv SA1 SA2 Some1 Some2
-            using IH2[OF Hvm Hfctx Exps_eqv, of g]
+            using IH2[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Exps_eqv, of g]
             by(cases res2; auto)
 
           obtain vals1 g1 where Res1' : "res1' = (vals1, g1)"
@@ -2977,14 +2987,14 @@ next
 
           show ?thesis
             using Heqv SA1 SA2 Some1 Some2 Ok1 Ok2 Res1' Res2'
-            using IH2[OF Hvm Hfctx Exps_eqv, of g] Ns_len Conc'
+            using IH2[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Exps_eqv, of g] Ns_len Conc'
             by(auto)
         next
           case Error1 : (Error err1)
 
           then obtain err2 where Error2 : "res2 = Error err2"
             using Heqv SA1 SA2 Some1 Some2
-            using IH2[OF Hvm Hfctx Exps_eqv, of g]
+            using IH2[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Exps_eqv, of g]
             by(cases res2; auto)
 
           show ?thesis using Heqv SA1 SA2 Some1 Some2 Error1 Error2
@@ -3031,13 +3041,13 @@ next
 
           show ?thesis
             using SI1 SI2 Heqv Some1 Some2 True Res_eq
-            using IH1[OF Hvm Hfctx]
+            using IH1[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 ]
             by(auto)
         next
           case False
           show ?thesis
             using SI1 SI2 Heqv Some1 Some2 False Res_eq
-            using IH1[OF Hvm Hfctx]
+            using IH1[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 ]
             by(auto)
         qed
       qed
@@ -3096,14 +3106,14 @@ next
               case None_stm2 : None
               then show ?thesis
                 using SW1 SW2 Heqv Some1 Some2 False None_stm1 Res_eq
-                using IH1[OF Hvm Hfctx Heqv', of g]
+                using IH1[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Heqv', of g]
                 by(auto)
             next
               case Some_stm2 : (Some stm_res2)
 
               show ?thesis
                 using SW1 SW2 Heqv Some1 Some2 False None_stm1 Some_stm2 Res_eq
-                using IH1[OF Hvm Hfctx Heqv', of g]
+                using IH1[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Heqv', of g]
                 by(auto)
             qed
           next
@@ -3113,7 +3123,7 @@ next
               case None_stm2 : None
               then show ?thesis
                 using SW1 SW2 Heqv Some1 Some2 False Some_stm1 Res_eq
-                using IH1[OF Hvm Hfctx Heqv', of g] 
+                using IH1[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Heqv', of g] 
                 by(auto)
             next
               case Some_stm2 : (Some stm_res2)
@@ -3135,18 +3145,18 @@ next
 
                   have Eqv' : "alpha_equiv_varmap subst vm1' vm2'" "g1' = g2'"
                     using SW1 SW2 Heqv Some1 Some2 False Res_eq Some_stm1 Some_stm2 Ok1 Ok2 Res1' Res2'
-                    using IH1[OF Hvm Hfctx Heqv', of g] 
+                    using IH1[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Heqv', of g] 
                     by(auto)
 
                   show ?thesis
                     using SW1 SW2 Heqv Some1 Some2 False Res_eq Some_stm1 Some_stm2 Ok1 Ok2 Res1' Res2'
-                    using IH1[OF Eqv'(1) Hfctx Heqv] Eqv'(2)
+                    using IH1[OF Eqv'(1) Hfctx Hfctx_ok Hproper1 Hproper2 Heqv] Eqv'(2)
                     by(auto)
                 next
                   case Error2 : (Error err2)
                   then show ?thesis
                     using SW1 SW2 Heqv Some1 Some2 False Res_eq Some_stm1 Some_stm2 Ok1 Error2
-                    using IH1[OF Hvm Hfctx Heqv', of g] Suc.prems
+                    using IH1[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Heqv', of g] Suc.prems
                     by(auto)
                 qed
               next
@@ -3156,13 +3166,13 @@ next
                   case Ok2 : (Ok stm_res2')
                   then show ?thesis
                     using SW1 SW2 Heqv Some1 Some2 False Res_eq Some_stm1 Some_stm2 Error1 Ok2
-                    using IH1[OF Hvm Hfctx Heqv', of g] Suc.prems
+                    using IH1[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Heqv', of g] Suc.prems
                     by(auto)
                 next
                   case Error2 : (Error err2)
                   then show ?thesis
                     using SW1 SW2 Heqv Some1 Some2 False Res_eq Some_stm1 Some_stm2 Error1 Error2
-                    using IH1[OF Hvm Hfctx Heqv', of g] Suc.prems
+                    using IH1[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Heqv', of g] Suc.prems
                     by(auto)
                 qed
               qed
@@ -3186,6 +3196,9 @@ next
 " \<And> subst fsubst vm1 vm2 (ctx1 :: 'g fctx) (ctx2 :: 'g fctx) expr1 expr2 g.
      alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
      alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
+     fctx_prims_ok fsubst ctx1 ctx2 \<Longrightarrow>
+     ctx_proper ctx1 \<Longrightarrow>
+     ctx_proper ctx2 \<Longrightarrow>
          alpha_equiv_expr fsubst subst expr1 expr2 \<Longrightarrow>
          alpha_equiv_expr_results (eval_expression (Suc n') ctx1 expr1 vm1 g) (eval_expression (Suc n') ctx2 expr2 vm2 g)"
   proof-
@@ -3195,6 +3208,9 @@ next
 
     assume Hvm : "alpha_equiv_varmap subst vm1 vm2"
     assume Hfctx : "alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2"
+    assume Hfctx_ok : "fctx_prims_ok fsubst ctx1 ctx2"
+    assume Hproper1 : "ctx_proper ctx1"
+    assume Hproper2 : "ctx_proper ctx2"
     assume Heqv : "alpha_equiv_expr fsubst subst expr1 expr2"
     show "alpha_equiv_expr_results
         (eval_expression (Suc n') ctx1 expr1 vm1 g)
@@ -3219,6 +3235,10 @@ next
         using EPrim1 EPrim2 Heqv alpha_equiv_eval_expr1s_correct[OF Hvm, of args1 args2]
         by auto
 
+      have Fname : "alpha_equiv_name' fsubst f1 f2"
+        using EPrim1 EPrim2 Args Heqv
+        by(auto)
+
       show ?thesis 
       proof(cases "eval_expr1s vm1 args1")
         case None1 : None
@@ -3234,7 +3254,123 @@ next
           by(cases "eval_expr1s vm2 args2"; auto)
 
         show ?thesis 
-          sorry
+        proof(cases "get ctx1 f1")
+          case None_get_ctx1 : None
+
+
+          show ?thesis
+          proof(cases "get ctx2 f2")
+            case None_get_ctx2 : None
+            show ?thesis
+              using EPrim1 EPrim2 Args Some1 Some2 Heqv None_get_ctx1 None_get_ctx2
+              by auto
+          next
+            case Some_get_ctx2 : (Some fres2)
+            then show ?thesis 
+              using EPrim1 EPrim2 Args Some1 Some2 Heqv Hfctx None_get_ctx1 Some_get_ctx2
+              using alpha_equiv_fctx_name[OF Hfctx Fname]
+              by(auto)
+          qed
+        next
+          case Some_get_ctx1 : (Some fres1)
+          show ?thesis
+          proof(cases "get ctx2 f2")
+            case None_get_ctx2 : None
+            show ?thesis
+              using EPrim1 EPrim2 Args Some1 Some2 Heqv Some_get_ctx1 None_get_ctx2
+              using alpha_equiv_fctx_name[OF Hfctx Fname]
+              by(auto)
+          next
+            case Some_get_ctx2 : (Some fres2)
+
+            show ?thesis
+            proof(cases fres1)
+              case Inl1 : (Inl decl1)
+
+              obtain f1_args f1_rets f1_body where
+                Decl1 : "decl1 = Decl f1_args f1_rets f1_body"
+                by(cases decl1; auto)
+
+              show ?thesis
+              proof(cases fres2)
+                case Inl2 : (Inl decl2)
+
+                obtain f2_args f2_rets f2_body where
+                  Decl2 : "decl2 = Decl f2_args f2_rets f2_body"
+                  by(cases decl2; auto)
+
+                show ?thesis
+                  using EPrim1 EPrim2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inl2 Decl2
+                  by(auto)
+              next
+                case Inr2 : (Inr prim2)
+                show ?thesis
+                  using EPrim1 EPrim2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inl1 Decl1 Inr2
+                  using alpha_equiv_fctx_name[OF Hfctx Fname]
+                  by(auto)
+              qed
+            next
+              case Inr1 : (Inr prim1)
+              show ?thesis
+              proof(cases fres2)
+                case Inl2 : (Inl decl2)
+
+                obtain f2_args f2_rets f2_body where
+                  Decl2 : "decl2 = Decl f2_args f2_rets f2_body"
+                  by(cases decl2; auto)
+
+                show ?thesis
+                  using EPrim1 EPrim2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inr1 Inl2 Decl2
+                  using alpha_equiv_fctx_name[OF Hfctx Fname]
+                  by(auto)
+              next
+                case Inr2 : (Inr prim2)
+
+                have Prim_eq : "prim1 = prim2"
+                  using fctx_prims_okD[OF Hfctx_ok Fname] Some_get_ctx1 Some_get_ctx2 Inr1 Inr2
+                  by(auto)
+
+                have Proper_prim1 : "prim_proper prim1"
+                  using oalist_all_val_get[OF Hproper1[unfolded ctx_proper_def] Some_get_ctx1] Inr1
+                  by auto
+
+                have Prim_res_eq : "prim1 g res2 vm1 = prim2 g res2 vm2"
+                  using Proper_prim1 unfolding prim_proper_def Prim_eq
+                  by(auto)
+
+                show ?thesis
+                proof(cases "prim1 g res1 vm1")
+                  case None_prim1 : None
+                  show ?thesis
+                  proof(cases "prim2 g res2 vm2")
+                    case None_prim2 : None
+                    show ?thesis using EPrim1 EPrim2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inr1 Inr2 None_prim1 None_prim2
+                      by(auto)
+                  next
+                    case Some_prim2 : (Some pres2)
+                    show ?thesis using EPrim1 EPrim2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inr1 Inr2 None_prim1 Some_prim2
+                        Prim_res_eq
+                      by(auto)
+                  qed
+                next
+                  case Some_prim1 : (Some pres1)
+                  show ?thesis
+                  proof(cases "prim2 g res2 vm2")
+                    case None_prim2 : None
+                    show ?thesis using EPrim1 EPrim2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inr1 Inr2 Some_prim1 None_prim2
+                        Prim_res_eq
+                      by(auto)
+                  next
+                    case Some_prim2 : (Some pres2)
+                    show ?thesis using EPrim1 EPrim2 Args Some1 Some2 Heqv Some_get_ctx1 Some_get_ctx2 Inr1 Inr2 Some_prim1 Some_prim2
+                        Prim_res_eq
+                      by(cases pres1; auto)
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
       qed
     next
 
@@ -3366,7 +3502,7 @@ next
                     "alpha_equiv_results [to_oalist (zip (f1_args @ f1_rets) (f2_args @ f2_rets))]
                       (eval_statement n' ctx1 f1_body (varmap_inserts (varmap_extend [Oalist.empty] f1_rets) (zip f1_args res2)) g)
                       (eval_statement n' ctx2 f2_body (varmap_inserts (varmap_extend [Oalist.empty] f2_rets) (zip f2_args res2)) g)"
-                    using IH1[OF Vm_eq_pre_call Hfctx Bodies']
+                    using IH1[OF Vm_eq_pre_call Hfctx Hfctx_ok Hproper1 Hproper2 Bodies']
                     by auto
   
                   show ?thesis
@@ -3610,6 +3746,9 @@ next
 " \<And> subst fsubst vm1 vm2 (ctx1 :: 'g fctx) (ctx2 :: 'g fctx) stms1 stms2 g.
      alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
      alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
+     fctx_prims_ok fsubst ctx1 ctx2 \<Longrightarrow>
+     ctx_proper ctx1 \<Longrightarrow>
+     ctx_proper ctx2 \<Longrightarrow>
        list_all2 (alpha_equiv_stmt fsubst subst ctx1 ctx2) stms1 stms2 \<Longrightarrow>
        alpha_equiv_results subst (eval_statements (Suc n') ctx1 stms1 vm1 g) (eval_statements (Suc n') ctx2 stms2 vm2 g)"
   proof-
@@ -3619,6 +3758,10 @@ next
 
     assume Hvm : "alpha_equiv_varmap subst vm1 vm2"
     assume Hfctx : "alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2"
+    assume Hfctx_ok : "fctx_prims_ok fsubst ctx1 ctx2"
+    assume Hproper1 : "ctx_proper ctx1"
+    assume Hproper2 : "ctx_proper ctx2"
+
     assume Heqv : "list_all2 (alpha_equiv_stmt fsubst subst ctx1 ctx2) stms1 stms2 "
 
     show "alpha_equiv_results subst (eval_statements (Suc n') ctx1 stms1 vm1 g)
@@ -3643,7 +3786,7 @@ next
         by(auto)
 
       have Eval_hd : "alpha_equiv_results subst (eval_statement n' ctx1 stm1h vm1 g) (eval_statement n' ctx2 stm2h vm2 g)"
-        using IH1[OF Hvm Hfctx Eqv_hd, of g]
+        using IH1[OF Hvm Hfctx Hfctx_ok Hproper1 Hproper2 Eqv_hd, of g]
         by auto
 
       show ?thesis
@@ -3685,7 +3828,7 @@ next
 
           show ?thesis
             using Cons1 Cons2 Eval_hd Some1h Some2h Ok1h Res1h Ok2h Res2h
-            using IH3[OF Vmh_eqv Hfctx Eqv_tl]
+            using IH3[OF Vmh_eqv Hfctx Hfctx_ok Hproper1 Hproper2 Eqv_tl]
             by(auto)
         next
           case Error1h : (Error err1)
@@ -3705,353 +3848,5 @@ next
     using Conc1 Conc2 Conc3
     by(auto)
 qed
-
-
-lemma alpha_equiv_eval_correct_test :
-  shows "(\<forall> subst fsubst vm1 vm2 ctx1 ctx2 stm1 stm2 .
-          alpha_equiv_varmap subst vm1 vm2 \<longrightarrow>
-          alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<longrightarrow>
-          alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2 \<longrightarrow>
-          (\<forall> g .
-             eval_statement n ctx1 stm1 vm1 g =
-             eval_statement n ctx2 stm2 vm2 g) \<and>
-          (\<forall> x1 expr1 x2 expr2 g .
-             stm1 = SAssn x1 expr1 \<longrightarrow>
-             stm2 = SAssn x2 expr2 \<longrightarrow>
-             alpha_equiv_expr fsubst subst expr1 expr2 \<longrightarrow>
-             eval_expression n ctx1 expr1 vm1 g =
-             eval_expression n ctx2 expr2 vm2 g) 
-         )\<and>
-         (\<forall> subst fsubst vm1 vm2 ctx1 ctx2 stm1 stm2 x1 x2 stms1 stms2 g .
-            alpha_equiv_varmap subst vm1 vm2 \<longrightarrow>
-            alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<longrightarrow>
-            alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2 \<longrightarrow>
-            stm1 = SBlock x1 stms1 \<longrightarrow>
-            stm2 = SBlock x2 stms2 \<longrightarrow>
-            eval_statements n ctx1 stms1 vm1 g =
-            eval_statements n ctx2 stms2 vm2 g
-         )"
-
-proof(induction n)
-  case 0
-  then show ?case 
-    by(auto)
-next
-  case (Suc n')
-
-  have Hyp' :
-    "(\<And> subst fsubst vm1 vm2 ctx1 ctx2 stm1 stm2.
-      alpha_equiv_varmap subst vm1 vm2 \<longrightarrow>
-      alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<longrightarrow>
-      alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2 \<longrightarrow>
-      (\<forall>g. eval_statement n' ctx1 stm1 vm1 g = eval_statement n' ctx2 stm2 vm2 g) \<and>
-      (\<forall>x1 expr1 x2 expr2 g.
-          stm1 = SAssn x1 expr1 \<longrightarrow>
-          stm2 = SAssn x2 expr2 \<longrightarrow>
-          alpha_equiv_expr fsubst subst expr1 expr2 \<longrightarrow>
-          eval_expression n' ctx1 expr1 vm1 g =
-          eval_expression n' ctx2 expr2 vm2 g))"
-  "(\<forall>subst fsubst vm1 vm2 ctx1 ctx2 stm1 stm2 x1 x2 stms1 stms2 g.
-      alpha_equiv_varmap subst vm1 vm2 \<longrightarrow>
-      alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<longrightarrow>
-      alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2 \<longrightarrow>
-      stm1 = SBlock x1 stms1 \<longrightarrow>
-      stm2 = SBlock x2 stms2 \<longrightarrow>
-      eval_statements n' ctx1 stms1 vm1 g = eval_statements n' ctx2 stms2 vm2 g)"
-
-  have Conc' : 
-
-  show ?case
-  proof(cases stm1)
-
-  then show ?case
-    apply(auto)
-qed
-
-lemma alpha_equiv_eval_correct :
-  shows "(\<forall> subst fsubst vm1 vm2 ctx1 ctx2 stm2 .
-          alpha_equiv_varmap subst vm1 vm2 \<longrightarrow>
-          alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<longrightarrow>
-          alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2 \<longrightarrow>
-          (\<forall> g n .
-             eval_statement n ctx1 stm1 vm1 g =
-             eval_statement n ctx2 stm2 vm2 g) \<and>
-          (\<forall> x1 expr1 x2 expr2 g n .
-             stm1 = SAssn x1 expr1 \<longrightarrow>
-             stm2 = SAssn x2 expr2 \<longrightarrow>
-             alpha_equiv_expr fsubst subst expr1 expr2 \<longrightarrow>
-             eval_expression n ctx1 expr1 vm1 g =
-             eval_expression n ctx2 expr2 vm2 g) 
-         )\<and>
-         (\<forall> subst fsubst vm1 vm2 ctx1 ctx2 stm1 stm2 x1 x2 stms2 g n .
-            alpha_equiv_varmap subst vm1 vm2 \<longrightarrow>
-            alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<longrightarrow>
-            alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2 \<longrightarrow>
-            stm1 = SBlock x1 stms1 \<longrightarrow>
-            stm2 = SBlock x2 stms2 \<longrightarrow>
-            eval_statements n ctx1 stms1 vm1 g =
-            eval_statements n ctx2 stms2 vm2 g
-         )"
-proof(induction  rule: statement_induct_strong)
-  case SBlock1 : (1 x1 x2)
-  show ?case 
-    apply(auto)
-    sorry
-next
-  case SAssn1 : (2 x1 x2)
-
-  have Conc'1 :
-    "\<And>subst fsubst vm1 vm2 ctx1 ctx2 stm2 g n.
-          alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
-          alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
-          alpha_equiv_stmt fsubst subst ctx1 ctx2 (SAssn x1 x2) stm2 \<Longrightarrow>
-          eval_statement n ctx1 (SAssn x1 x2) vm1 g =
-          eval_statement n ctx2 stm2 vm2 g"
-  proof-
-    fix subst fsubst vm1 vm2 ctx1 ctx2 stm2 g n
-    assume Hmap : "alpha_equiv_varmap subst vm1 vm2"
-    assume Hfctx : "alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2"
-    assume Hstmt : "alpha_equiv_stmt fsubst subst ctx1 ctx2 (SAssn x1 x2) stm2"
-
-    obtain y1 y2 where SAssn2 : "stm2 = SAssn y1 y2"
-      using Hstmt
-      by(cases stm2; auto)
-
-    show "eval_statement n ctx1 (SAssn x1 x2) vm1 g = eval_statement n ctx2 stm2 vm2 g"
-    proof(cases n)
-      case 0
-      then show ?thesis by auto
-    next
-      case (Suc n')
-
-      show ?thesis
-      proof(cases "eval_expression n' ctx1 x2 vm1 g")
-        case None1 : None
-        show ?thesis
-        proof(cases "eval_expression n' ctx2 y2 vm2 g")
-          case None2 : None
-          show ?thesis
-            using Hmap Hfctx Hstmt SAssn2 Suc None1 None2
-            by(auto)
-        next
-          case Some2 : (Some res2)
-          show ?thesis
-            using Hmap Hfctx Hstmt SAssn2 Suc None1 Some2
-            apply(auto)
-
-        next
-          case (Some a)
-          then show ?thesis sorry
-        qed
-        then show ?thesis sorry
-      next
-        case (Some a)
-        then show ?thesis sorry
-      qed
-
-      then show ?thesis
-        using Hmap Hfctx Hstmt SAssn2
-        apply(auto)
-    qed
-      using Hmap Hfctx Hstmt SAssn2
-      apply(cases n; auto split: option.splits if_splits orerror.splits)
-
-      sorry
-  qed
-
-  have Conc'2 :
-    "\<And>subst fsubst vm1 vm2 ctx1 ctx2 stm2 x1a expr1 x2a expr2 g n.
-          alpha_equiv_varmap subst vm1 vm2 \<Longrightarrow>
-          alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2 \<Longrightarrow>
-          alpha_equiv_stmt fsubst subst ctx1 ctx2 (SAssn x1 x2) stm2 \<Longrightarrow>
-          SAssn x1 x2 = SAssn x1a expr1 \<Longrightarrow>
-          stm2 = SAssn x2a expr2 \<Longrightarrow>
-          eval_expression n ctx1 expr1 vm1 g = eval_expression n ctx2 expr2 vm2 g"
-    sorry
-
-  show ?case
-    using Conc'1 Conc'2 
-    by(metis)
-next
-  case SIf1 : (3 x1 x2 x3)
-  then show ?case sorry
-next
-  case SWhile1 : (4 x1 x2)
-  then show ?case sorry
-next
-  case SSkip1 : 5
-  then show ?case 
-    apply(auto)
-next
-  case SNil : 6
-  then show ?case sorry
-next
-  case SCons : (7 h t)
-  then show ?case sorry
-qed
-
-lemma alpha_equiv_eval_correct :
-  assumes "alpha_equiv_varmap subst vm1 vm2"
-  assumes "alpha_equiv_fctx (impl_of fsubst) ctx1 ctx2"
-  assumes "alpha_equiv_stmt fsubst subst ctx1 ctx2 stm1 stm2"
-  shows "eval_statement n ctx1 stm1 vm1 g =
-         eval_statement n ctx2 stm2 vm2 g"
-  using assms
-proof(induction stm1 arbitrary: subst vm1 vm2 fsubst ctx1 ctx2 stm2 n g)
-  case SB1 : (SBlock names1 body1)
-
-  obtain names2 body2 where SB2 : "stm2 = SBlock names2 body2"
-    using SB1.prems
-    by(cases stm2; auto)
-
-  show ?case
-  proof(cases n)
-    case 0
-    then show ?thesis by auto
-  next
-    case (Suc n')
-
-    show ?thesis using SB1 SB2 Suc
-      sorry
-  qed
-next
-  case SA1 : (SAssn names1 expr1)
-  obtain names2 expr2 where SA2 : "stm2 = SAssn names2 expr2"
-    using SA1.prems
-    by(cases stm2; auto)
-
-  show ?case
-  proof(cases n)
-    case 0
-    then show ?thesis by auto
-  next
-    case (Suc n')
-
-    show ?thesis using SA1 SA2 Suc
-      sorry
-  qed
-next
-  case SI1 : (SIf x1 stm11 stm12)
-  then show ?case sorry
-next
-  case SW1 : (SWhile x1 stm1)
-  then show ?case sorry
-next
-  case SS1 : SSkip
-
-  have SS2 : "stm2 = SSkip"
-    using SS1
-    by(cases stm2; auto)
-
-  show ?case using SS1 SS2
-    apply(cases n; auto)
-
-  then show ?case sorry
-qed
-
-(*
-lemma alpha_equiv_eval_correct_full :
-  assumes "alpha_equiv_varmap subst vm1 vm2"
-  assumes "alpha_equiv_fctx fsubst ctx1 ctx2"
-  assumes "alpha_equiv_stmt fsubst subst stm1 stm2"
-  shows
-    "(\<forall> n .
-     eval_statement n ctx1 stm1 vm1 g =
-     eval_statement n ctx2 stm2 vm2 g) \<and>
-     (\<forall> n decls1 body1 decls2 body2.
-      stm1 = SBlock decls1 body1 \<Longrightarrow>
-      stm2 = SBlock decls2 body2 \<Longrightarrow>
-      eval_statements n ctx1 body1 (varmap_extend (varmap_push vm1) decls1) =
-      eval_statements n ctx2 body2 (varmap_extend (varmap_push vm2) decls2)) \<and>
-     (\<forall> n names1 expr1 names2 expr2 .
-      stm1 = SAssn ns1 expr1 \<Longrightarrow>
-      stm2 = SAssn ns2 expr2 \<Longrightarrow>
-      eval_statement n ctx1 stm1 vm1 g =
-      eval_statement n ctx2 stm2 vm2 g)"
-  assumes "alpha_equiv_expr fsubst subst e1 e2"
-  shows "eval_expr vm1 e1 = eval_expr vm2 e2"
-  using assms
-*)
-
-(*
- *
-*)
-
-(*
-lemma alpha_equiv_eval :
-  assumes "alpha_equiv_fctx fnames ctx1 ctx2"
-  assumes "alpha_equiv_varmap vsubst vars1 vars2"
-  assumes "fsubst = to_oalist fnames"
-  shows "alpha_equiv_stmt fsubst vsubst ctx1 ctx2 stm1 stm2 \<Longrightarrow>
-         eval_statement n ctx1 stm1 vars1 g =
-         eval_statement n ctx2 stm2 vars2 g"
-and "list_all2 (alpha_equiv_stmt fsubst vsubst ctx1 ctx2) stms1 stms2 \<Longrightarrow>
-    eval_statements n ctx1 stms1 vars1 g =
-    eval_statements n ctx2 stms2 vars2 g"
-and "alpha_equiv_expr fsubst vsubst e1 e2 \<Longrightarrow>
-    eval_expression n ctx1 e1 vars1 g =
-    eval_expression n ctx2 e2 vars2 g"
-  using assms
-proof(rule
-eval_statement_eval_statements_eval_expression.induct)
-case (1 uu uv uw ux)
-then show ?case sorry
-next
-  case (2 n ctx decls stms vars g)
-  then show ?case sorry
-next
-  case (3 n ctx ns expr vars g)
-  then show ?case sorry
-next
-  case (4 n ctx expr1 stm_t stm_f vars g)
-  then show ?case sorry
-next
-  case (5 n ctx expr1 stm_body vars g)
-  then show ?case sorry
-next
-  case (6 n ctx vars g)
-  then show ?case sorry
-next
-  case (7 ctx uy vars g)
-  then show ?case sorry
-next
-  case (8 n ctx vars g)
-  then show ?case sorry
-next
-  case (9 n ctx stm_h stm_t vars g)
-  then show ?case sorry
-next
-  case (10 ctx uz vars g)
-  then show ?case sorry
-next
-  case (11 n ctx e1s vars g)
-  then show ?case sorry
-next
-  case (12 n ctx p args vars g)
-  then show ?case sorry
-next
-  case (13 n ctx f args vars g)
-  then show ?case sorry
-qed
-*)
-
-(* the goal. *)
-(* assumptions:
- * primitives do not inspect variable map (proper)
- * manually supplied function mapping is valid.
- * how exactly do we specify this?
- *)
-
-(*
-lemma alpha_equiv_eval_program :
-  assumes "prog1 = Prog ctx1 body1"
-  assumes "prog2 = Prog ctx2 body2"
-  assumes "ctx_proper ctx1"
-  assumes "ctx_proper ctx2"
-  assumes "alpha_equiv_program prog1 prog2"
-  shows
-    "eval_program n prog1 g =
-     eval_program n prog2 g"
-*)
 
 end

@@ -175,6 +175,34 @@ definition alpha_equiv_fctx ::
 "alpha_equiv_fctx ns ctx1 ctx2 = 
   alpha_equiv_fctx' ns (to_oalist ns) ctx1 ctx2"
 
+definition fctx_prims_ok ::
+  "(name, name) oalist \<Rightarrow> (name, (fundec + 'g builtin)) oalist \<Rightarrow> (name, (fundec + 'g builtin)) oalist \<Rightarrow> bool" where
+"fctx_prims_ok subst ctx1 ctx2 =
+  (\<forall> n1 n2 p1 p2.
+    alpha_equiv_name' subst n1 n2 \<longrightarrow>
+    get ctx1 n1 = Some (Inr p1) \<longrightarrow>
+    get ctx2 n2 = Some (Inr p2) \<longrightarrow>
+    p1 = p2)"
+
+lemma fctx_prims_okI :
+  assumes "\<And> n1 n2 p1 p2 .
+    alpha_equiv_name' subst n1 n2 \<Longrightarrow>
+    get ctx1 n1 = Some (Inr p1) \<Longrightarrow>
+    get ctx2 n2 = Some (Inr p2) \<Longrightarrow>
+    p1 = p2"
+  shows "fctx_prims_ok subst ctx1 ctx2"
+  using assms
+  by(auto simp add: fctx_prims_ok_def)
+
+lemma fctx_prims_okD :
+  assumes "fctx_prims_ok subst ctx1 ctx2"
+  assumes "alpha_equiv_name' subst n1 n2"
+  assumes "get ctx1 n1 = Some (Inr p1)"
+  assumes "get ctx2 n2 = Some (Inr p2)"
+  shows "p1 = p2"
+  using assms
+  by(auto simp add: fctx_prims_ok_def)
+
 fun alpha_equiv_program ::
   "(name * name) list \<Rightarrow> 'g program \<Rightarrow> 'g program \<Rightarrow> bool"
   where
