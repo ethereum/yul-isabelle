@@ -5,9 +5,7 @@ begin
  * This is based somewhat on the implementation of association lists from
  * HOL/Library/AList.thy and HOL/Library/DAlist.thy, with the twist that
  * keys are required to be in strictly increasing order.
- * This gives us the property that all sets of (key, value) pairs have a canonical representation,
- * which is necessary to satisfy the ordering laws used by Gazelle
- * (see Mergeable/Pord.thy, Mergeable/Mergeable.thy)
+ * This gives us the property that all sets of (key, value) pairs have a canonical representation
  *
  * TODO: Implementations given here are not necessarily as efficient as they could be
  *)
@@ -1470,6 +1468,10 @@ is oalist_flip'
 lift_definition oalist_one_one :: "('k :: linorder, 'v) oalist \<Rightarrow> bool"
 is "\<lambda> l . distinct (map snd l)"
   .
+
+lift_definition oalist_all ::
+  "(('k :: linorder * 'v) \<Rightarrow> bool) \<Rightarrow> ('k, 'v) oalist \<Rightarrow> bool"
+is "list_all :: (('k * 'v) \<Rightarrow> bool) \<Rightarrow> ('k * 'v) list \<Rightarrow> bool" .
 
 (*
 lemma oalist_flip'_flip' :

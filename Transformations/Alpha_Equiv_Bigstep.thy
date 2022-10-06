@@ -93,6 +93,7 @@ definition alpha_equiv_name' ::
 (* makes sure a pair of variables are mapped to each other
  * at the _same_ scope depth.
  *)
+
 fun alpha_equiv_name ::
   "subst \<Rightarrow> string \<Rightarrow> string \<Rightarrow> bool" where
 "alpha_equiv_name [] n1 n2 = False"
@@ -102,6 +103,7 @@ fun alpha_equiv_name ::
     (Some n2', Some n1') \<Rightarrow> (n1 = n1' \<and> n2 = n2')
     | (None, None) \<Rightarrow> alpha_equiv_name st n1 n2
     | _ \<Rightarrow> False)"
+
 
 (* TODO: do we want to do a single list version and then zip?
  * or a two-list version?
@@ -266,7 +268,7 @@ fun alpha_equiv_statement :: "subst \<Rightarrow> subst \<Rightarrow> Statement 
   (case s2 of
     (FunctionDefinition n2 params2 rets2 body2) \<Rightarrow> 
       (alpha_equiv_name fsubst n1 n2 \<and>
-      (case update_vars_for_fun_body vsubst params1 rets1 params2 rets2 of
+      (case update_vars_for_fun_body [Oalist.empty] params1 rets1 params2 rets2 of
         Some vsubst' \<Rightarrow> 
         (case update_funs_and_vars_for_block fsubst vsubst' body1 body2 of
          None \<Rightarrow> False
