@@ -1,60 +1,34 @@
 theory Alpha_Equiv_Bigstep
-  imports "../Yul/BigStep" "../Oalist/Oalist" "../Oalist/Oalist_Lemmas" "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
+  imports "../Yul/BigStep" "HOL-Library.List_Lexorder" "HOL-Library.Char_ord"
 begin
 
 type_synonym name = string
 
-type_synonym subst' = "(name, name) oalist"
+type_synonym subst = "(name * name) list"
 
-definition subst'_valid :: "subst' \<Rightarrow> bool" where
-"subst'_valid subst =
-  distinct (map snd (impl_of subst))"
-
-type_synonym subst = "(name, name) oalist list"
+definition subst_valid :: "subst \<Rightarrow> bool" where
+"subst_valid subst =
+  (distinct (map fst subst) \<and>
+   distinct (map snd subst))"
 
 
 type_synonym varmap =
-  "(name, Value) oalist list"
-
-(*
-type_synonym funmap =
-  
-*)
-
-definition subst_valid :: "subst \<Rightarrow> bool" where
-"subst_valid subst = 
-  list_all subst'_valid subst"
-
-fun subst_get :: "subst \<Rightarrow> name \<Rightarrow> name option" where
-  "subst_get [] s = None"
-| "subst_get (hl#t) s =
-   (case get hl s of
-    Some v \<Rightarrow> Some v
-    | None \<Rightarrow> subst_get t s)"
+  "(name * Value) list"
 
 fun subst_gets :: "subst \<Rightarrow> name list \<Rightarrow> name list option" where
-  "subst_gets vm [] = Some []"
-| "subst_gets vm (nh # nt) =
-   (case subst_get vm nh of
+  "subst_gets s [] = Some []"
+| "subst_gets s (nh # nt) =
+   (case map_of s nh of
     None \<Rightarrow> None
-    | Some vh \<Rightarrow>
-      (case subst_gets vm nt of
+    | Some nh' \<Rightarrow>
+      (case subst_gets s nt of
        None \<Rightarrow> None
-       | Some vt \<Rightarrow> Some (vh#vt)))"
+       | Some nt' \<Rightarrow> Some (nh'#nt')))"
 
-fun subst_insert :: "subst \<Rightarrow> name \<Rightarrow> name \<Rightarrow> subst" where
-  "subst_insert [] s i = []" (* bogus *)
-| "subst_insert (hl#t) s i =
-   update s i hl # t"
-
-fun subst_inserts :: "subst \<Rightarrow> (name * name) list \<Rightarrow> subst" where
-"subst_inserts vm [] = vm"
-| "subst_inserts vm ((n, v)#t) =
-   subst_inserts (subst_insert vm n v) t"
-
+(*
 fun subst_update :: "subst \<Rightarrow> name \<Rightarrow> name \<Rightarrow> subst" where
-  "subst_update [] s i = []" (* bogus *)
-| "subst_update (hl#t) s i =
+  "subst_update [] n1 n2 = [(n1, n2)]"
+| "subst_update ((n1h, n2h)#t) s i =
    (case get hl s of
     Some _ \<Rightarrow> (update s i hl #t)
     | None \<Rightarrow> hl # subst_update t s i)"
@@ -63,13 +37,7 @@ fun subst_updates :: "subst \<Rightarrow> (name * name) list \<Rightarrow> subst
 "subst_updates vm [] = vm"
 | "subst_updates vm ((n, v)#t) =
    subst_updates (subst_update vm n v) t"
-
-fun subst_push :: "subst \<Rightarrow> subst" where
-"subst_push x = (empty#x)"
-
-fun subst_pop :: "subst \<Rightarrow> subst" where
-"subst_pop [] = []"
-| "subst_pop (h#t) = t"
+*)
 
 (*
 definition alpha_equiv_name' :: "subst' \<Rightarrow> name \<Rightarrow> name \<Rightarrow> bool"
@@ -83,25 +51,15 @@ definition alpha_equiv_name :: "subst \<Rightarrow> name \<Rightarrow> name \<Ri
   (subst_get subst n1 = Some n2)"
 *)
 
-definition alpha_equiv_name' ::
-  "subst' \<Rightarrow> name \<Rightarrow> name \<Rightarrow> bool" where
-"alpha_equiv_name' subst n1 n2 = 
-   (case (get subst n1, get (oalist_flip subst) n2) of
-    (Some n2', Some n1') \<Rightarrow> (n1 = n1' \<and> n2 = n2')
-    | _ \<Rightarrow> False)"
+definition flip :: "('x * 'x) list \<Rightarrow> ('x * 'x) list" where
+"flip l =
+  map (\<lambda> (x, y) . (y, x)) l"
 
-(* makes sure a pair of variables are mapped to each other
- * at the _same_ scope depth.
- *)
-
-fun alpha_equiv_name ::
-  "subst \<Rightarrow> string \<Rightarrow> string \<Rightarrow> bool" where
-"alpha_equiv_name [] n1 n2 = False"
-| "alpha_equiv_name
-    (sh#st) n1 n2 =
-   (case (get sh n1, get (oalist_flip sh) n2) of
+definition alpha_equiv_name ::
+  "subst \<Rightarrow> name \<Rightarrow> name \<Rightarrow> bool" where
+"alpha_equiv_name subst n1 n2 = 
+   (case (map_of subst n1, map_of (flip subst) n2) of
     (Some n2', Some n1') \<Rightarrow> (n1 = n1' \<and> n2 = n2')
-    | (None, None) \<Rightarrow> alpha_equiv_name st n1 n2
     | _ \<Rightarrow> False)"
 
 
@@ -131,7 +89,7 @@ definition update_vars_for_block :: "subst \<Rightarrow> Statement list \<Righta
   (let decls1 = gather_var_declarations l1 in
   (let decls2 = gather_var_declarations l2 in
     (if length l1 = length l2
-     then Some (to_oalist (zip decls1 decls2) # subst)
+     then Some ((zip decls1 decls2) @ subst)
      else None)))"
 
 declare update_vars_for_block_def [simp add]
@@ -141,7 +99,7 @@ definition update_funs_for_block :: "subst \<Rightarrow> Statement list \<Righta
   (let decls1 = gather_fun_declarations l1 in
   (let decls2 = gather_fun_declarations l2 in
     (if length l1 = length l2
-     then Some (to_oalist (zip decls1 decls2) # subst)
+     then Some ((zip decls1 decls2) @ subst)
      else None)))"
 
 definition update_funs_and_vars_for_block ::
@@ -162,7 +120,7 @@ definition update_vars_for_fun_body ::
 "update_vars_for_fun_body subst params1 rets1 params2 rets2 =
   (if length params1 = length params2
    then (if length rets1 = length rets2
-         then Some (to_oalist (zip params1 params2 @ zip rets1 rets2) # subst)
+         then Some ((zip params1 params2 @ zip rets1 rets2) @ subst)
          else None)
    else None)"
 
@@ -268,7 +226,7 @@ fun alpha_equiv_statement :: "subst \<Rightarrow> subst \<Rightarrow> Statement 
   (case s2 of
     (FunctionDefinition n2 params2 rets2 body2) \<Rightarrow> 
       (alpha_equiv_name fsubst n1 n2 \<and>
-      (case update_vars_for_fun_body [Oalist.empty] params1 rets1 params2 rets2 of
+      (case update_vars_for_fun_body [] params1 rets1 params2 rets2 of
         Some vsubst' \<Rightarrow> 
         (case update_funs_and_vars_for_block fsubst vsubst' body1 body2 of
          None \<Rightarrow> False
